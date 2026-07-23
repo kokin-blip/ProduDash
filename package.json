@@ -1,0 +1,26 @@
+{
+  "name": "produdash",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Glassy business and social operations dashboard prototype.",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "app": "electron .",
+    "web": "python3 -m http.server 5188",
+    "test": "node --test",
+    "check": "node scripts/check-syntax.cjs",
+    "build": "npm run check && npm test"
+  },
+  "keywords": [
+    "dashboard",
+    "shopify",
+    "social-media",
+    "ai-assistant"
+  ],
+  "author": "",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "^43.0.0"
+  }
+}

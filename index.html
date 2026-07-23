@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProduDash</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <div class="window-chrome" aria-hidden="true">
+      <span></span>
+      <strong>ProduDash</strong>
+    </div>
+    <div class="shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <div class="brand">
+          <div class="brand-mark">
+            <svg class="brand-logo" viewBox="0 0 48 48" aria-hidden="true">
+              <defs>
+                <linearGradient id="brandLogoGradient" x1="8" y1="6" x2="42" y2="44" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#eaf6ff" />
+                  <stop offset="0.56" stop-color="#b9dcff" />
+                  <stop offset="1" stop-color="#77aee8" />
+                </linearGradient>
+              </defs>
+              <rect x="5" y="5" width="38" height="38" rx="12" fill="rgba(8, 12, 17, 0.42)" stroke="url(#brandLogoGradient)" stroke-width="1.35" />
+              <path fill="url(#brandLogoGradient)" d="M15 32V16h9.2c4.2 0 7 2.6 7 6.4s-2.8 6.3-7 6.3h-4.6V32H15Zm4.6-7.4h4.2c1.8 0 2.9-.8 2.9-2.2s-1.1-2.3-2.9-2.3h-4.2v4.5Z" />
+              <path fill="url(#brandLogoGradient)" d="M31.4 32V16h2.9v16h-2.9Z" />
+              <circle fill="url(#brandLogoGradient)" cx="34.2" cy="24" r="2.1" />
+            </svg>
+          </div>
+          <div>
+            <strong>ProduDash</strong>
+            <span>Business command app</span>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Dashboard sections">
+          <button class="nav-item active" type="button" data-section="overview">
+            <span class="nav-icon">DB</span>
+            <span>Dashboard</span>
+          </button>
+          <button class="nav-item" type="button" data-section="inbox">
+            <span class="nav-icon">IN</span>
+            <span>AI Inbox</span>
+          </button>
+          <button class="nav-item" type="button" data-section="orders">
+            <span class="nav-icon">OR</span>
+            <span>Orders</span>
+          </button>
+          <button class="nav-item" type="button" data-section="signals">
+            <span class="nav-icon">SG</span>
+            <span>Signals</span>
+          </button>
+          <button class="nav-item" type="button" data-section="studio">
+            <span class="nav-icon">CL</span>
+            <span>Content Studio</span>
+          </button>
+          <button class="nav-item" type="button" data-section="analytics">
+            <span class="nav-icon">AN</span>
+            <span>Analytics</span>
+          </button>
+          <button class="nav-item" type="button" data-section="integrations">
+            <span class="nav-icon">PL</span>
+            <span>Integrations</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span class="status-dot"></span>
+          <div>
+            <strong>Gemini clerk ready</strong>
+            <span>Awaiting API keys</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Unified command app</p>
+            <h1>Your businesses, socials, and AI clerks.</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="ghost-button" type="button" id="syncButton">Sync channels</button>
+            <button class="primary-button" type="button" id="trainButton">Train AI clerk</button>
+          </div>
+        </header>
+
+        <section class="business-strip" aria-label="Businesses" id="businessStrip"></section>
+        <section id="viewRoot" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
