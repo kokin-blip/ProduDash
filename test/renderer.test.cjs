@@ -25,6 +25,15 @@ async function setupRenderer() {
   stateModule.ui.studioTab = "library";
   stateModule.ui.error = null;
   stateModule.ui.pending.clear();
+  stateModule.ui.advisorOpen = false;
+  stateModule.ui.advisorRequest = null;
+  stateModule.ui.advisorStatus = "idle";
+  stateModule.ui.advisorToolName = null;
+  stateModule.ui.advisorError = null;
+  stateModule.setAdvisorHistory({
+    turns: [],
+    status: { ready: false, providerId: null, modelId: null, consentedCategories: [] }
+  });
   stateModule.ui.providerCatalog = [
     {
       id: "gemini",
@@ -674,4 +683,61 @@ test("motion CSS uses explicit restrained transitions and complete reduced-motio
   assert.match(css, /\.button-spinner\s*\{[\s\S]*animation: none !important/);
   assert.match(html, /class="nav-active-indicator"/);
   assert.match(html, /data-active-section="overview"/);
+});
+
+test("Advisor panel is accessible, provider-scoped, escaped, and reduced-motion safe", async () => {
+  const renderer = await setupRenderer();
+  renderer.setAppState(
+    baseState({
+      aiProviders: [
+        {
+          id: "gemini",
+          providerType: "gemini",
+          name: "Google Gemini",
+          status: "connected",
+          credentialStatus: "stored",
+          selectedModelId: "gemini-3.6-flash",
+          models: [
+            {
+              id: "gemini-3.6-flash",
+              name: "Gemini 3.6 Flash",
+              capabilities: ["text_generation", "tool_calling"]
+            }
+          ]
+        }
+      ]
+    })
+  );
+  renderer.setAdvisorHistory({
+    turns: [
+      {
+        id: "turn-1",
+        role: "assistant",
+        text: `<img src=x onerror="window.advisorPwned=true">`,
+        at: new Date().toISOString(),
+        providerId: "gemini",
+        modelId: "gemini-3.6-flash",
+        tools: ["get_business_overview"]
+      }
+    ],
+    status: {
+      ready: true,
+      providerId: "gemini",
+      modelId: "gemini-3.6-flash",
+      consentedCategories: ["dashboard_summary", "commerce_aggregates", "integration_health", "media_summaries"]
+    }
+  });
+  renderer.ui.advisorOpen = true;
+  renderer.renderApp();
+  assert.equal(document.querySelector("[data-advisor-toggle]").getAttribute("aria-expanded"), "true");
+  assert.equal(document.querySelector("#advisorPanel").getAttribute("aria-hidden"), "false");
+  assert.equal(document.querySelector("[data-advisor-form]").getAttribute("aria-busy"), "false");
+  assert.match(document.querySelector("#advisorPanel").textContent, /Responses are advisory/i);
+  assert.match(document.querySelector("#advisorPanel").textContent, /50 visible turns/i);
+  assert.equal(window.advisorPwned, undefined);
+  assert.equal(document.querySelector("#advisorPanel img"), null);
+  const css = fs.readFileSync(path.join(projectRoot, "src/styles.css"), "utf8");
+  assert.match(css, /\.advisor-panel/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.advisor-panel/);
+  assert.doesNotMatch(css, /transition:\s*all/);
 });

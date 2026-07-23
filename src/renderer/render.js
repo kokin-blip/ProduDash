@@ -6,6 +6,7 @@ import { renderInbox } from "./views/inbox.js";
 import { renderIntegrations } from "./views/integrations.js";
 import { renderConnectionFirst, renderStatusMessages } from "./views/shared.js";
 import { renderStudio } from "./views/studio.js";
+import { renderAdvisor } from "./advisor.js";
 
 const VIEW_META = {
   overview: ["Dashboard", "Operations overview", "Monitor verified commerce data and items that need attention."],
@@ -62,6 +63,7 @@ function renderAppContents(animateFallback) {
   renderBusinesses();
   renderHeader();
   renderActiveView(animateFallback);
+  renderAdvisor();
 }
 
 function renderNav() {

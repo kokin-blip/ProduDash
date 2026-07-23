@@ -20,6 +20,9 @@ const { createMediaProtocolHandler } = require("./media/media-protocol.cjs");
 const { MediaUtilityRunner } = require("./media/utility-runner.cjs");
 const { TranscriptionService } = require("./media/transcription-service.cjs");
 const { MediaAnalysisService } = require("./media/media-analysis-service.cjs");
+const { AdvisorHistory } = require("./advisor/advisor-history.cjs");
+const { AdvisorService } = require("./advisor/advisor-service.cjs");
+const { createAdvisorTools } = require("./advisor/advisor-tools.cjs");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -120,9 +123,19 @@ if (hasSingleInstanceLock) {
         }
       });
       store.notices.push(...mediaLibrary.getNotices());
+      const advisorHistory = new AdvisorHistory(app.getPath("userData"));
+      const advisor = new AdvisorService({
+        providerService: providers,
+        history: advisorHistory,
+        tools: createAdvisorTools({ store, mediaLibrary }),
+        onEvent: (event) => {
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("produdash:advisorEvent", event);
+        }
+      });
+      store.notices.push(...advisorHistory.getNotices());
       const connections = new ConnectionService({ store, shopify: connectors.shopify, providerService: providers });
       protocol.handle("produdash-media", createMediaProtocolHandler(mediaLibrary));
-      registerIpc({ store, connections, providers, mediaLibrary, mediaJobs, appUrl, shell });
+      registerIpc({ store, connections, providers, mediaLibrary, mediaJobs, advisor, appUrl, shell });
       await mediaJobs.initialize();
       Menu.setApplicationMenu(null);
       createWindow();

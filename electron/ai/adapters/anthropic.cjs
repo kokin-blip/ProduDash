@@ -98,18 +98,21 @@ class AnthropicProviderAdapter {
     return message?.parsed_output || parseJsonText(textFromMessage(message), this.name, schemaName);
   }
 
-  async generateWithTools({ credentials, modelId, prompt, tools = [] }) {
+  async generateWithTools({ credentials, modelId, prompt, tools = [], signal }) {
     const message = await this.request(credentials, (client) =>
-      client.messages.create({
-        ...this.messageParams(modelId, prompt),
-        tools: tools.map((tool) => ({
-          name: tool.name,
-          description: tool.description,
-          input_schema: tool.inputSchema
-        }))
-      })
+      client.messages.create(
+        {
+          ...this.messageParams(modelId, prompt),
+          tools: tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            input_schema: tool.inputSchema
+          }))
+        },
+        { signal }
+      )
     );
-    return { text: textFromMessage(message), toolCalls: normalizeToolCalls(message?.content) };
+    return { text: textFromMessage(message), toolCalls: normalizeToolCalls(message?.content), usage: message?.usage || null };
   }
 
   async analyzeImages({ credentials, modelId, prompt, images = [], schema, schemaName = "image analysis" }) {

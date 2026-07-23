@@ -1,6 +1,6 @@
 # ProduDash
 
-ProduDash is a local-first Electron dashboard for merchant operations. The secure MVP connects Shopify data, routes approval-only drafting through provider-neutral AI profiles, indexes local video, and creates human-approved clips with isolated local media tools. Media analysis is local by default and can use one explicitly selected cloud provider only after a per-job disclosure and consent. Incomplete social, publishing, advisor, and analytics features remain visibly separated from working functionality.
+ProduDash is a local-first Electron dashboard for merchant operations. The secure MVP connects Shopify data, routes approval-only drafting through provider-neutral AI profiles, indexes local video, creates human-approved clips with isolated local media tools, and provides a read-only operations Advisor. Media analysis is local by default and can use one explicitly selected cloud provider only after a per-job disclosure and consent. Incomplete social, publishing, and analytics features remain visibly separated from working functionality.
 
 ## What works
 
@@ -15,6 +15,7 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - Explicit local, transcript-only, transcript-plus-frames, and Gemini native-video analysis modes with exact per-job provider/model/data-category consent and no silent provider or mode fallback.
 - Schema-validated AI candidates with bounded timestamps, overlap/duplicate rejection, limited boundary snapping, eleven stored component scores, and concise rationale.
 - Human approval gates for AI drafts and local post-export plans.
+- A provider-neutral Advisor with session-only cloud consent, request cancellation, a five-round local tool limit, bounded business-scoped summaries, and a separate recoverable 50-turn visible history.
 - Hardened Electron renderer isolation, restrictive CSP, trusted IPC senders, blocked navigation/windows, and normalized errors.
 - A separate atomic and recoverable Clip Library index with folder/loose-file imports, recursive scans, search, filters, tags, cached thumbnails, opaque previews, and visible missing/offline/corrupt/unsupported states.
 - A durable one-at-a-time local media queue with deterministic silence/scene inspection, candidate review, cancel/retry behavior, H.264/AAC rendering, optional SRT/burned captions, thumbnails, safe manifests, and automatic Clip Library import.
@@ -26,7 +27,7 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - Automatic order creation, payments, refunds, discounts, or fulfillment.
 - TikTok, Instagram, Facebook, YouTube, or Stripe API connectors.
 - External publishing or any unapproved media upload.
-- Frog Advisor chat and tools.
+- Final Advisor character art and expression variants, pending owner selection of a base concept.
 - Social analytics or Shopify profit/conversion figures without real cost and traffic inputs.
 - Hosted accounts, cross-device synchronization, OAuth callbacks, webhooks, or token refresh.
 - Signed installers, notarization, automatic updates, or production release packaging.
@@ -77,6 +78,14 @@ For local transcription, choose an existing whisper.cpp executable and model thr
 
 Inbox draft requests include only the selected business, a bounded operator instruction, and the latest bounded messages from one conversation. Output is schema-validated before storage. It can contain a draft, intent, summary, possible order details, a recommended action, and risk flags. It cannot send a message or perform an external side effect, and ProduDash never silently switches providers.
 
+## Advisor
+
+The lower-right Advisor panel uses the model assigned to the **Advisor** workload. The selected profile must be genuinely connected and expose text generation plus local tool calling. Before the first question in each app session, ProduDash names the selected provider/model and the bounded data categories that may be sent. Consent expires when ProduDash closes and must be confirmed again if the provider changes or a new category is requested.
+
+Advisor can read only ProduDash’s allowlisted local summaries: current view, supported business metrics, recent order statuses, attention counts, public integration health, media-job status, and Clip Library counts. It cannot mutate records or use provider-hosted web, code execution, MCP, or computer-use tools. Each turn stops after five local tool rounds.
+
+Default tool results exclude customer names, addresses, emails, authorization data, raw messages, credentials, and unrelated businesses. Imported fields are treated as untrusted quoted data rather than instructions. Up to 50 visible user/assistant turns are stored in a separate atomic, recoverable file; provider reasoning and credentials are never stored there. **Clear history** deletes the visible local conversation.
+
 ## Clip Library
 
 Open **Content Studio → Library** to add folders or loose video files. ProduDash:
@@ -120,7 +129,7 @@ Aspect treatment can keep the original frame, fit/pad, or center crop; fit/pad i
 
 ## Reset and deletion
 
-- **Reset dashboard data** clears imported businesses, snapshots, local plans, media-job records and protected path references, approvals, audits, advisor history when introduced, the Clip Library index, and cached thumbnails. AI profiles, workload assignments, and encrypted provider/integration credentials remain. Integrations return to a disconnected state until refreshed.
+- **Reset dashboard data** clears imported businesses, snapshots, local plans, media-job records and protected path references, approvals, audits, Advisor history, the Clip Library index, and cached thumbnails. AI profiles, workload assignments, and encrypted provider/integration credentials remain. Integrations return to a disconnected state until refreshed.
 - **Remove** on an integration deletes that integration’s credentials and marks its snapshots disconnected; already imported Shopify snapshots remain for local reference.
 - **Delete all data and credentials** removes ProduDash state, provider metadata, indexes, cached thumbnails, stored bookmarks, backups, recovery snapshots, and the encrypted credential vault, then creates a clean local workspace.
 

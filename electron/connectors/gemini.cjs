@@ -44,21 +44,24 @@ class GeminiConnector {
     try {
       const client = await this.clientFactory(key);
       return await withTimeout(
-        client.interactions.create({
-          model: modelId,
-          input,
-          ...(schema
-            ? {
-                response_format: {
-                  type: "text",
-                  mime_type: "application/json",
-                  schema
+        client.interactions.create(
+          {
+            model: modelId,
+            input,
+            ...(schema
+              ? {
+                  response_format: {
+                    type: "text",
+                    mime_type: "application/json",
+                    schema
+                  }
                 }
-              }
-            : {}),
-          ...(options.stream ? { stream: true } : {}),
-          ...(Array.isArray(options.tools) ? { tools: options.tools } : {})
-        }),
+              : {}),
+            ...(options.stream ? { stream: true } : {}),
+            ...(Array.isArray(options.tools) ? { tools: options.tools } : {})
+          },
+          { signal: options.signal }
+        ),
         this.timeoutMs
       );
     } catch (error) {
@@ -91,8 +94,8 @@ class GeminiConnector {
     return this.interact(apiKey, input, null, modelId, { stream: true });
   }
 
-  async generateWithTools(apiKey, input, tools, modelId = MODEL) {
-    return this.interact(apiKey, input, null, modelId, { tools });
+  async generateWithTools(apiKey, input, tools, modelId = MODEL, signal) {
+    return this.interact(apiKey, input, null, modelId, { tools, signal });
   }
 
   async generateStructuredWithMedia(apiKey, prompt, media, schema, schemaName, modelId = MODEL) {

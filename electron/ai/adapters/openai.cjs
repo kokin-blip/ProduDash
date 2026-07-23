@@ -137,22 +137,25 @@ class OpenAIProviderAdapter {
     return parseJsonText(response?.output_text, this.name, schemaName);
   }
 
-  async generateWithTools({ credentials, modelId, prompt, tools = [] }) {
+  async generateWithTools({ credentials, modelId, prompt, tools = [], signal }) {
     this.requireModel(modelId);
     const response = await this.request(credentials, (client) =>
-      client.responses.create({
-        model: modelId,
-        input: prompt,
-        tools: tools.map((tool) => ({
-          type: "function",
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.inputSchema,
-          strict: true
-        }))
-      })
+      client.responses.create(
+        {
+          model: modelId,
+          input: prompt,
+          tools: tools.map((tool) => ({
+            type: "function",
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema,
+            strict: true
+          }))
+        },
+        { signal }
+      )
     );
-    return { text: response?.output_text || "", toolCalls: normalizeToolCalls(response?.output) };
+    return { text: response?.output_text || "", toolCalls: normalizeToolCalls(response?.output), usage: response?.usage || null };
   }
 
   async analyzeImages({ credentials, modelId, prompt, images = [], schema, schemaName = "image analysis" }) {

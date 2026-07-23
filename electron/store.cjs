@@ -304,6 +304,21 @@ class ProduDashStore {
     });
   }
 
+  async updateAdvisorSettings(values) {
+    const displayName = boundedString(values?.displayName, {
+      label: "Advisor display name",
+      min: 1,
+      max: 40,
+      fallback: "Advisor"
+    });
+    return this.enqueueMutation(async () => {
+      this.state.advisorSettings = { displayName };
+      this.audit("advisor", "Updated the local Advisor display name.");
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
   async removeIntegrationCredentials(integrationId) {
     requireKnownIntegration(integrationId);
     if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");

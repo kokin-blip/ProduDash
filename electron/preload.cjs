@@ -22,8 +22,70 @@ function normalizeMediaJobEvent(value) {
   };
 }
 
+function normalizeAdvisorEvent(value) {
+  if (!value || typeof value !== "object" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(value.requestId)) return null;
+  const type = String(value.type || "");
+  if (!["started", "tool", "message", "completed", "canceled", "error"].includes(type)) return null;
+  if (type === "started") {
+    return {
+      requestId: value.requestId,
+      type,
+      providerId: String(value.providerId || "").slice(0, 128),
+      providerName: String(value.providerName || "").slice(0, 200),
+      modelId: String(value.modelId || "").slice(0, 200)
+    };
+  }
+  if (type === "tool") {
+    return { requestId: value.requestId, type, name: String(value.name || "").slice(0, 128) };
+  }
+  if (type === "message") {
+    const turn = value.turn;
+    if (!turn || turn.role !== "assistant" || typeof turn.text !== "string" || turn.text.length > 12000) return null;
+    return {
+      requestId: value.requestId,
+      type,
+      turn: {
+        id: String(turn.id || "").slice(0, 128),
+        role: "assistant",
+        text: turn.text,
+        at: String(turn.at || "").slice(0, 40),
+        providerId: String(turn.providerId || "").slice(0, 128),
+        modelId: String(turn.modelId || "").slice(0, 200),
+        usage: turn.usage && typeof turn.usage === "object" ? turn.usage : null,
+        tools: Array.isArray(turn.tools) ? turn.tools.map((item) => String(item).slice(0, 128)).slice(0, 5) : []
+      }
+    };
+  }
+  if (type === "error") {
+    return {
+      requestId: value.requestId,
+      type,
+      error: {
+        code: String(value.error?.code || "ADVISOR_FAILED").slice(0, 100),
+        message: String(value.error?.message || "Advisor could not complete that request.").slice(0, 500)
+      }
+    };
+  }
+  return { requestId: value.requestId, type };
+}
+
 contextBridge.exposeInMainWorld("produdash", {
   getAppState: () => invoke("produdash:getAppState"),
+  getAdvisorHistory: () => invoke("produdash:getAdvisorHistory"),
+  grantAdvisorConsent: (profileId, dataCategories) => invoke("produdash:grantAdvisorConsent", { profileId, dataCategories }),
+  sendAdvisorTurn: (payload) => invoke("produdash:sendAdvisorTurn", payload),
+  cancelAdvisorTurn: (requestId) => invoke("produdash:cancelAdvisorTurn", { requestId }),
+  clearAdvisorHistory: () => invoke("produdash:clearAdvisorHistory"),
+  updateAdvisorSettings: (values) => invoke("produdash:updateAdvisorSettings", values),
+  onAdvisorEvent: (callback) => {
+    if (typeof callback !== "function") return () => {};
+    const listener = (_event, value) => {
+      const normalized = normalizeAdvisorEvent(value);
+      if (normalized) callback(normalized);
+    };
+    ipcRenderer.on("produdash:advisorEvent", listener);
+    return () => ipcRenderer.removeListener("produdash:advisorEvent", listener);
+  },
   getAiProviderCatalog: () => invoke("produdash:getAiProviderCatalog"),
   draftAiReply: (conversationId, prompt) => invoke("produdash:draftAiReply", { conversationId, prompt }),
   approveAiAction: (actionId) => invoke("produdash:approveAiAction", { actionId }),

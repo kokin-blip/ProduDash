@@ -25,6 +25,13 @@ async function unwrap(request) {
 
 export const api = {
   getAppState: () => unwrap(client().getAppState()),
+  getAdvisorHistory: () => unwrap(client().getAdvisorHistory()),
+  grantAdvisorConsent: (profileId, dataCategories) => unwrap(client().grantAdvisorConsent(profileId, dataCategories)),
+  sendAdvisorTurn: (payload) => unwrap(client().sendAdvisorTurn(payload)),
+  cancelAdvisorTurn: (requestId) => unwrap(client().cancelAdvisorTurn(requestId)),
+  clearAdvisorHistory: () => unwrap(client().clearAdvisorHistory()),
+  updateAdvisorSettings: (values) => unwrap(client().updateAdvisorSettings(values)),
+  onAdvisorEvent: (callback) => client().onAdvisorEvent(callback),
   draftAiReply: (conversationId, prompt) => unwrap(client().draftAiReply(conversationId, prompt)),
   approveAiAction: (actionId) => unwrap(client().approveAiAction(actionId)),
   rejectAiAction: (actionId) => unwrap(client().rejectAiAction(actionId)),

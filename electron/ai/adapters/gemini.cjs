@@ -60,7 +60,7 @@ class GeminiProviderAdapter {
     return this.connector.streamText(credentials.apiKey, prompt, modelId);
   }
 
-  async generateWithTools({ credentials, modelId, prompt, tools = [] }) {
+  async generateWithTools({ credentials, modelId, prompt, tools = [], signal }) {
     this.requireModel(modelId);
     const interaction = await this.connector.generateWithTools(
       credentials.apiKey,
@@ -71,11 +71,13 @@ class GeminiProviderAdapter {
         description: tool.description,
         parameters: tool.inputSchema
       })),
-      modelId
+      modelId,
+      signal
     );
     return {
       text: interaction?.outputText || "",
-      toolCalls: normalizeToolCalls(interaction?.outputs || interaction?.output)
+      toolCalls: normalizeToolCalls(interaction?.outputs || interaction?.output),
+      usage: interaction?.usageMetadata || interaction?.usage || null
     };
   }
 

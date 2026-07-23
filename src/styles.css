@@ -2441,6 +2441,380 @@ tbody tr:hover {
   }
 }
 
+.advisor-launcher {
+  position: fixed;
+  z-index: 30;
+  right: 24px;
+  bottom: 24px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 28%);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-control) var(--ease-out),
+    border-color var(--motion-control) var(--ease-out),
+    color var(--motion-control) var(--ease-out),
+    opacity var(--motion-control) var(--ease-out),
+    transform var(--motion-control) var(--ease-out);
+}
+
+.advisor-launcher:hover {
+  border-color: var(--accent);
+  background: #23272d;
+  transform: translateY(-1px);
+}
+
+.advisor-launcher:active {
+  transform: scale(0.98);
+}
+
+.advisor-launcher svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.advisor-panel {
+  position: fixed;
+  z-index: 29;
+  right: 24px;
+  bottom: 80px;
+  width: min(420px, calc(100vw - 48px));
+  max-height: min(720px, calc(100vh - 112px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 42%);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px) scale(0.99);
+  pointer-events: none;
+  transition:
+    opacity var(--motion-surface) var(--ease-out),
+    visibility var(--motion-surface) var(--ease-out),
+    transform var(--motion-surface) var(--ease-out);
+}
+
+.advisor-panel.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.advisor-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.advisor-header h2 {
+  margin: 2px 0 3px;
+  font-size: 20px;
+}
+
+.advisor-header p,
+.advisor-header span {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.advisor-kicker {
+  display: block;
+}
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-control) var(--ease-out),
+    border-color var(--motion-control) var(--ease-out),
+    color var(--motion-control) var(--ease-out),
+    opacity var(--motion-control) var(--ease-out),
+    transform var(--motion-control) var(--ease-out);
+}
+
+.icon-button:hover {
+  border-color: var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.icon-button:active {
+  transform: scale(0.98);
+}
+
+.advisor-state {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.advisor-panel > .inline-message {
+  margin: 12px 18px 0;
+}
+
+.advisor-history {
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 18px;
+  scrollbar-gutter: stable;
+}
+
+.advisor-empty {
+  min-height: 144px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 20px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.advisor-empty strong {
+  color: var(--text);
+}
+
+.advisor-empty p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.advisor-turn {
+  max-width: 90%;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+
+.advisor-turn.user {
+  margin-left: auto;
+  border-color: #314568;
+  background: #1a2433;
+}
+
+.advisor-turn > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.advisor-turn strong {
+  font-size: 12px;
+}
+
+.advisor-turn time,
+.advisor-turn small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.advisor-turn p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.advisor-turn small {
+  display: block;
+  margin-top: 7px;
+}
+
+.advisor-blocked,
+.advisor-consent {
+  display: grid;
+  gap: 10px;
+  margin: 0 18px 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+
+.advisor-blocked p,
+.advisor-consent p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.advisor-blocked button,
+.advisor-consent button {
+  justify-self: start;
+}
+
+.advisor-suggestions {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 0 18px 10px;
+}
+
+.advisor-suggestions button {
+  align-self: center;
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-control) var(--ease-out),
+    border-color var(--motion-control) var(--ease-out),
+    color var(--motion-control) var(--ease-out),
+    opacity var(--motion-control) var(--ease-out),
+    transform var(--motion-control) var(--ease-out);
+}
+
+.advisor-suggestions button:not(:disabled):hover {
+  border-color: var(--accent);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.advisor-suggestions button:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.advisor-composer {
+  display: grid;
+  gap: 8px;
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.advisor-composer > label {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.advisor-composer textarea {
+  min-height: 72px;
+  max-height: 160px;
+  resize: vertical;
+}
+
+.advisor-composer > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.advisor-composer small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.advisor-privacy {
+  margin: 0;
+  border-width: 1px 0 0;
+  border-radius: 0;
+}
+
+.advisor-privacy summary {
+  padding: 12px 18px;
+}
+
+.advisor-privacy .disclosure-content {
+  padding: 0 18px 14px;
+}
+
+.advisor-privacy p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.advisor-name-form {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.advisor-name-form label {
+  flex: 1 1 auto;
+}
+
+.advisor-name-form label span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.advisor-name-form input {
+  width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .advisor-launcher {
+    right: 16px;
+    bottom: 16px;
+  }
+
+  .advisor-panel {
+    right: 16px;
+    bottom: 72px;
+    max-height: calc(100vh - 88px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -2467,6 +2841,20 @@ tbody tr:hover {
   .attention-row:hover,
   button.compact-row:hover,
   .conversation-item:hover {
+    transform: none !important;
+  }
+
+  .advisor-panel {
+    transition: none !important;
+    transform: none !important;
+  }
+
+  .advisor-launcher:hover,
+  .advisor-launcher:active,
+  .icon-button:hover,
+  .icon-button:active,
+  .advisor-suggestions button:not(:disabled):hover,
+  .advisor-suggestions button:not(:disabled):active {
     transform: none !important;
   }
 

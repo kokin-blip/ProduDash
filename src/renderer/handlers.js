@@ -1,6 +1,7 @@
 import { api } from "./api.js";
+import { ADVISOR_CATEGORIES, renderAdvisor } from "./advisor.js";
 import { renderApp } from "./render.js";
-import { getConversations, getSelectedConversation, setAppState, setClipLibrary, ui } from "./state.js";
+import { getConversations, getSelectedConversation, setAdvisorHistory, setAppState, setClipLibrary, ui } from "./state.js";
 
 let handlersBound = false;
 
@@ -99,6 +100,68 @@ function restorePendingUi(pendingUi) {
 }
 
 async function handleClick(event) {
+  const advisorToggle = event.target.closest("[data-advisor-toggle]");
+  if (advisorToggle) {
+    ui.advisorOpen = !ui.advisorOpen;
+    renderAdvisor();
+    if (ui.advisorOpen) document.querySelector("#advisorPanel .icon-button")?.focus();
+    return;
+  }
+
+  const advisorClose = event.target.closest("[data-advisor-close]");
+  if (advisorClose) {
+    ui.advisorOpen = false;
+    renderAdvisor();
+    document.querySelector("[data-advisor-toggle]")?.focus();
+    return;
+  }
+
+  const advisorConsent = event.target.closest("[data-advisor-consent]");
+  if (advisorConsent) {
+    const profileId = advisorConsent.dataset.advisorConsent;
+    await runAction(`advisor-consent-${profileId}`, advisorConsent, () => api.grantAdvisorConsent(profileId, ADVISOR_CATEGORIES), {
+      applyResult: (status) => {
+        ui.advisorHistory.status = status;
+        ui.advisorError = null;
+      }
+    });
+    return;
+  }
+
+  const advisorClear = event.target.closest("[data-advisor-clear]");
+  if (advisorClear) {
+    if (!window.confirm("Clear all visible Advisor history stored on this computer?")) return;
+    await runAction("advisor-clear", advisorClear, () => api.clearAdvisorHistory(), {
+      applyResult: setAdvisorHistory
+    });
+    return;
+  }
+
+  const advisorSuggestion = event.target.closest("[data-advisor-suggestion]");
+  if (advisorSuggestion) {
+    const prompt = document.querySelector("#advisorPrompt");
+    if (prompt) {
+      prompt.value = advisorSuggestion.dataset.advisorSuggestion;
+      prompt.focus();
+    }
+    return;
+  }
+
+  const advisorCancel = event.target.closest("[data-advisor-cancel]");
+  if (advisorCancel) {
+    await api.cancelAdvisorTurn(advisorCancel.dataset.advisorCancel).catch((error) => {
+      ui.advisorError = error?.message || "Advisor cancellation could not be completed.";
+    });
+    return;
+  }
+
+  const advisorIntegrations = event.target.closest("[data-advisor-open-integrations]");
+  if (advisorIntegrations) {
+    ui.activeSection = "integrations";
+    renderApp({ animateView: true });
+    return;
+  }
+
   const studioTab = event.target.closest("[data-studio-tab]");
   if (studioTab) {
     ui.studioTab = studioTab.dataset.studioTab;
@@ -330,6 +393,7 @@ async function handleClick(event) {
     await runAction("reset-dashboard", resetButton, async () => {
       const state = await api.resetDashboardData();
       setClipLibrary(await api.getClipLibrary({ limit: ui.libraryFilters.limit }));
+      setAdvisorHistory(await api.getAdvisorHistory());
       return state;
     });
     return;
@@ -341,6 +405,7 @@ async function handleClick(event) {
     await runAction("delete-all", deleteButton, async () => {
       const state = await api.deleteAllLocalData();
       setClipLibrary(await api.getClipLibrary({ limit: ui.libraryFilters.limit }));
+      setAdvisorHistory(await api.getAdvisorHistory());
       return state;
     });
     return;
@@ -360,6 +425,66 @@ async function handleClick(event) {
 async function handleSubmit(event) {
   const form = event.target;
   if (!(form instanceof HTMLElement)) return;
+
+  if (form.matches("[data-advisor-form]")) {
+    event.preventDefault();
+    if (ui.advisorRequest) return;
+    const text = form.elements.text.value.trim();
+    if (!text) return;
+    const requestId = `advisor-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    ui.advisorRequest = requestId;
+    ui.advisorStatus = "thinking";
+    ui.advisorToolName = null;
+    ui.advisorError = null;
+    ui.advisorHistory.turns = [
+      ...ui.advisorHistory.turns,
+      {
+        id: `pending-${requestId}`,
+        role: "user",
+        text,
+        at: new Date().toISOString(),
+        providerId: ui.advisorHistory.status?.providerId || null,
+        modelId: ui.advisorHistory.status?.modelId || null,
+        usage: null,
+        tools: []
+      }
+    ].slice(-50);
+    renderAdvisor();
+    try {
+      await api.sendAdvisorTurn({
+        requestId,
+        text,
+        context: { view: ui.activeSection, businessId: ui.selectedBusinessId },
+        dataCategories: ADVISOR_CATEGORIES
+      });
+    } catch (error) {
+      if (error?.code !== "ADVISOR_CANCELED") {
+        ui.advisorStatus = "warning";
+        ui.advisorError = error?.message || "Advisor could not complete that request.";
+      }
+    } finally {
+      ui.advisorRequest = null;
+      try {
+        setAdvisorHistory(await api.getAdvisorHistory());
+      } catch {
+        // The controlled Advisor error remains visible if history refresh fails.
+      }
+      renderAdvisor();
+      if (!ui.advisorError) document.querySelector("#advisorPrompt")?.focus();
+    }
+    return;
+  }
+
+  if (form.matches("[data-advisor-settings-form]")) {
+    event.preventDefault();
+    await runAction(
+      "advisor-settings",
+      event.submitter,
+      () => api.updateAdvisorSettings({ displayName: form.elements.displayName.value }),
+      { applyResult: setAppState }
+    );
+    return;
+  }
 
   if (form.matches("[data-media-job-form]")) {
     event.preventDefault();

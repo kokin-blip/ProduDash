@@ -12,6 +12,12 @@ export const ui = {
   libraryFilters: { query: "", folderId: "", status: "", sort: "modified_desc", offset: 0, limit: 40 },
   selectedClipId: null,
   mediaOutputSelection: null,
+  advisorOpen: false,
+  advisorHistory: { turns: [], status: { ready: false, providerId: null, modelId: null, consentedCategories: [] } },
+  advisorRequest: null,
+  advisorStatus: "idle",
+  advisorToolName: null,
+  advisorError: null,
   pending: new Set(),
   error: null
 };
@@ -71,14 +77,16 @@ export function normalizeAppState(value) {
 }
 
 export async function loadInitialState() {
-  const [appState, providerCatalog, clipLibrary] = await Promise.all([
+  const [appState, providerCatalog, clipLibrary, advisorHistory] = await Promise.all([
     api.getAppState(),
     api.getAiProviderCatalog(),
-    api.getClipLibrary({ limit: ui.libraryFilters.limit })
+    api.getClipLibrary({ limit: ui.libraryFilters.limit }),
+    api.getAdvisorHistory()
   ]);
   setAppState(appState);
   ui.providerCatalog = asArray(providerCatalog);
   setClipLibrary(clipLibrary);
+  setAdvisorHistory(advisorHistory);
 }
 
 export function setAppState(nextState) {
@@ -139,6 +147,17 @@ export function setClipLibrary(value) {
   if (!ui.clipLibrary.clips.some((clip) => clip.id === ui.selectedClipId)) {
     ui.selectedClipId = ui.clipLibrary.clips[0]?.id || null;
   }
+}
+
+export function setAdvisorHistory(value) {
+  const history = value && typeof value === "object" ? value : {};
+  ui.advisorHistory = {
+    turns: asArray(history.turns),
+    status:
+      history.status && typeof history.status === "object"
+        ? history.status
+        : { ready: false, providerId: null, modelId: null, consentedCategories: [] }
+  };
 }
 
 export function credentialStored(integrationId) {

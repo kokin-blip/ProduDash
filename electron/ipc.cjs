@@ -14,6 +14,7 @@ function createHandlers({
   providers,
   mediaLibrary,
   mediaJobs,
+  advisor,
   isTrustedSender,
   chooseClipFolders,
   chooseClipFiles,
@@ -26,6 +27,12 @@ function createHandlers({
   const trusted = isTrustedSender || (() => false);
   const handlers = {
     "produdash:getAppState": async () => store.getAppState(),
+    "produdash:getAdvisorHistory": async () => advisor.getHistory(),
+    "produdash:grantAdvisorConsent": async (_event, payload) => advisor.grantConsent(payload),
+    "produdash:sendAdvisorTurn": async (_event, payload) => advisor.sendTurn(payload),
+    "produdash:cancelAdvisorTurn": async (_event, payload) => advisor.cancel(payload?.requestId),
+    "produdash:clearAdvisorHistory": async () => advisor.clearHistory(),
+    "produdash:updateAdvisorSettings": async (_event, payload) => store.updateAdvisorSettings(payload),
     "produdash:getAiProviderCatalog": async () => providers.getCatalog(),
     "produdash:draftAiReply": async (_event, payload) => connections.draftAiReply(payload?.conversationId, payload?.prompt),
     "produdash:approveAiAction": async (_event, payload) => store.approveAiAction(payload?.actionId),
@@ -35,6 +42,7 @@ function createHandlers({
       try {
         if (mediaJobs) await mediaJobs.clear();
         if (mediaLibrary) await mediaLibrary.clear();
+        if (advisor) await advisor.clearHistory();
         return await store.resetDashboardData();
       } finally {
         mediaJobs?.resume?.();
@@ -44,6 +52,7 @@ function createHandlers({
       try {
         if (mediaJobs) await mediaJobs.clear();
         if (mediaLibrary) await mediaLibrary.clear({ removeIndex: true });
+        if (advisor) await advisor.history.clear({ removeFiles: true });
         return await store.deleteAllLocalData();
       } finally {
         mediaJobs?.resume?.();
@@ -101,7 +110,7 @@ function createHandlers({
   );
 }
 
-function registerIpc({ store, connections, providers, mediaLibrary, mediaJobs, appUrl, shell }) {
+function registerIpc({ store, connections, providers, mediaLibrary, mediaJobs, advisor, appUrl, shell }) {
   const folderDialogOptions = {
     title: "Add folders to Clip Library",
     properties: ["openDirectory", "multiSelections"],
@@ -180,6 +189,7 @@ function registerIpc({ store, connections, providers, mediaLibrary, mediaJobs, a
     providers,
     mediaLibrary,
     mediaJobs,
+    advisor,
     isTrustedSender: createTrustedSender(appUrl),
     chooseClipFolders,
     chooseClipFiles,

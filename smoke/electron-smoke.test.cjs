@@ -42,9 +42,24 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
   );
   assert.equal(await page.locator('[data-section="overview"]').getAttribute("aria-current"), "page");
   await page.screenshot({ path: path.join(artifactPath, "empty-1440x960.png") });
+  await page.click("[data-advisor-toggle]");
+  assert.equal(await page.locator("[data-advisor-toggle]").getAttribute("aria-expanded"), "true");
+  assert.equal(await page.locator("#advisorPanel").getAttribute("aria-hidden"), "false");
+  assert.match(await page.locator("#advisorPanel").textContent(), /Connection required/i);
+  await page.locator(".advisor-privacy > summary").click();
+  assert.equal(await page.locator(".advisor-privacy").getAttribute("open"), "");
+  assert.match(await page.locator(".advisor-privacy .disclosure-content").textContent(), /50 visible turns/i);
+  await page.screenshot({ path: path.join(artifactPath, "advisor-empty-1440x960.png") });
+  await page.click("[data-advisor-close]");
+  assert.equal(await page.locator("[data-advisor-toggle]").getAttribute("aria-expanded"), "false");
+  assert.equal(await page.evaluate(() => document.activeElement.matches("[data-advisor-toggle]")), true);
 
   await resizeWindow(application, 1120, 760);
   assert.equal(await hasHorizontalOverflow(page), false);
+  await page.click("[data-advisor-toggle]");
+  assert.equal(await hasHorizontalOverflow(page), false);
+  await page.screenshot({ path: path.join(artifactPath, "advisor-empty-1120x760.png") });
+  await page.click("[data-advisor-close]");
   await page.screenshot({ path: path.join(artifactPath, "empty-1120x760.png") });
 
   await resizeWindow(application, 1440, 960);
@@ -133,11 +148,14 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
   assert.equal(await page.locator("[data-post-form]").count(), 1);
   await page.click('[data-section="integrations"]');
 
-  await page.locator("details.disclosure:not(.danger-zone) > summary").click();
-  assert.equal(await page.locator("details.disclosure:not(.danger-zone)").getAttribute("open"), "");
-  assert.match(await page.locator("details.disclosure:not(.danger-zone) .disclosure-content").textContent(), /Official connections only/);
-  await page.locator("details.disclosure:not(.danger-zone) > summary").click();
-  assert.equal(await page.locator("details.disclosure:not(.danger-zone)").getAttribute("open"), null);
+  await page.locator("#viewRoot details.disclosure:not(.danger-zone) > summary").click();
+  assert.equal(await page.locator("#viewRoot details.disclosure:not(.danger-zone)").getAttribute("open"), "");
+  assert.match(
+    await page.locator("#viewRoot details.disclosure:not(.danger-zone) .disclosure-content").textContent(),
+    /Official connections only/
+  );
+  await page.locator("#viewRoot details.disclosure:not(.danger-zone) > summary").click();
+  assert.equal(await page.locator("#viewRoot details.disclosure:not(.danger-zone)").getAttribute("open"), null);
   await page.locator("details.danger-zone > summary").click();
   assert.equal(await page.locator("details.danger-zone").getAttribute("open"), "");
   await page.locator("details.danger-zone [data-delete-all]").waitFor({ state: "visible" });
@@ -216,6 +234,47 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
   assert.equal(await hasHorizontalOverflow(page), false);
   assert.equal(await page.locator("table tbody tr").count(), 2);
   await page.screenshot({ path: path.join(artifactPath, "connected-1440x960.png"), fullPage: true });
+  await page.evaluate(async () => {
+    const state = await import("./src/renderer/state.js");
+    const advisor = await import("./src/renderer/advisor.js");
+    state.setAdvisorHistory({
+      turns: [
+        {
+          id: "advisor-user-fixture",
+          role: "user",
+          text: "What needs my attention today?",
+          at: new Date().toISOString(),
+          providerId: "gemini",
+          modelId: "gemini-3.6-flash",
+          usage: null,
+          tools: []
+        },
+        {
+          id: "advisor-reply-fixture",
+          role: "assistant",
+          text: "One paid order still awaits fulfillment, and one reply draft needs human approval. Profit and conversion remain unavailable.",
+          at: new Date().toISOString(),
+          providerId: "gemini",
+          modelId: "gemini-3.6-flash",
+          usage: { totalTokens: 84 },
+          tools: ["get_attention_items", "get_business_overview"]
+        }
+      ],
+      status: {
+        ready: true,
+        providerId: "gemini",
+        modelId: "gemini-3.6-flash",
+        consentedCategories: ["dashboard_summary", "commerce_aggregates", "integration_health", "media_summaries"]
+      }
+    });
+    state.ui.advisorOpen = true;
+    state.ui.advisorStatus = "success";
+    advisor.renderAdvisor();
+  });
+  assert.equal(await page.locator("[data-advisor-form]").getAttribute("aria-busy"), "false");
+  assert.match(await page.locator("#advisorPanel").textContent(), /one reply draft needs human approval/i);
+  await page.screenshot({ path: path.join(artifactPath, "advisor-connected-1440x960.png"), fullPage: true });
+  await page.click("[data-advisor-close]");
 
   await resizeWindow(application, 1120, 760);
   assert.equal(await hasHorizontalOverflow(page), false);
@@ -226,6 +285,9 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
   await setZoomFactor(application, 1);
   await page.emulateMedia({ reducedMotion: "reduce" });
   assert.equal(await page.evaluate(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches), true);
+  await page.click("[data-advisor-toggle]");
+  assert.equal(await page.locator("#advisorPanel").evaluate((element) => window.getComputedStyle(element).transitionDuration), "0s");
+  await page.click("[data-advisor-close]");
   const reducedMotionTransitionCount = await page.evaluate(() => window.__viewTransitionStarts);
   await page.click('[data-section="studio"]');
   assert.equal(await page.locator('[data-section="studio"]').getAttribute("aria-current"), "page");
@@ -395,7 +457,7 @@ async function renderConnectedFixture(page) {
             {
               id: "gemini-3.6-flash",
               name: "Gemini 3.6 Flash",
-              capabilities: ["text_generation", "structured_output"]
+              capabilities: ["text_generation", "structured_output", "tool_calling"]
             }
           ]
         }

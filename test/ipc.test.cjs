@@ -30,12 +30,21 @@ function fixtures(isTrustedSender) {
     cancel: async () => state,
     retry: async () => state
   };
+  const advisor = {
+    getHistory: () => ({ turns: [] }),
+    grantConsent: () => ({ providerId: "provider-1" }),
+    sendTurn: async () => ({ accepted: true }),
+    cancel: () => ({ canceled: true }),
+    clearHistory: async () => ({ turns: [] }),
+    history: { clear: async () => ({ turns: [] }) }
+  };
   return createHandlers({
     store,
     connections,
     providers,
     mediaLibrary,
     mediaJobs,
+    advisor,
     isTrustedSender,
     chooseMediaOutputFolder: async () => ({ id: "output-1", name: "Clips" }),
     openMediaJobOutput: async () => ({ jobId: "mediajob-1" })
@@ -82,13 +91,29 @@ test("dashboard reset and delete-all clear only ProduDash library metadata", asy
     mediaJobs: {
       clear: async () => events.push("clear-jobs")
     },
+    advisor: {
+      clearHistory: async () => events.push("clear-advisor"),
+      history: { clear: async () => events.push("remove-advisor-history") }
+    },
     isTrustedSender: () => true
   });
   assert.equal((await handlers["produdash:resetDashboardData"]({})).ok, true);
-  assert.deepEqual(events, ["clear-jobs", "clear-index", "reset-state"]);
+  assert.deepEqual(events, ["clear-jobs", "clear-index", "clear-advisor", "reset-state"]);
   events.length = 0;
   assert.equal((await handlers["produdash:deleteAllLocalData"]({})).ok, true);
-  assert.deepEqual(events, ["clear-jobs", "remove-index", "delete-state"]);
+  assert.deepEqual(events, ["clear-jobs", "remove-index", "remove-advisor-history", "delete-state"]);
+});
+
+test("Advisor IPC uses normalized envelopes for history, consent, turns, cancellation, and clearing", async () => {
+  const handlers = fixtures(() => true);
+  assert.equal((await handlers["produdash:getAdvisorHistory"]({})).ok, true);
+  assert.equal(
+    (await handlers["produdash:grantAdvisorConsent"]({}, { profileId: "provider-1", dataCategories: ["dashboard_summary"] })).ok,
+    true
+  );
+  assert.equal((await handlers["produdash:sendAdvisorTurn"]({}, { requestId: "request-1" })).ok, true);
+  assert.equal((await handlers["produdash:cancelAdvisorTurn"]({}, { requestId: "request-1" })).data.canceled, true);
+  assert.equal((await handlers["produdash:clearAdvisorHistory"]({})).ok, true);
 });
 
 test("media job IPC keeps output selection and lifecycle operations in normalized envelopes", async () => {
