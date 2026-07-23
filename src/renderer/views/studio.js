@@ -12,7 +12,7 @@ export function renderStudio() {
   return `
     <div class="inline-message neutral planning-banner">
       <strong>Local media workspace</strong>
-      <span>ProduDash can inspect and create clips on this computer. No source media is uploaded, and publishing still requires a future official connector.</span>
+      <span>ProduDash processes media locally by default. A cloud analysis mode uploads only the categories named in a separate per-job consent; publishing still requires a future official connector.</span>
     </div>
     <div class="studio-tabs" role="tablist" aria-label="Content Studio">
       ${STUDIO_TABS.map(
@@ -27,6 +27,62 @@ export function renderStudio() {
       ${ui.studioTab === "create" ? renderCreateClips() : ui.studioTab === "publishing" ? renderPublishing() : renderLibrary()}
     </section>
   `;
+}
+
+function resolveWorkload(workloadId) {
+  let assignment = ui.appState.aiWorkloads?.[workloadId];
+  if (assignment?.mode === "same_as_advisor") assignment = ui.appState.aiWorkloads?.advisor;
+  if (!assignment || assignment.mode !== "provider") return null;
+  const profile = asArray(ui.appState.aiProviders).find((item) => item.id === assignment.profileId);
+  const model = asArray(profile?.models).find((item) => item.id === assignment.modelId);
+  if (!profile || !model || profile.status !== "connected") return null;
+  return { profile, model };
+}
+
+function supports(model, ...capabilities) {
+  const available = new Set(asArray(model?.capabilities));
+  return capabilities.every((capability) => available.has(capability));
+}
+
+function getCloudAnalysisOptions() {
+  const analysis = resolveWorkload("clipAnalysis");
+  const transcription = resolveWorkload("transcription");
+  if (!analysis) return [];
+  const base = {
+    profileId: analysis.profile.id,
+    modelId: analysis.model.id,
+    providerName: analysis.profile.name,
+    modelName: analysis.model.name
+  };
+  const options = [];
+  if (supports(analysis.model, "native_video_understanding")) {
+    options.push({ ...base, id: "native_video", label: "Native video analysis", categories: ["complete_video"] });
+  }
+  if (transcription && supports(analysis.model, "structured_output")) {
+    const transcriptionUsesCloud = transcription.profile.providerType !== "whisper-cpp";
+    const transcriptionData = {
+      transcriptionProfileId: transcription.profile.id,
+      transcriptionModelId: transcription.model.id,
+      transcriptionName: `${transcription.profile.name} / ${transcription.model.name}`
+    };
+    options.push({
+      ...base,
+      ...transcriptionData,
+      id: "transcript_only",
+      label: "Transcript-only analysis",
+      categories: [...(transcriptionUsesCloud ? ["audio"] : []), "transcript"]
+    });
+    if (supports(analysis.model, "image_understanding")) {
+      options.push({
+        ...base,
+        ...transcriptionData,
+        id: "transcript_frames",
+        label: "Transcript + sampled frames",
+        categories: [...(transcriptionUsesCloud ? ["audio"] : []), "transcript", "frames"]
+      });
+    }
+  }
+  return options;
 }
 
 function renderLibrary() {
@@ -245,11 +301,12 @@ function renderCreateClips() {
   const legacyPlans = asArray(ui.appState.clipperJobs);
   const availableClips = asArray(ui.clipLibrary.clips).filter((clip) => clip.status === "available");
   const secureStorageUnavailable = asArray(ui.appState.systemNotices).some((notice) => notice.code === "SECURE_STORAGE_UNAVAILABLE");
+  const cloudOptions = getCloudAnalysisOptions();
   return `
     <section class="studio-grid single-workflow">
       <article class="panel">
         <div class="section-heading">
-          <div><h2>Create local clips</h2><p>Analyze one indexed video, review deterministic candidates, then render approved clips.</p></div>
+          <div><h2>Create clips</h2><p>Choose local heuristics or an explicitly consented provider, review every candidate, then render approved clips locally.</p></div>
           ${renderStatusBadge(
             secureStorageUnavailable ? "error" : "available",
             secureStorageUnavailable ? "Secure storage required" : "Local processing"
@@ -281,6 +338,33 @@ function renderCreateClips() {
             <option value="off">Off</option><option value="srt">SRT file</option><option value="srt_burned">SRT + burned in</option>
           </select></label>
           <label><span>Caption text</span><textarea name="captionText" maxlength="2000" placeholder="Required only when captions are enabled"></textarea></label>
+          <label>
+            <span>Analysis mode</span>
+            <select name="analysisMode">
+              <option value="local_heuristics">Local heuristics — no upload</option>
+              ${cloudOptions
+                .map(
+                  (option) =>
+                    `<option value="${escapeHtml(option.id)}"
+                      data-provider-id="${escapeHtml(option.profileId)}"
+                      data-model-id="${escapeHtml(option.modelId)}"
+                      data-transcription-provider-id="${escapeHtml(option.transcriptionProfileId || "")}"
+                      data-transcription-model-id="${escapeHtml(option.transcriptionModelId || "")}"
+                      data-categories="${escapeHtml(option.categories.join(","))}">${escapeHtml(option.label)} — ${escapeHtml(
+                        option.providerName
+                      )} / ${escapeHtml(option.modelName)}</option>`
+                )
+                .join("")}
+            </select>
+          </label>
+          ${
+            cloudOptions.length
+              ? `<label class="approval-check cloud-consent-check">
+                  <input type="checkbox" name="cloudConsent" />
+                  <span><strong>Consent for this job only</strong><small>If I choose a cloud mode, upload the named audio, transcript, sampled frames, or complete video to the displayed provider/model. No automatic provider or mode fallback is allowed.</small></span>
+                </label>`
+              : `<div class="inline-message neutral"><strong>Cloud analysis is not ready</strong><span>Connect and assign compatible Clip Analysis and Transcription models in Integrations to enable consented cloud modes.</span></div>`
+          }
           ${renderPlatformChecks()}
           <div class="media-output-picker">
             <div><strong>Output folder</strong><span>${escapeHtml(
@@ -292,7 +376,7 @@ function renderCreateClips() {
           </div>
           ${
             availableClips.length && !secureStorageUnavailable
-              ? `<button class="primary-button" type="submit" data-pending-label="Queueing…">Analyze locally</button>`
+              ? `<button class="primary-button" type="submit" data-pending-label="Queueing…">Create analysis job</button>`
               : secureStorageUnavailable
                 ? `<div class="inline-message error"><strong>Local jobs are unavailable</strong><span>ProduDash requires secure OS encryption before it can remember protected media paths.</span></div>`
                 : `<div class="inline-message warning"><strong>Add a source first</strong><span>Add an available video in the Library tab before creating a job.</span></div>`
@@ -326,7 +410,7 @@ function renderMediaJob(job) {
       <div class="media-job-heading">
         <div><strong>${escapeHtml(job.title)}</strong><span>${escapeHtml(job.sourceName || "Indexed source")} → ${escapeHtml(
           job.outputFolderName
-        )}</span></div>
+        )}</span><small>${escapeHtml(statusLabel(job.settings?.analysisMode || "local_heuristics"))}</small></div>
         ${renderStatusBadge(status)}
       </div>
       <div class="media-progress" aria-label="${escapeHtml(statusLabel(job.stage || status))}: ${Math.round(Number(job.progress || 0))}%">

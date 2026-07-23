@@ -12,11 +12,12 @@ class ProviderService {
   }
 
   async initialize() {
-    return this.store.syncAiProviderCredentialStatus((providerType) => {
+    return this.store.syncAiProviderCredentialStatus((providerType, profile) => {
+      if (!this.registry.has(providerType)) return null;
       const adapter = this.registry.get(providerType);
       return {
         credentialFields: adapter.credentialFields,
-        models: adapter.listModels(),
+        models: adapter.listModels(profile),
         name: adapter.name
       };
     });
@@ -30,7 +31,20 @@ class ProviderService {
     const profile = this.store.getAiProvider(profileId);
     const adapter = this.registry.get(profile.providerType);
     await this.store.saveAiProviderCredentials(profileId, values, adapter.credentialFields);
+    const configured = this.store.getAiProvider(profileId);
+    const models = adapter.listModels(configured);
+    const selectedModelId =
+      typeof values?.selectedModelId === "string" && models.some((model) => model.id === values.selectedModelId)
+        ? values.selectedModelId
+        : configured.selectedModelId;
+    await this.store.updateAiProviderModels(profileId, models, selectedModelId);
     return this.testConnection(profileId);
+  }
+
+  async saveCredentialDraft(profileId, values) {
+    const profile = this.store.getAiProvider(profileId);
+    const adapter = this.registry.get(profile.providerType);
+    return this.store.saveAiProviderCredentials(profileId, values, adapter.allCredentialFields || adapter.credentialFields);
   }
 
   async testConnection(profileId) {
@@ -103,7 +117,12 @@ class ProviderService {
     if (profile.status !== "connected") {
       throw new AppError("PROVIDER_NOT_READY", "Validate the selected AI provider before using this workload.");
     }
-    return { adapter: this.registry.get(profile.providerType), credentials: this.store.getAiProviderCredentials(profile.id), model };
+    return {
+      adapter: this.registry.get(profile.providerType),
+      credentials: this.store.getAiProviderCredentials(profile.id),
+      profile,
+      model
+    };
   }
 
   async draftAiReply(conversationId, prompt) {

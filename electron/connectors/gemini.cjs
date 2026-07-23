@@ -39,7 +39,7 @@ class GeminiConnector {
     this.timeoutMs = options.timeoutMs || 20_000;
   }
 
-  async interact(apiKey, input, schema, modelId = MODEL) {
+  async interact(apiKey, input, schema, modelId = MODEL, options = {}) {
     const key = boundedString(apiKey, { label: "Gemini API key", min: 8, max: 4096 });
     try {
       const client = await this.clientFactory(key);
@@ -47,11 +47,17 @@ class GeminiConnector {
         client.interactions.create({
           model: modelId,
           input,
-          response_format: {
-            type: "text",
-            mime_type: "application/json",
-            schema
-          }
+          ...(schema
+            ? {
+                response_format: {
+                  type: "text",
+                  mime_type: "application/json",
+                  schema
+                }
+              }
+            : {}),
+          ...(options.stream ? { stream: true } : {}),
+          ...(Array.isArray(options.tools) ? { tools: options.tools } : {})
         }),
         this.timeoutMs
       );
@@ -71,6 +77,57 @@ class GeminiConnector {
   async generateStructured(apiKey, input, schema, schemaName = "structured", modelId = MODEL) {
     const interaction = await this.interact(apiKey, input, schema, modelId);
     return parseInteraction(interaction, schemaName);
+  }
+
+  async generateText(apiKey, input, modelId = MODEL) {
+    const interaction = await this.interact(apiKey, input, null, modelId);
+    if (typeof interaction?.outputText !== "string") {
+      throw new AppError("GEMINI_INVALID_RESPONSE", "Gemini returned an invalid text response.");
+    }
+    return interaction.outputText;
+  }
+
+  async streamText(apiKey, input, modelId = MODEL) {
+    return this.interact(apiKey, input, null, modelId, { stream: true });
+  }
+
+  async generateWithTools(apiKey, input, tools, modelId = MODEL) {
+    return this.interact(apiKey, input, null, modelId, { tools });
+  }
+
+  async generateStructuredWithMedia(apiKey, prompt, media, schema, schemaName, modelId = MODEL) {
+    const key = boundedString(apiKey, { label: "Gemini API key", min: 8, max: 4096 });
+    let client;
+    const uploaded = [];
+    try {
+      client = await this.clientFactory(key);
+      const mediaContent = [];
+      for (const item of Array.isArray(media) ? media : [media]) {
+        if (item.path) {
+          const file = await withTimeout(client.files.upload({ file: item.path, config: { mimeType: item.mimeType } }), this.timeoutMs);
+          uploaded.push(file);
+          mediaContent.push({ type: item.type, uri: file.uri, mime_type: file.mimeType || item.mimeType });
+        } else {
+          mediaContent.push({ type: item.type, data: item.data, mime_type: item.mimeType });
+        }
+      }
+      const interaction = await withTimeout(
+        client.interactions.create({
+          model: modelId,
+          input: [{ type: "text", text: prompt }, ...mediaContent],
+          response_format: { type: "text", mime_type: "application/json", schema }
+        }),
+        this.timeoutMs
+      );
+      return parseInteraction(interaction, schemaName);
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError("GEMINI_API_ERROR", "Gemini could not analyze the selected media.");
+    } finally {
+      if (client?.files?.delete) {
+        await Promise.all(uploaded.filter((file) => file?.name).map((file) => client.files.delete({ name: file.name }).catch(() => {})));
+      }
+    }
   }
 }
 

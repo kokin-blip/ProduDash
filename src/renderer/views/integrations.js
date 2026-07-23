@@ -122,7 +122,23 @@ function renderAiProvider(profile) {
       }
       <div class="provider-model-row">
         <div>
-          <strong>${escapeHtml(model?.name || profile.selectedModelId || "No model")}</strong>
+          ${
+            profile.models.length > 1
+              ? `<label class="credential-field compact-model-picker">
+                  <span>Model used for connection testing</span>
+                  <select name="selectedModelId">
+                    ${profile.models
+                      .map(
+                        (item) =>
+                          `<option value="${escapeHtml(item.id)}" ${item.id === model?.id ? "selected" : ""}>${escapeHtml(
+                            item.name
+                          )}</option>`
+                      )
+                      .join("")}
+                  </select>
+                </label>`
+              : `<strong>${escapeHtml(model?.name || profile.selectedModelId || "Configure a model below")}</strong>`
+          }
           <span>Verified capabilities</span>
         </div>
         <div class="capability-list">${asArray(model?.capabilities)
@@ -131,7 +147,7 @@ function renderAiProvider(profile) {
       </div>
       <fieldset class="credential-fields" ${pending ? "disabled" : ""}>
         ${asArray(catalog?.credentialFields)
-          .map((field) => renderCredentialField(field, stored ? [field.key] : [], profile.publicValues))
+          .map((field) => renderCredentialField(field, stored ? [field.key] : [], profile.publicValues, profile.id))
           .join("")}
       </fieldset>
       <div class="connection-actions">
@@ -156,8 +172,19 @@ function renderAiProvider(profile) {
   `;
 }
 
-function renderCredentialField(field, configuredFields = [], publicValues = {}) {
+function renderCredentialField(field, configuredFields = [], publicValues = {}, profileId = "") {
   const configured = configuredFields.includes(field.key);
+  if (field.type === "native-file") {
+    return `
+      <div class="credential-field native-file-field">
+        <span>${escapeHtml(field.label)}</span>
+        <button class="ghost-button small" type="button" data-local-whisper-file="${escapeHtml(field.key)}" data-profile-id="${escapeHtml(
+          profileId
+        )}" data-pending-label="Choosing…">${configured ? "Replace file" : "Choose file"}</button>
+        <small>${configured ? "Stored as an encrypted local path" : "Not configured · ProduDash never downloads models"}</small>
+      </div>
+    `;
+  }
   const publicValue = field.sensitive ? "" : publicValues?.[field.key] || "";
   return `
     <label class="credential-field">

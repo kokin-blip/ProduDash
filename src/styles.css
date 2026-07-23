@@ -933,6 +933,19 @@ summary:focus-visible {
   gap: 6px;
 }
 
+.native-file-field {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 10px;
+}
+
+.native-file-field small {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+}
+
 .credential-field span,
 .studio-form label > span,
 .platform-checks legend {
@@ -1669,6 +1682,10 @@ tbody tr:hover {
   background: #141619;
 }
 
+.compact-model-picker {
+  min-width: min(320px, 40vw);
+}
+
 .provider-model-row strong,
 .provider-model-row span,
 .workload-row strong,
@@ -2021,6 +2038,33 @@ tbody tr:hover {
 .platform-checks {
   display: grid;
   gap: 6px;
+}
+
+.studio-form .cloud-consent-check {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  padding: 12px;
+  background: var(--surface-raised);
+}
+
+.cloud-consent-check input {
+  width: 17px;
+  min-height: 17px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.cloud-consent-check strong,
+.cloud-consent-check small {
+  display: block;
+}
+
+.cloud-consent-check small {
+  margin-top: 3px;
+  color: var(--text-muted);
+  line-height: 1.45;
 }
 
 .studio-form textarea {

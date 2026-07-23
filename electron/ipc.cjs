@@ -18,6 +18,7 @@ function createHandlers({
   chooseClipFolders,
   chooseClipFiles,
   chooseMediaOutputFolder,
+  chooseLocalWhisperFile,
   relocateClipFolder,
   openClipInFolder,
   openMediaJobOutput
@@ -63,6 +64,7 @@ function createHandlers({
     "produdash:testAiProvider": async (_event, payload) => providers.testConnection(payload?.profileId),
     "produdash:removeAiProviderCredentials": async (_event, payload) => providers.removeCredentials(payload?.profileId),
     "produdash:setAiWorkload": async (_event, payload) => providers.setWorkload(payload?.workloadId, payload?.selection),
+    "produdash:chooseLocalWhisperFile": async (event, payload) => chooseLocalWhisperFile(event, payload?.kind),
     "produdash:getClipLibrary": async (_event, payload) => mediaLibrary.query(payload),
     "produdash:chooseClipFolders": async (event) => chooseClipFolders(event),
     "produdash:chooseClipFiles": async (event) => chooseClipFiles(event),
@@ -155,6 +157,22 @@ function registerIpc({ store, connections, providers, mediaLibrary, mediaJobs, a
       bookmark: result.bookmarks?.[0] || null
     });
   };
+  const chooseLocalWhisperFile = async (event, kind) => {
+    if (!["executablePath", "modelPath"].includes(kind)) {
+      throw new AppError("INVALID_INPUT", "The local Whisper file type is invalid.");
+    }
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(window, {
+      title: kind === "executablePath" ? "Choose whisper.cpp executable" : "Choose local Whisper model",
+      properties: ["openFile"],
+      securityScopedBookmarks: true
+    });
+    if (result.canceled) return store.getAppState();
+    return providers.saveCredentialDraft("whisper-cpp", {
+      [kind]: result.filePaths[0],
+      ...(result.bookmarks?.[0] ? { [`${kind}Bookmark`]: result.bookmarks[0] } : {})
+    });
+  };
   const openMediaJobOutput = async (_event, jobId) => mediaJobs.revealOutput(jobId, (outputPath) => shell.showItemInFolder(outputPath));
   const handlers = createHandlers({
     store,
@@ -166,6 +184,7 @@ function registerIpc({ store, connections, providers, mediaLibrary, mediaJobs, a
     chooseClipFolders,
     chooseClipFiles,
     chooseMediaOutputFolder,
+    chooseLocalWhisperFile,
     relocateClipFolder,
     openClipInFolder,
     openMediaJobOutput

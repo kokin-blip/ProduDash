@@ -12,6 +12,10 @@ class ProviderRegistry {
     return adapter;
   }
 
+  has(providerType) {
+    return this.adapters.has(providerType);
+  }
+
   listProviderTypes() {
     return [...this.adapters.values()].map((adapter) => ({
       id: adapter.id,

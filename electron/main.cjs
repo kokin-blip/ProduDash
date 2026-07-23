@@ -8,12 +8,18 @@ const { AppError } = require("./errors.cjs");
 const { registerIpc } = require("./ipc.cjs");
 const { ProduDashStore } = require("./store.cjs");
 const { GeminiProviderAdapter } = require("./ai/adapters/gemini.cjs");
+const { OpenAIProviderAdapter } = require("./ai/adapters/openai.cjs");
+const { AnthropicProviderAdapter } = require("./ai/adapters/anthropic.cjs");
+const { OpenAICompatibleProviderAdapter } = require("./ai/adapters/openai-compatible.cjs");
+const { WhisperCppProviderAdapter } = require("./ai/adapters/whisper-cpp.cjs");
 const { ProviderRegistry } = require("./ai/provider-registry.cjs");
 const { ProviderService } = require("./ai/provider-service.cjs");
 const { MediaLibrary } = require("./media/media-library.cjs");
 const { MediaJobService } = require("./media/media-job-service.cjs");
 const { createMediaProtocolHandler } = require("./media/media-protocol.cjs");
 const { MediaUtilityRunner } = require("./media/utility-runner.cjs");
+const { TranscriptionService } = require("./media/transcription-service.cjs");
+const { MediaAnalysisService } = require("./media/media-analysis-service.cjs");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -82,18 +88,32 @@ if (hasSingleInstanceLock) {
         }
       }
       const connectors = createConnectors();
-      const providerRegistry = new ProviderRegistry([new GeminiProviderAdapter({ connector: connectors.gemini })]);
+      const providerRegistry = new ProviderRegistry([
+        new GeminiProviderAdapter({ connector: connectors.gemini }),
+        new OpenAIProviderAdapter(),
+        new AnthropicProviderAdapter(),
+        new OpenAICompatibleProviderAdapter(),
+        new WhisperCppProviderAdapter({
+          startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
+        })
+      ]);
       const providers = new ProviderService({ store, registry: providerRegistry });
       await providers.initialize();
       const mediaLibrary = new MediaLibrary(app.getPath("userData"), {
         credentialVault: store.credentialVault,
         startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
       });
+      const transcriptionService = new TranscriptionService({ providerService: providers });
+      const mediaAnalysisService = new MediaAnalysisService({
+        providerService: providers,
+        transcriptionService
+      });
       const mediaJobs = new MediaJobService({
         store,
         mediaLibrary,
         credentialVault: store.credentialVault,
         runner: new MediaUtilityRunner({ utilityProcess }),
+        analysisService: mediaAnalysisService,
         startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark),
         onEvent: (event) => {
           if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("produdash:mediaJobEvent", event);

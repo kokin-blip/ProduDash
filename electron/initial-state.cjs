@@ -229,6 +229,84 @@ function createInitialState() {
         ],
         lastValidatedAt: null,
         error: null
+      },
+      {
+        id: "openai",
+        providerType: "openai",
+        name: "OpenAI",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: "gpt-5.6-terra",
+        models: [
+          {
+            id: "gpt-5.6-sol",
+            name: "GPT-5.6 Sol",
+            capabilities: ["text_generation", "streaming", "structured_output", "tool_calling", "image_understanding"]
+          },
+          {
+            id: "gpt-5.6-terra",
+            name: "GPT-5.6 Terra",
+            capabilities: ["text_generation", "streaming", "structured_output", "tool_calling", "image_understanding"]
+          },
+          {
+            id: "gpt-5.6-luna",
+            name: "GPT-5.6 Luna",
+            capabilities: ["text_generation", "streaming", "structured_output", "tool_calling", "image_understanding"]
+          },
+          {
+            id: "whisper-1",
+            name: "Whisper 1 (timestamped transcription)",
+            capabilities: ["audio_transcription"]
+          }
+        ],
+        lastValidatedAt: null,
+        error: null
+      },
+      {
+        id: "anthropic",
+        providerType: "anthropic",
+        name: "Anthropic Claude",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: "claude-sonnet-5",
+        models: [
+          {
+            id: "claude-sonnet-5",
+            name: "Claude Sonnet 5",
+            capabilities: ["text_generation", "streaming", "structured_output", "tool_calling", "image_understanding"]
+          }
+        ],
+        lastValidatedAt: null,
+        error: null
+      },
+      {
+        id: "openai-compatible",
+        providerType: "openai-compatible",
+        name: "OpenAI-compatible endpoint",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: null,
+        models: [],
+        publicValues: {},
+        lastValidatedAt: null,
+        error: null
+      },
+      {
+        id: "whisper-cpp",
+        providerType: "whisper-cpp",
+        name: "Local whisper.cpp",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: "local-whisper",
+        models: [
+          {
+            id: "local-whisper",
+            name: "Local whisper.cpp",
+            capabilities: ["audio_transcription"]
+          }
+        ],
+        lastValidatedAt: null,
+        error: null
       }
     ],
     aiWorkloads: {

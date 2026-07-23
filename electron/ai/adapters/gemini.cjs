@@ -1,6 +1,7 @@
 const { AI_CAPABILITIES } = require("../capabilities.cjs");
 const { GeminiConnector, MODEL } = require("../../connectors/gemini.cjs");
 const { AppError } = require("../../errors.cjs");
+const { normalizeToolCalls } = require("../provider-utils.cjs");
 
 const MODELS = [
   {
@@ -47,6 +48,62 @@ class GeminiProviderAdapter {
   async generateStructured({ credentials, modelId, prompt, schema, schemaName }) {
     this.requireModel(modelId);
     return this.connector.generateStructured(credentials.apiKey, prompt, schema, schemaName, modelId);
+  }
+
+  async generateText({ credentials, modelId, prompt }) {
+    this.requireModel(modelId);
+    return this.connector.generateText(credentials.apiKey, prompt, modelId);
+  }
+
+  async streamText({ credentials, modelId, prompt }) {
+    this.requireModel(modelId);
+    return this.connector.streamText(credentials.apiKey, prompt, modelId);
+  }
+
+  async generateWithTools({ credentials, modelId, prompt, tools = [] }) {
+    this.requireModel(modelId);
+    const interaction = await this.connector.generateWithTools(
+      credentials.apiKey,
+      prompt,
+      tools.map((tool) => ({
+        type: "function",
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema
+      })),
+      modelId
+    );
+    return {
+      text: interaction?.outputText || "",
+      toolCalls: normalizeToolCalls(interaction?.outputs || interaction?.output)
+    };
+  }
+
+  async analyzeImages({ credentials, modelId, prompt, images = [], schema, schemaName = "image analysis" }) {
+    this.requireModel(modelId);
+    if (!images.length || images.length > 12 || images.some((image) => !image?.data || !image?.mediaType)) {
+      throw new AppError("INVALID_INPUT", "Gemini image analysis requires between one and twelve bounded images.");
+    }
+    return this.connector.generateStructuredWithMedia(
+      credentials.apiKey,
+      prompt,
+      images.map((image) => ({ type: "image", data: image.data, mimeType: image.mediaType })),
+      schema,
+      schemaName,
+      modelId
+    );
+  }
+
+  async analyzeVideo({ credentials, modelId, prompt, videoPath, mimeType, schema, schemaName = "video analysis" }) {
+    this.requireModel(modelId);
+    return this.connector.generateStructuredWithMedia(
+      credentials.apiKey,
+      prompt,
+      { type: "video", path: videoPath, mimeType },
+      schema,
+      schemaName,
+      modelId
+    );
   }
 
   requireModel(modelId) {

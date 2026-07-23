@@ -40,6 +40,7 @@ export const api = {
   testAiProvider: (profileId) => unwrap(client().testAiProvider(profileId)),
   removeAiProviderCredentials: (profileId) => unwrap(client().removeAiProviderCredentials(profileId)),
   setAiWorkload: (workloadId, selection) => unwrap(client().setAiWorkload(workloadId, selection)),
+  chooseLocalWhisperFile: (kind) => unwrap(client().chooseLocalWhisperFile(kind)),
   getClipLibrary: (options = {}) => unwrap(client().getClipLibrary(options)),
   chooseClipFolders: () => unwrap(client().chooseClipFolders()),
   chooseClipFiles: () => unwrap(client().chooseClipFiles()),

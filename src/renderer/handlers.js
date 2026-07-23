@@ -204,6 +204,13 @@ async function handleClick(event) {
     return;
   }
 
+  const localWhisperButton = event.target.closest("[data-local-whisper-file]");
+  if (localWhisperButton) {
+    const kind = localWhisperButton.dataset.localWhisperFile;
+    await runAction(`local-whisper-${kind}`, localWhisperButton, () => api.chooseLocalWhisperFile(kind));
+    return;
+  }
+
   const addFoldersButton = event.target.closest("[data-add-clip-folders]");
   if (addFoldersButton) {
     await runAction("add-clip-folders", addFoldersButton, () => api.chooseClipFolders(), {
@@ -363,6 +370,20 @@ async function handleSubmit(event) {
       return;
     }
     await runAction("create-media-job", event.submitter, async () => {
+      const analysisMode = form.elements.analysisMode.value;
+      const analysisOption = form.elements.analysisMode.selectedOptions[0];
+      const categories = (analysisOption.dataset.categories || "").split(",").filter(Boolean);
+      const cloudConsent =
+        analysisMode === "local_heuristics"
+          ? null
+          : {
+              confirmed: form.elements.cloudConsent?.checked === true,
+              providerId: analysisOption.dataset.providerId,
+              modelId: analysisOption.dataset.modelId,
+              transcriptionProviderId: analysisOption.dataset.transcriptionProviderId || null,
+              transcriptionModelId: analysisOption.dataset.transcriptionModelId || null,
+              dataCategories: categories
+            };
       const state = await api.createMediaJob({
         sourceMediaId: form.elements.sourceMediaId.value,
         outputSelectionId: outputSelection.id,
@@ -374,6 +395,8 @@ async function handleSubmit(event) {
         captionText: form.elements.captionText.value,
         aspectTreatment: form.elements.aspectTreatment.value,
         targetAspect: form.elements.targetAspect.value,
+        analysisMode,
+        cloudConsent,
         platforms: getCheckedValues(form, "platforms")
       });
       ui.mediaOutputSelection = null;
@@ -410,7 +433,7 @@ async function handleSubmit(event) {
     event.preventDefault();
     const integrationId = form.dataset.credentialsForm;
     const values = {};
-    for (const input of form.querySelectorAll("input[name]")) values[input.name] = input.value;
+    for (const input of form.querySelectorAll("input[name], select[name]")) values[input.name] = input.value;
     await runAction(`credentials-${integrationId}`, event.submitter, () => api.saveIntegrationCredentials(integrationId, values), {
       refreshOnError: true
     });
@@ -421,7 +444,7 @@ async function handleSubmit(event) {
     event.preventDefault();
     const profileId = form.dataset.aiProviderForm;
     const values = {};
-    for (const input of form.querySelectorAll("input[name]")) values[input.name] = input.value;
+    for (const input of form.querySelectorAll("input[name], select[name]")) values[input.name] = input.value;
     await runAction(`ai-provider-${profileId}`, event.submitter, () => api.saveAiProviderCredentials(profileId, values), {
       refreshOnError: true
     });

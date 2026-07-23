@@ -443,6 +443,84 @@ test("Studio creates deterministic local jobs while preserving legacy plans as n
   assert.ok(document.querySelector("[data-post-form]"));
 });
 
+test("Studio exposes only connected capability-compatible cloud modes with per-job consent", async () => {
+  const renderer = await setupRenderer();
+  const state = baseState();
+  state.aiProviders[0] = {
+    ...state.aiProviders[0],
+    status: "connected",
+    models: [
+      {
+        id: "gemini-3.6-flash",
+        name: "Gemini 3.6 Flash",
+        capabilities: ["text_generation", "structured_output", "image_understanding", "native_video_understanding"]
+      }
+    ]
+  };
+  state.aiProviders.push({
+    id: "openai",
+    providerType: "openai",
+    name: "OpenAI",
+    status: "connected",
+    credentialStatus: "stored",
+    selectedModelId: "whisper-1",
+    models: [{ id: "whisper-1", name: "Whisper 1", capabilities: ["audio_transcription"] }]
+  });
+  state.aiWorkloads.transcription = { mode: "provider", profileId: "openai", modelId: "whisper-1" };
+  renderer.setAppState(state);
+  renderer.setClipLibrary({
+    folders: [],
+    clips: [{ id: "media-1", name: "Source.mp4", status: "available" }],
+    total: 1,
+    offset: 0,
+    limit: 40,
+    notices: []
+  });
+  renderer.ui.activeSection = "studio";
+  renderer.ui.studioTab = "create";
+  renderer.renderApp();
+  const modes = document.querySelector('[name="analysisMode"]');
+  assert.match(modes.textContent, /Local heuristics/);
+  assert.match(modes.textContent, /Native video analysis/);
+  assert.match(modes.textContent, /Transcript-only analysis/);
+  assert.match(modes.textContent, /Transcript \+ sampled frames/);
+  const frames = modes.querySelector('option[value="transcript_frames"]');
+  assert.equal(frames.dataset.providerId, "gemini");
+  assert.equal(frames.dataset.transcriptionProviderId, "openai");
+  assert.equal(frames.dataset.categories, "audio,transcript,frames");
+  assert.match(document.querySelector(".cloud-consent-check").textContent, /Consent for this job only/);
+});
+
+test("local whisper configuration uses native file selectors and never renders protected paths", async () => {
+  const renderer = await setupRenderer();
+  renderer.ui.providerCatalog.push({
+    id: "whisper-cpp",
+    name: "Local whisper.cpp",
+    credentialFields: [
+      { key: "executablePath", label: "whisper.cpp executable", type: "native-file", sensitive: true },
+      { key: "modelPath", label: "Whisper model file", type: "native-file", sensitive: true }
+    ]
+  });
+  const state = baseState();
+  state.aiProviders.push({
+    id: "whisper-cpp",
+    providerType: "whisper-cpp",
+    name: "Local whisper.cpp",
+    status: "disconnected",
+    credentialStatus: "missing",
+    selectedModelId: "local-whisper",
+    models: [{ id: "local-whisper", name: "Local whisper.cpp", capabilities: ["audio_transcription"] }]
+  });
+  renderer.setAppState(state);
+  renderer.ui.activeSection = "integrations";
+  renderer.renderApp();
+  const form = document.querySelector('[data-ai-provider-form="whisper-cpp"]');
+  assert.equal(form.querySelectorAll("[data-local-whisper-file]").length, 2);
+  assert.equal(form.querySelector('input[name="executablePath"]'), null);
+  assert.doesNotMatch(form.textContent, /Users\/owner/);
+  assert.match(form.textContent, /never downloads models/i);
+});
+
 test("Studio safely renders durable job progress, candidate approval, and partial artifacts", async () => {
   const renderer = await setupRenderer();
   renderer.setAppState(

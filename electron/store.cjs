@@ -186,7 +186,8 @@ class ProduDashStore {
   async syncAiProviderCredentialStatus(resolveFields) {
     return this.enqueueMutation(async () => {
       for (const profile of this.state.aiProviders) {
-        const resolved = resolveFields(profile.providerType);
+        const resolved = resolveFields(profile.providerType, clone(profile));
+        if (!resolved) continue;
         const fields = Array.isArray(resolved) ? resolved : resolved.credentialFields;
         if (!Array.isArray(resolved)) {
           profile.name = resolved.name;
@@ -277,6 +278,18 @@ class ProduDashStore {
       profile.error = result.error || null;
       profile.lastValidatedAt = result.lastValidatedAt || new Date().toISOString();
       this.audit("ai_provider", `${profile.name} connection updated to ${profile.status}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async updateAiProviderModels(profileId, models, selectedModelId) {
+    this.getAiProvider(profileId);
+    return this.enqueueMutation(async () => {
+      const profile = this.state.aiProviders.find((item) => item.id === profileId);
+      profile.models = clone(Array.isArray(models) ? models : []);
+      profile.selectedModelId =
+        selectedModelId && profile.models.some((model) => model.id === selectedModelId) ? selectedModelId : profile.models[0]?.id || null;
       this.persist();
       return this.getAppState();
     });

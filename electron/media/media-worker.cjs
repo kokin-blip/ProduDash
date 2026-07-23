@@ -5,6 +5,7 @@ const { spawn } = require("node:child_process");
 const { AppError } = require("../errors.cjs");
 const { writeJsonAtomic } = require("../atomic-json.cjs");
 const { getMediaBinaries } = require("./binaries.cjs");
+const { scoreCandidate } = require("./analysis-contract.cjs");
 
 const PROCESSING_VERSION = 1;
 const MIN_CLIP_DURATION = 5;
@@ -206,6 +207,19 @@ function generateCandidates({ duration, scenes = [], silences = [], targetDurati
     if (start + MIN_CLIP_DURATION > duration) continue;
     const end = Math.min(duration, start + clipDuration);
     const silencePenalty = silences.some((silence) => silence.start < end && (silence.end ?? duration) > start) ? 0.15 : 0;
+    const scores = {
+      hook: proposedStart === 0 || scenes.includes(proposedStart) ? 0.65 : 0.5,
+      completeThought: 0.5,
+      audioClarity: silencePenalty ? 0.55 : 0.8,
+      visualContinuity: scenes.includes(proposedStart) ? 0.8 : 0.65,
+      goalRelevance: 0.5,
+      duration: Number(Math.min(1, (end - start) / Math.max(targetDuration, MIN_CLIP_DURATION)).toFixed(2)),
+      platformFit: 0.6,
+      novelty: 0.6,
+      duplication: 0,
+      silence: silencePenalty ? 0.6 : 0.05,
+      unusableFrames: 0
+    };
     candidates.push({
       id: `candidate-${candidates.length + 1}`,
       title: `Clip ${candidates.length + 1}`,
@@ -213,11 +227,8 @@ function generateCandidates({ duration, scenes = [], silences = [], targetDurati
       end: Number(end.toFixed(3)),
       duration: Number((end - start).toFixed(3)),
       confidence: Number(Math.max(0, 0.7 - silencePenalty).toFixed(2)),
-      scores: {
-        duration: Number(Math.min(1, (end - start) / Math.max(targetDuration, MIN_CLIP_DURATION)).toFixed(2)),
-        audioClarity: silencePenalty ? 0.55 : 0.8,
-        visualContinuity: scenes.includes(proposedStart) ? 0.8 : 0.65
-      },
+      scores,
+      weightedScore: scoreCandidate(scores),
       rationale: silencePenalty
         ? "A deterministic interval near a scene boundary; review the detected silence before rendering."
         : "A deterministic interval aligned to the source timeline or a detected scene boundary."
@@ -553,14 +564,16 @@ async function renderJob(job, context, binaries) {
       captionMode: job.settings.captionMode,
       aspectTreatment: job.settings.aspectTreatment,
       targetAspect: job.settings.targetAspect,
-      platforms: job.settings.platforms
+      platforms: job.settings.platforms,
+      analysisMode: job.settings.analysisMode || "local_heuristics"
     },
     startedAt,
     completedAt: new Date().toISOString(),
     files: artifacts.map((artifact) => ({ kind: artifact.kind, filename: artifact.name })),
     analysis: {
-      provider: "local_heuristics",
-      model: "deterministic-v1",
+      provider: analysis.provider?.profileId || "local_heuristics",
+      model: analysis.provider?.modelId || "deterministic-v1",
+      mode: analysis.analysisMode || "local_heuristics",
       candidates: selected.map((candidate) => ({
         id: candidate.id,
         start: candidate.start,

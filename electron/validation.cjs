@@ -6,6 +6,7 @@ const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 const CAPTION_MODES = new Set(["off", "srt", "srt_burned"]);
 const ASPECT_TREATMENTS = new Set(["original", "fit_pad", "center_crop"]);
 const TARGET_ASPECTS = new Set(["original", "vertical", "square", "landscape"]);
+const ANALYSIS_MODES = new Set(["local_heuristics", "transcript_only", "transcript_frames", "native_video"]);
 
 function requireId(value, label = "Identifier") {
   if (typeof value !== "string" || !ID_PATTERN.test(value)) {
@@ -111,12 +112,33 @@ function validateMediaJobPayload(payload) {
   const captionMode = String(payload?.captionMode || "off");
   const aspectTreatment = String(payload?.aspectTreatment || "fit_pad");
   const targetAspect = String(payload?.targetAspect || "original");
+  const analysisMode = String(payload?.analysisMode || "local_heuristics");
   if (!CAPTION_MODES.has(captionMode)) throw new AppError("INVALID_INPUT", "Caption mode is invalid.");
   if (!ASPECT_TREATMENTS.has(aspectTreatment)) throw new AppError("INVALID_INPUT", "Aspect treatment is invalid.");
   if (!TARGET_ASPECTS.has(targetAspect)) throw new AppError("INVALID_INPUT", "Target aspect is invalid.");
+  if (!ANALYSIS_MODES.has(analysisMode)) throw new AppError("INVALID_ANALYSIS_MODE", "The selected media analysis mode is invalid.");
   const captionText = boundedString(payload?.captionText, { label: "Caption text", max: 2000 });
   if (captionMode !== "off" && !captionText) {
     throw new AppError("CAPTION_TEXT_REQUIRED", "Enter caption text for SRT or burned-in captions.");
+  }
+  let cloudConsent = null;
+  if (analysisMode !== "local_heuristics") {
+    const consent = payload?.cloudConsent;
+    if (consent?.confirmed !== true || !Array.isArray(consent?.dataCategories) || consent.dataCategories.length > 4) {
+      throw new AppError("CLOUD_MEDIA_CONSENT_REQUIRED", "Confirm the cloud media disclosure for this individual job.");
+    }
+    cloudConsent = {
+      confirmed: true,
+      providerId: requireId(consent.providerId, "Analysis provider"),
+      modelId: boundedString(consent.modelId, { label: "Analysis model", min: 1, max: 200 }),
+      transcriptionProviderId: consent.transcriptionProviderId
+        ? requireId(consent.transcriptionProviderId, "Transcription provider")
+        : null,
+      transcriptionModelId: consent.transcriptionModelId
+        ? boundedString(consent.transcriptionModelId, { label: "Transcription model", min: 1, max: 200 })
+        : null,
+      dataCategories: [...new Set(consent.dataCategories.map((item) => boundedString(item, { label: "Data category", min: 1, max: 40 })))]
+    };
   }
   return {
     sourceMediaId: requireId(payload?.sourceMediaId, "Source media"),
@@ -134,6 +156,8 @@ function validateMediaJobPayload(payload) {
     captionText,
     aspectTreatment,
     targetAspect,
+    analysisMode,
+    cloudConsent,
     platforms: normalizePlatforms(payload?.platforms || [])
   };
 }

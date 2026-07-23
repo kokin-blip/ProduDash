@@ -50,11 +50,12 @@ function sanitizeArtifacts(artifacts) {
 }
 
 class MediaJobService {
-  constructor({ store, mediaLibrary, credentialVault, runner, startAccessingBookmark, onEvent = () => {} }) {
+  constructor({ store, mediaLibrary, credentialVault, runner, analysisService = null, startAccessingBookmark, onEvent = () => {} }) {
     this.store = store;
     this.mediaLibrary = mediaLibrary;
     this.credentialVault = credentialVault;
     this.runner = runner;
+    this.analysisService = analysisService;
     this.startAccessingBookmark = startAccessingBookmark;
     this.onEvent = onEvent;
     this.outputSelections = new Map();
@@ -151,6 +152,8 @@ class MediaJobService {
           captionText: input.captionText,
           aspectTreatment: input.aspectTreatment,
           targetAspect: input.targetAspect,
+          analysisMode: input.analysisMode,
+          cloudConsent: input.cloudConsent,
           platforms: input.platforms
         },
         candidates: [],
@@ -372,7 +375,31 @@ class MediaJobService {
 
   async finish(jobId, result) {
     const job = this.store.getMediaJob(jobId);
+    if (result.type === "awaiting_review" && (job.settings.analysisMode || "local_heuristics") !== "local_heuristics") {
+      if (!this.analysisService) {
+        result = {
+          type: "error",
+          error: { code: "ANALYSIS_MODE_UNAVAILABLE", message: "The selected cloud analysis mode is unavailable." },
+          retryable: true
+        };
+      } else {
+        try {
+          result = await this.analysisService.analyze({ job, paths: this.getPrivatePaths(jobId), localResult: result });
+        } catch (error) {
+          result = {
+            type: "error",
+            error: {
+              code: error instanceof AppError ? error.code : "CLOUD_ANALYSIS_FAILED",
+              message: error instanceof AppError ? error.message : "The selected cloud analysis could not complete."
+            },
+            retryable: true
+          };
+        }
+      }
+    }
     if (result.type === "awaiting_review") {
+      const method =
+        (job.settings.analysisMode || "local_heuristics") === "local_heuristics" ? "local heuristics" : "the selected AI provider";
       await this.store.updateMediaJobSummary(
         jobId,
         {
@@ -384,7 +411,7 @@ class MediaJobService {
           error: null,
           retryable: false
         },
-        `Prepared deterministic candidates for review: ${job.title}.`
+        `Prepared candidates with ${method} for review: ${job.title}.`
       );
     } else if (result.type === "completed") {
       const videos = (result.artifacts || []).filter((artifact) => artifact.kind === "video" && artifact.path);

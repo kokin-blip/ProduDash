@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld("produdash", {
   testAiProvider: (profileId) => invoke("produdash:testAiProvider", { profileId }),
   removeAiProviderCredentials: (profileId) => invoke("produdash:removeAiProviderCredentials", { profileId }),
   setAiWorkload: (workloadId, selection) => invoke("produdash:setAiWorkload", { workloadId, selection }),
+  chooseLocalWhisperFile: (kind) => invoke("produdash:chooseLocalWhisperFile", { kind }),
   getClipLibrary: (options) => invoke("produdash:getClipLibrary", options),
   chooseClipFolders: () => invoke("produdash:chooseClipFolders"),
   chooseClipFiles: () => invoke("produdash:chooseClipFiles"),

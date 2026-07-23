@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const { AppError } = require("../electron/errors.cjs");
 const { MediaJobService } = require("../electron/media/media-job-service.cjs");
 const { validateState } = require("../electron/state-schema.cjs");
 const { createHarness } = require("./helpers.cjs");
@@ -189,4 +190,65 @@ test("restart interruption, cancellation, retry, and clear preserve user-owned o
   assert.equal(fs.existsSync(privatePaths.tempPath), false);
   assert.equal(fs.existsSync(userOutput), true);
   assert.deepEqual(harness.vault.get(`media-job-${jobId}`), {});
+});
+
+test("cloud media jobs invoke only the selected analysis path and never fall back to local candidates", async (context) => {
+  const harness = await createHarness();
+  context.after(harness.cleanup);
+  const sourcePath = path.join(harness.directory, "source.mp4");
+  const outputParent = path.join(harness.directory, "outputs");
+  fs.writeFileSync(sourcePath, "fixture");
+  fs.mkdirSync(outputParent);
+  const runner = createFakeRunner();
+  let analysisCalls = 0;
+  const jobs = new MediaJobService({
+    store: harness.store,
+    mediaLibrary: {
+      getClipSummary: (id) => ({ id, name: "Source.mp4", status: "available" }),
+      resolveClipPath: () => sourcePath,
+      startClipAccess: () => null,
+      addFiles: async () => ({})
+    },
+    credentialVault: harness.vault,
+    runner,
+    analysisService: {
+      async analyze() {
+        analysisCalls += 1;
+        throw new AppError("PROVIDER_RATE_LIMITED", "The selected provider is temporarily rate limited.");
+      }
+    }
+  });
+  const selection = jobs.rememberOutputSelection({ path: outputParent });
+  const state = await jobs.create({
+    sourceMediaId: "media-source",
+    outputSelectionId: selection.id,
+    title: "Cloud analysis",
+    maxClips: 1,
+    targetDuration: 8,
+    captionMode: "off",
+    aspectTreatment: "fit_pad",
+    targetAspect: "original",
+    analysisMode: "native_video",
+    cloudConsent: {
+      confirmed: true,
+      providerId: "gemini",
+      modelId: "gemini-3.6-flash",
+      dataCategories: ["complete_video"]
+    },
+    platforms: []
+  });
+  const jobId = state.mediaJobs[0].id;
+  await waitFor(() => runner.starts.length === 1);
+  runner.starts[0].completion.resolve({
+    type: "awaiting_review",
+    metadata: { duration: 30 },
+    candidates: [{ id: "local-candidate", start: 0, end: 8 }],
+    warnings: []
+  });
+  await waitFor(() => harness.store.getMediaJob(jobId).status === "failed");
+  const failed = harness.store.getMediaJob(jobId);
+  assert.equal(analysisCalls, 1);
+  assert.equal(failed.candidates.length, 0);
+  assert.match(failed.error, /selected provider is temporarily rate limited/i);
+  assert.equal(failed.retryable, true);
 });
