@@ -10,6 +10,18 @@ const SUGGESTED_QUESTIONS = [
   "Are my integrations healthy?"
 ];
 
+const ADVISOR_ART = Object.freeze({
+  idle: "./assets/advisor/states/advisor-idle.png",
+  thinking: "./assets/advisor/states/advisor-thinking.png",
+  success: "./assets/advisor/states/advisor-success.png",
+  warning: "./assets/advisor/states/advisor-warning.png"
+});
+const ADVISOR_AVATAR = "./assets/advisor/states/advisor-avatar.png";
+
+function advisorArtSource() {
+  return ADVISOR_ART[ui.advisorStatus] || ADVISOR_ART.idle;
+}
+
 function advisorProvider() {
   const assignment = resolveWorkload("advisor");
   if (!assignment || assignment.mode !== "provider") return null;
@@ -116,9 +128,7 @@ export function renderAdvisor() {
       aria-controls="advisorPanel"
       aria-label="${escapeHtml(ui.advisorOpen ? `Close ${displayName}` : `Open ${displayName}`)}"
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M7 4.5h8.5A2.5 2.5 0 0 1 18 7v12H8a2 2 0 0 1-2-2V5.5A1 1 0 0 1 7 4.5Zm1 0V17a2 2 0 0 0 2 2M10 8h5M10 11h5M10 14h3" />
-      </svg>
+      <img class="advisor-launcher-avatar" src="${ADVISOR_AVATAR}" alt="" />
       <span>${escapeHtml(displayName)}</span>
     </button>
     <aside
@@ -128,10 +138,13 @@ export function renderAdvisor() {
       aria-hidden="${!ui.advisorOpen}"
     >
       <header class="advisor-header">
-        <div>
-          <span class="advisor-kicker">Read-only operations assistant</span>
-          <h2>${escapeHtml(displayName)}</h2>
-          <p>${escapeHtml(providerLabel)}</p>
+        <div class="advisor-identity">
+          <img class="advisor-state-art" src="${advisorArtSource()}" alt="" />
+          <div>
+            <span class="advisor-kicker">Read-only operations assistant</span>
+            <h2>${escapeHtml(displayName)}</h2>
+            <p>${escapeHtml(providerLabel)}</p>
+          </div>
         </div>
         <button class="icon-button" type="button" data-advisor-close aria-label="Close ${escapeHtml(displayName)}">×</button>
       </header>

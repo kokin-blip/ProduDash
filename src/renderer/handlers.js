@@ -132,7 +132,12 @@ async function handleClick(event) {
   if (advisorClear) {
     if (!window.confirm("Clear all visible Advisor history stored on this computer?")) return;
     await runAction("advisor-clear", advisorClear, () => api.clearAdvisorHistory(), {
-      applyResult: setAdvisorHistory
+      applyResult: (history) => {
+        setAdvisorHistory(history);
+        ui.advisorStatus = "idle";
+        ui.advisorToolName = null;
+        ui.advisorError = null;
+      }
     });
     return;
   }

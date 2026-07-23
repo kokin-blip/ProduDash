@@ -2478,14 +2478,10 @@ tbody tr:hover {
   transform: scale(0.98);
 }
 
-.advisor-launcher svg {
-  width: 19px;
-  height: 19px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.advisor-launcher-avatar {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
 }
 
 .advisor-panel {
@@ -2525,6 +2521,25 @@ tbody tr:hover {
   gap: 16px;
   padding: 18px 18px 14px;
   border-bottom: 1px solid var(--border);
+}
+
+.advisor-identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.advisor-identity > div {
+  min-width: 0;
+}
+
+.advisor-state-art {
+  width: 48px;
+  height: 68px;
+  flex: 0 0 48px;
+  object-fit: contain;
+  object-position: center;
 }
 
 .advisor-header h2 {

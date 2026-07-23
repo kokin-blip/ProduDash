@@ -273,6 +273,7 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
   });
   assert.equal(await page.locator("[data-advisor-form]").getAttribute("aria-busy"), "false");
   assert.match(await page.locator("#advisorPanel").textContent(), /one reply draft needs human approval/i);
+  assert.match(await page.locator(".advisor-state-art").getAttribute("src"), /advisor-success\.png$/);
   await page.screenshot({ path: path.join(artifactPath, "advisor-connected-1440x960.png"), fullPage: true });
   await page.click("[data-advisor-close]");
 

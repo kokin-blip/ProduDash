@@ -16,6 +16,7 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - Schema-validated AI candidates with bounded timestamps, overlap/duplicate rejection, limited boundary snapping, eleven stored component scores, and concise rationale.
 - Human approval gates for AI drafts and local post-export plans.
 - A provider-neutral Advisor with session-only cloud consent, request cancellation, a five-round local tool limit, bounded business-scoped summaries, and a separate recoverable 50-turn visible history.
+- An original transparent frog field-scout character with static idle, thinking, success, warning, and compact avatar artwork; reduced-motion behavior never depends on continuous character animation.
 - Hardened Electron renderer isolation, restrictive CSP, trusted IPC senders, blocked navigation/windows, and normalized errors.
 - A separate atomic and recoverable Clip Library index with folder/loose-file imports, recursive scans, search, filters, tags, cached thumbnails, opaque previews, and visible missing/offline/corrupt/unsupported states.
 - A durable one-at-a-time local media queue with deterministic silence/scene inspection, candidate review, cancel/retry behavior, H.264/AAC rendering, optional SRT/burned captions, thumbnails, safe manifests, and automatic Clip Library import.
@@ -27,7 +28,6 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - Automatic order creation, payments, refunds, discounts, or fulfillment.
 - TikTok, Instagram, Facebook, YouTube, or Stripe API connectors.
 - External publishing or any unapproved media upload.
-- Final Advisor character art and expression variants, pending owner selection of a base concept.
 - Social analytics or Shopify profit/conversion figures without real cost and traffic inputs.
 - Hosted accounts, cross-device synchronization, OAuth callbacks, webhooks, or token refresh.
 - Signed installers, notarization, automatic updates, or production release packaging.

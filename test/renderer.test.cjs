@@ -154,7 +154,7 @@ test("malicious connector strings render as text rather than elements", async ()
   const payload = `<img src=x onerror="window.pwned=true">`;
   renderer.setAppState(baseState({ businesses: [partialBusiness({ name: payload })] }));
   renderer.renderApp();
-  assert.equal(document.querySelector("img"), null);
+  assert.equal(document.querySelector("#viewRoot img, #businessStrip img"), null);
   assert.equal(window.pwned, undefined);
   assert.match(document.querySelector("#pageTitle").textContent, /<img src=x/);
 });
@@ -735,7 +735,17 @@ test("Advisor panel is accessible, provider-scoped, escaped, and reduced-motion 
   assert.match(document.querySelector("#advisorPanel").textContent, /Responses are advisory/i);
   assert.match(document.querySelector("#advisorPanel").textContent, /50 visible turns/i);
   assert.equal(window.advisorPwned, undefined);
-  assert.equal(document.querySelector("#advisorPanel img"), null);
+  assert.equal(document.querySelector('#advisorPanel img[src="x"]'), null);
+  assert.match(document.querySelector(".advisor-launcher-avatar").getAttribute("src"), /advisor-avatar\.png$/);
+  assert.match(document.querySelector(".advisor-state-art").getAttribute("src"), /advisor-idle\.png$/);
+  for (const state of ["thinking", "success", "warning"]) {
+    renderer.ui.advisorStatus = state;
+    renderer.renderApp();
+    assert.match(document.querySelector(".advisor-state-art").getAttribute("src"), new RegExp(`advisor-${state}\\.png$`));
+  }
+  for (const asset of ["idle", "thinking", "success", "warning", "avatar"]) {
+    assert.equal(fs.existsSync(path.join(projectRoot, `assets/advisor/states/advisor-${asset}.png`)), true);
+  }
   const css = fs.readFileSync(path.join(projectRoot, "src/styles.css"), "utf8");
   assert.match(css, /\.advisor-panel/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.advisor-panel/);
