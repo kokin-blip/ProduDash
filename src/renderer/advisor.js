@@ -17,6 +17,8 @@ const ADVISOR_ART = Object.freeze({
   warning: "./assets/advisor/states/advisor-warning.png"
 });
 const ADVISOR_AVATAR = "./assets/advisor/states/advisor-avatar.png";
+const ADVISOR_IDLE_BLINK = "./assets/advisor/states/advisor-idle-blink.png";
+const ADVISOR_AVATAR_BLINK = "./assets/advisor/states/advisor-avatar-blink.png";
 let previousArtState = null;
 let previousOpenState = false;
 
@@ -132,7 +134,12 @@ export function renderAdvisor() {
       aria-controls="advisorPanel"
       aria-label="${escapeHtml(ui.advisorOpen ? `Close ${displayName}` : `Open ${displayName}`)}"
     >
-      <img class="advisor-launcher-avatar${animateArt ? " is-reacting" : ""}" src="${ADVISOR_AVATAR}" alt="" />
+      <span class="advisor-avatar-stack${artState === "idle" ? " is-idle" : ""}" aria-hidden="true">
+        <span class="advisor-avatar-reaction${animateArt ? " is-reacting" : ""}">
+          <img class="advisor-launcher-avatar" src="${ADVISOR_AVATAR}" alt="" />
+          <img class="advisor-avatar-blink" src="${ADVISOR_AVATAR_BLINK}" alt="" />
+        </span>
+      </span>
       <span>${escapeHtml(displayName)}</span>
     </button>
     <aside
@@ -143,12 +150,16 @@ export function renderAdvisor() {
     >
       <header class="advisor-header">
         <div class="advisor-identity">
-          <img
-            class="advisor-state-art${animateArt ? " is-reacting" : ""}"
-            src="${ADVISOR_ART[artState]}"
+          <span
+            class="advisor-art-stack${artState === "idle" ? " is-idle" : ""}"
             data-advisor-art-state="${artState}"
-            alt=""
-          />
+            aria-hidden="true"
+          >
+            <span class="advisor-art-reaction${animateArt ? " is-reacting" : ""}">
+              <img class="advisor-state-art" src="${ADVISOR_ART[artState]}" alt="" />
+              ${artState === "idle" ? `<img class="advisor-idle-blink" src="${ADVISOR_IDLE_BLINK}" alt="" />` : ""}
+            </span>
+          </span>
           <div>
             <span class="advisor-kicker">Read-only operations assistant</span>
             <h2>${escapeHtml(displayName)}</h2>

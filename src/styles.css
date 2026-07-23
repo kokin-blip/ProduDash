@@ -2510,6 +2510,34 @@ tbody tr:hover {
   }
 }
 
+@keyframes advisor-idle-breathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-1px) scale(1.006);
+  }
+}
+
+@keyframes advisor-blink {
+  0%,
+  5.9%,
+  7.2%,
+  8.4%,
+  100% {
+    opacity: 0;
+  }
+
+  6.3%,
+  6.8%,
+  7.6%,
+  8% {
+    opacity: 1;
+  }
+}
+
 .advisor-launcher {
   position: fixed;
   z-index: 30;
@@ -2547,14 +2575,41 @@ tbody tr:hover {
   transform: scale(0.98);
 }
 
-.advisor-launcher-avatar {
+.advisor-avatar-stack {
+  position: relative;
   width: 28px;
   height: 28px;
+  flex: 0 0 28px;
+}
+
+.advisor-avatar-reaction {
+  position: absolute;
+  inset: 0;
+}
+
+.advisor-launcher-avatar,
+.advisor-avatar-blink {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 
-.advisor-launcher-avatar.is-reacting {
+.advisor-avatar-blink {
+  opacity: 0;
+}
+
+.advisor-avatar-reaction.is-reacting {
   animation: advisor-avatar-react var(--motion-surface) var(--ease-out) both;
+}
+
+.advisor-avatar-stack.is-idle {
+  animation: advisor-idle-breathe 5.8s ease-in-out infinite;
+}
+
+.advisor-avatar-stack.is-idle .advisor-avatar-blink {
+  animation: advisor-blink 7.1s steps(1, end) -2.2s infinite;
 }
 
 .advisor-panel {
@@ -2607,32 +2662,56 @@ tbody tr:hover {
   min-width: 0;
 }
 
-.advisor-state-art {
+.advisor-art-stack {
+  position: relative;
   width: 48px;
   height: 68px;
   flex: 0 0 48px;
+  transform-origin: 50% 76%;
+}
+
+.advisor-art-reaction {
+  position: absolute;
+  inset: 0;
+  transform-origin: inherit;
+}
+
+.advisor-state-art,
+.advisor-idle-blink {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   object-position: center;
 }
 
-.advisor-state-art.is-reacting {
-  transform-origin: 50% 76%;
+.advisor-idle-blink {
+  opacity: 0;
 }
 
-.advisor-state-art.is-reacting[data-advisor-art-state="idle"] {
+.advisor-art-stack[data-advisor-art-state="idle"] .advisor-art-reaction.is-reacting {
   animation: advisor-idle-arrive var(--motion-surface) var(--ease-out) both;
 }
 
-.advisor-state-art.is-reacting[data-advisor-art-state="thinking"] {
+.advisor-art-stack[data-advisor-art-state="thinking"] .advisor-art-reaction.is-reacting {
   animation: advisor-thinking-react calc(var(--motion-surface) * 2) var(--ease-out) 2;
 }
 
-.advisor-state-art.is-reacting[data-advisor-art-state="success"] {
+.advisor-art-stack[data-advisor-art-state="success"] .advisor-art-reaction.is-reacting {
   animation: advisor-success-react calc(var(--motion-surface) * 2) var(--ease-out) both;
 }
 
-.advisor-state-art.is-reacting[data-advisor-art-state="warning"] {
+.advisor-art-stack[data-advisor-art-state="warning"] .advisor-art-reaction.is-reacting {
   animation: advisor-warning-react calc(var(--motion-view) * 2) var(--ease-out) both;
+}
+
+.advisor-art-stack.is-idle {
+  animation: advisor-idle-breathe 5.8s ease-in-out infinite;
+}
+
+.advisor-art-stack.is-idle .advisor-idle-blink {
+  animation: advisor-blink 7.1s steps(1, end) infinite;
 }
 
 .advisor-header h2 {
@@ -2970,10 +3049,21 @@ tbody tr:hover {
     animation: none !important;
   }
 
+  .advisor-avatar-stack,
+  .advisor-avatar-reaction,
+  .advisor-art-stack,
+  .advisor-art-reaction,
   .advisor-launcher-avatar,
-  .advisor-state-art {
+  .advisor-avatar-blink,
+  .advisor-state-art,
+  .advisor-idle-blink {
     animation: none !important;
     transform: none !important;
+  }
+
+  .advisor-avatar-blink,
+  .advisor-idle-blink {
+    opacity: 0 !important;
   }
 
   ::view-transition-old(main-content),

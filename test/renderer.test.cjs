@@ -737,19 +737,23 @@ test("Advisor panel is accessible, provider-scoped, escaped, and reduced-motion 
   assert.equal(window.advisorPwned, undefined);
   assert.equal(document.querySelector('#advisorPanel img[src="x"]'), null);
   assert.match(document.querySelector(".advisor-launcher-avatar").getAttribute("src"), /advisor-avatar\.png$/);
+  assert.match(document.querySelector(".advisor-avatar-blink").getAttribute("src"), /advisor-avatar-blink\.png$/);
   assert.match(document.querySelector(".advisor-state-art").getAttribute("src"), /advisor-idle\.png$/);
-  assert.equal(document.querySelector(".advisor-state-art").dataset.advisorArtState, "idle");
+  assert.match(document.querySelector(".advisor-idle-blink").getAttribute("src"), /advisor-idle-blink\.png$/);
+  assert.equal(document.querySelector(".advisor-art-stack").dataset.advisorArtState, "idle");
+  assert.equal(document.querySelector(".advisor-art-stack").classList.contains("is-idle"), true);
   renderer.renderApp();
-  assert.equal(document.querySelector(".advisor-state-art").classList.contains("is-reacting"), false);
+  assert.equal(document.querySelector(".advisor-art-reaction").classList.contains("is-reacting"), false);
   for (const state of ["thinking", "success", "warning"]) {
     renderer.ui.advisorStatus = state;
     renderer.renderApp();
     const art = document.querySelector(".advisor-state-art");
     assert.match(art.getAttribute("src"), new RegExp(`advisor-${state}\\.png$`));
-    assert.equal(art.dataset.advisorArtState, state);
-    assert.equal(art.classList.contains("is-reacting"), true);
+    assert.equal(document.querySelector(".advisor-art-stack").dataset.advisorArtState, state);
+    assert.equal(document.querySelector(".advisor-art-reaction").classList.contains("is-reacting"), true);
+    assert.equal(document.querySelector(".advisor-idle-blink"), null);
   }
-  for (const asset of ["idle", "thinking", "success", "warning", "avatar"]) {
+  for (const asset of ["idle", "idle-blink", "thinking", "success", "warning", "avatar", "avatar-blink"]) {
     assert.equal(fs.existsSync(path.join(projectRoot, `assets/advisor/states/advisor-${asset}.png`)), true);
   }
   const css = fs.readFileSync(path.join(projectRoot, "src/styles.css"), "utf8");
@@ -757,14 +761,18 @@ test("Advisor panel is accessible, provider-scoped, escaped, and reduced-motion 
   for (const animation of [
     "advisor-avatar-react",
     "advisor-idle-arrive",
+    "advisor-idle-breathe",
+    "advisor-blink",
     "advisor-thinking-react",
     "advisor-success-react",
     "advisor-warning-react"
   ]) {
     assert.match(css, new RegExp(`@keyframes ${animation}`));
   }
-  assert.doesNotMatch(css, /advisor-(?:avatar|idle|thinking|success|warning)[^{]*\{[^}]*animation:[^;}]*infinite/s);
-  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.advisor-state-art[\s\S]*animation: none !important/);
+  assert.match(css, /\.advisor-art-stack\.is-idle[\s\S]*advisor-idle-breathe[^;]*infinite/);
+  assert.match(css, /\.advisor-art-stack\.is-idle \.advisor-idle-blink[\s\S]*advisor-blink[^;]*infinite/);
+  assert.doesNotMatch(css, /advisor-(?:thinking|success|warning)-react[^;]*infinite/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.advisor-art-reaction[\s\S]*animation: none !important/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.advisor-panel/);
   assert.doesNotMatch(css, /transition:\s*all/);
 });
