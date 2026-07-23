@@ -740,6 +740,9 @@ test("Advisor panel is accessible, provider-scoped, escaped, and reduced-motion 
   assert.match(document.querySelector(".advisor-avatar-blink").getAttribute("src"), /advisor-avatar-blink\.png$/);
   assert.match(document.querySelector(".advisor-state-art").getAttribute("src"), /advisor-idle\.png$/);
   assert.match(document.querySelector(".advisor-idle-blink").getAttribute("src"), /advisor-idle-blink\.png$/);
+  assert.match(document.querySelector(".advisor-journal-a").getAttribute("src"), /advisor-journal-a\.png$/);
+  assert.match(document.querySelector(".advisor-journal-b").getAttribute("src"), /advisor-journal-b\.png$/);
+  assert.match(document.querySelector(".advisor-art-stack").className, /journal-cadence-(?:calm|patient|reflective)/);
   assert.equal(document.querySelector(".advisor-art-stack").dataset.advisorArtState, "idle");
   assert.equal(document.querySelector(".advisor-art-stack").classList.contains("is-idle"), true);
   renderer.renderApp();
@@ -752,8 +755,9 @@ test("Advisor panel is accessible, provider-scoped, escaped, and reduced-motion 
     assert.equal(document.querySelector(".advisor-art-stack").dataset.advisorArtState, state);
     assert.equal(document.querySelector(".advisor-art-reaction").classList.contains("is-reacting"), true);
     assert.equal(document.querySelector(".advisor-idle-blink"), null);
+    assert.equal(document.querySelector(".advisor-journal-sequence"), null);
   }
-  for (const asset of ["idle", "idle-blink", "thinking", "success", "warning", "avatar", "avatar-blink"]) {
+  for (const asset of ["idle", "idle-blink", "thinking", "success", "warning", "avatar", "avatar-blink", "journal-a", "journal-b"]) {
     assert.equal(fs.existsSync(path.join(projectRoot, `assets/advisor/states/advisor-${asset}.png`)), true);
   }
   const css = fs.readFileSync(path.join(projectRoot, "src/styles.css"), "utf8");
@@ -763,6 +767,9 @@ test("Advisor panel is accessible, provider-scoped, escaped, and reduced-motion 
     "advisor-idle-arrive",
     "advisor-idle-breathe",
     "advisor-blink",
+    "advisor-idle-yield",
+    "advisor-journal-appear",
+    "advisor-journal-write",
     "advisor-thinking-react",
     "advisor-success-react",
     "advisor-warning-react"
@@ -771,8 +778,10 @@ test("Advisor panel is accessible, provider-scoped, escaped, and reduced-motion 
   }
   assert.match(css, /\.advisor-art-stack\.is-idle[\s\S]*advisor-idle-breathe[^;]*infinite/);
   assert.match(css, /\.advisor-art-stack\.is-idle \.advisor-idle-blink[\s\S]*advisor-blink[^;]*infinite/);
+  assert.match(css, /\.advisor-journal-sequence[\s\S]*advisor-journal-appear[^;]*infinite/);
+  assert.match(css, /\.advisor-journal-b[\s\S]*advisor-journal-write[^;]*infinite/);
   assert.doesNotMatch(css, /advisor-(?:thinking|success|warning)-react[^;]*infinite/);
-  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.advisor-art-reaction[\s\S]*animation: none !important/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.advisor-journal-sequence[\s\S]*animation: none !important/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.advisor-panel/);
   assert.doesNotMatch(css, /transition:\s*all/);
 });

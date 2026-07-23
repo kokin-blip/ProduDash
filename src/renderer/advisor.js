@@ -19,6 +19,10 @@ const ADVISOR_ART = Object.freeze({
 const ADVISOR_AVATAR = "./assets/advisor/states/advisor-avatar.png";
 const ADVISOR_IDLE_BLINK = "./assets/advisor/states/advisor-idle-blink.png";
 const ADVISOR_AVATAR_BLINK = "./assets/advisor/states/advisor-avatar-blink.png";
+const ADVISOR_JOURNAL_A = "./assets/advisor/states/advisor-journal-a.png";
+const ADVISOR_JOURNAL_B = "./assets/advisor/states/advisor-journal-b.png";
+const JOURNAL_CADENCES = ["calm", "patient", "reflective"];
+const journalCadence = JOURNAL_CADENCES[Math.floor(Math.random() * JOURNAL_CADENCES.length)];
 let previousArtState = null;
 let previousOpenState = false;
 
@@ -151,13 +155,25 @@ export function renderAdvisor() {
       <header class="advisor-header">
         <div class="advisor-identity">
           <span
-            class="advisor-art-stack${artState === "idle" ? " is-idle" : ""}"
+            class="advisor-art-stack${artState === "idle" ? ` is-idle journal-cadence-${journalCadence}` : ""}"
             data-advisor-art-state="${artState}"
             aria-hidden="true"
           >
             <span class="advisor-art-reaction${animateArt ? " is-reacting" : ""}">
-              <img class="advisor-state-art" src="${ADVISOR_ART[artState]}" alt="" />
-              ${artState === "idle" ? `<img class="advisor-idle-blink" src="${ADVISOR_IDLE_BLINK}" alt="" />` : ""}
+              <span class="advisor-idle-base">
+                <img class="advisor-state-art" src="${ADVISOR_ART[artState]}" alt="" />
+                ${artState === "idle" ? `<img class="advisor-idle-blink" src="${ADVISOR_IDLE_BLINK}" alt="" />` : ""}
+              </span>
+              ${
+                artState === "idle"
+                  ? `
+                    <span class="advisor-journal-sequence">
+                      <img class="advisor-journal-frame advisor-journal-a" src="${ADVISOR_JOURNAL_A}" alt="" />
+                      <img class="advisor-journal-frame advisor-journal-b" src="${ADVISOR_JOURNAL_B}" alt="" />
+                    </span>
+                  `
+                  : ""
+              }
             </span>
           </span>
           <div>

@@ -294,6 +294,23 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
     await page.locator(".advisor-idle-blink").evaluate((element) => window.getComputedStyle(element).animationName),
     "advisor-blink"
   );
+  assert.equal(
+    await page.locator(".advisor-journal-sequence").evaluate((element) => window.getComputedStyle(element).animationName),
+    "advisor-journal-appear"
+  );
+  assert.match(await page.locator(".advisor-art-stack").getAttribute("class"), /journal-cadence-(?:calm|patient|reflective)/);
+  await page.evaluate(() => {
+    for (const selector of [".advisor-idle-base", ".advisor-journal-sequence", ".advisor-journal-b"]) {
+      const animation = document.querySelector(selector)?.getAnimations()[0];
+      const duration = Number(animation?.effect.getTiming().duration);
+      if (!animation || !Number.isFinite(duration)) continue;
+      animation.currentTime = duration * 0.765;
+      animation.pause();
+    }
+  });
+  assert.equal(await page.locator(".advisor-idle-base").evaluate((element) => window.getComputedStyle(element).opacity), "0");
+  assert.equal(await page.locator(".advisor-journal-sequence").evaluate((element) => window.getComputedStyle(element).opacity), "1");
+  await page.screenshot({ path: path.join(artifactPath, "advisor-journal-1440x960.png"), fullPage: true });
   await page.click("[data-advisor-close]");
 
   await resizeWindow(application, 1120, 760);
@@ -309,6 +326,10 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
   assert.equal(await page.locator("#advisorPanel").evaluate((element) => window.getComputedStyle(element).transitionDuration), "0s");
   assert.equal(await page.locator(".advisor-art-stack").evaluate((element) => window.getComputedStyle(element).animationName), "none");
   assert.equal(await page.locator(".advisor-art-reaction").evaluate((element) => window.getComputedStyle(element).animationName), "none");
+  assert.equal(
+    await page.locator(".advisor-journal-sequence").evaluate((element) => window.getComputedStyle(element).animationName),
+    "none"
+  );
   await page.click("[data-advisor-close]");
   const reducedMotionTransitionCount = await page.evaluate(() => window.__viewTransitionStarts);
   await page.click('[data-section="studio"]');
