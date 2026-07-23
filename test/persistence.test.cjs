@@ -7,13 +7,16 @@ const { ProduDashStore } = require("../electron/store.cjs");
 const { createDirectory, createHarness, fakeEncryption } = require("./helpers.cjs");
 const { CredentialVault } = require("../electron/credential-vault.cjs");
 
-test("starts with validated schema 3 connection-first state", async (t) => {
+test("starts with validated schema 4 provider-neutral state", async (t) => {
   const harness = await createHarness();
   t.after(harness.cleanup);
   const state = harness.store.getAppState();
-  assert.equal(state.schemaVersion, 3);
+  assert.equal(state.schemaVersion, 4);
   assert.deepEqual(state.businesses, []);
   assert.equal(state.integrations.find((item) => item.id === "shopify").status, "disconnected");
+  assert.equal(state.aiProviders[0].providerType, "gemini");
+  assert.equal(state.aiWorkloads.inboxDrafting.profileId, "gemini");
+  assert.deepEqual(state.mediaJobs, []);
 });
 
 test("atomic writes keep a valid last-known-good backup", async (t) => {
@@ -61,7 +64,7 @@ test("missing primary state is restored from the valid backup", async (t) => {
   assert.ok(recovered.getAppState().systemNotices.some((notice) => notice.code === "STATE_RECOVERED"));
 });
 
-test("schema 2 state migrates to schema 3 without losing valid data", async (t) => {
+test("schema 2 state migrates sequentially to schema 4 without losing valid data", async (t) => {
   const directory = createDirectory();
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const state = createInitialState();
@@ -70,8 +73,41 @@ test("schema 2 state migrates to schema 3 without losing valid data", async (t) 
   fs.writeFileSync(path.join(directory, "produdash-state.json"), JSON.stringify(state));
   const store = new ProduDashStore(directory, { credentialVault: new CredentialVault(directory, fakeEncryption()) });
   await store.initialize();
-  assert.equal(store.getAppState().schemaVersion, 3);
+  assert.equal(store.getAppState().schemaVersion, 4);
   assert.equal(store.getAppState().clipperJobs[0].id, "clip-existing");
+  assert.equal(store.getAppState().clipperJobs[0].status, "legacy_plan");
+});
+
+test("schema 3 Gemini state migrates to an idempotent provider profile and legacy plans", async (t) => {
+  const directory = createDirectory();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const state = createInitialState();
+  state.schemaVersion = 3;
+  delete state.aiProviders;
+  delete state.aiWorkloads;
+  delete state.advisorSettings;
+  state.integrations.push({
+    id: "gemini",
+    name: "Gemini",
+    status: "connected",
+    lastSync: "2026-07-23T01:00:00.000Z"
+  });
+  state.credentialSettings.push({ id: "gemini", name: "Gemini", status: "stored", fields: [] });
+  state.clipperJobs.push({ id: "clip-legacy", title: "Legacy" });
+  fs.writeFileSync(path.join(directory, "produdash-state.json"), JSON.stringify(state));
+  fs.writeFileSync(path.join(directory, "produdash-credentials.json"), JSON.stringify({ gemini: { apiKey: "AIza-preserved-key" } }), {
+    mode: 0o600
+  });
+  const store = new ProduDashStore(directory, { credentialVault: new CredentialVault(directory, fakeEncryption()) });
+  await store.initialize();
+  const migrated = store.getAppState();
+  assert.equal(migrated.schemaVersion, 4);
+  assert.equal(
+    migrated.integrations.some((item) => item.id === "gemini"),
+    false
+  );
+  assert.equal(migrated.aiProviders[0].status, "connected");
+  assert.equal(migrated.clipperJobs[0].status, "legacy_plan");
 });
 
 test("future schema blocks startup without modifying the file", () => {

@@ -111,6 +111,11 @@ class ProduDashStore {
         });
       }
       this.state.credentialSettings = settings;
+      for (const profile of this.state.aiProviders) {
+        const keys = this.credentialVault.keys(profile.id);
+        profile.credentialStatus = keys.length ? "stored" : "missing";
+        if (!keys.length && profile.status === "connected") profile.status = "disconnected";
+      }
       this.persist();
       return this.getAppState();
     });
@@ -118,7 +123,7 @@ class ProduDashStore {
 
   async saveIntegrationCredentials(integrationId, values) {
     requireKnownIntegration(integrationId);
-    if (!["shopify", "gemini"].includes(integrationId)) {
+    if (integrationId !== "shopify") {
       throw new AppError("INTEGRATION_UNAVAILABLE", "This provider connector is planned and does not accept credentials yet.");
     }
     if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
@@ -166,6 +171,125 @@ class ProduDashStore {
     return { ...(setting.publicValues || {}), ...this.credentialVault.get(integrationId) };
   }
 
+  getAiProvider(profileId) {
+    requireId(profileId, "AI provider");
+    const profile = this.state.aiProviders.find((item) => item.id === profileId);
+    if (!profile) throw new AppError("AI_PROVIDER_NOT_FOUND", "AI provider profile not found.");
+    return clone(profile);
+  }
+
+  getAiWorkload(workloadId) {
+    return clone(this.state.aiWorkloads[workloadId] || null);
+  }
+
+  async syncAiProviderCredentialStatus(resolveFields) {
+    return this.enqueueMutation(async () => {
+      for (const profile of this.state.aiProviders) {
+        const resolved = resolveFields(profile.providerType);
+        const fields = Array.isArray(resolved) ? resolved : resolved.credentialFields;
+        if (!Array.isArray(resolved)) {
+          profile.name = resolved.name;
+          profile.models = clone(resolved.models);
+          if (!profile.models.some((model) => model.id === profile.selectedModelId)) {
+            profile.selectedModelId = profile.models[0]?.id || null;
+          }
+        }
+        const secretKeys = new Set(this.credentialVault ? this.credentialVault.keys(profile.id) : []);
+        const publicValues = profile.publicValues || {};
+        const configured = fields.filter((field) => (field.sensitive ? secretKeys.has(field.key) : Boolean(publicValues[field.key])));
+        profile.credentialStatus = fields
+          .filter((field) => field.required !== false)
+          .every((field) => configured.some((item) => item.key === field.key))
+          ? "stored"
+          : "missing";
+        if (profile.credentialStatus === "missing" && profile.status === "connected") profile.status = "disconnected";
+      }
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async saveAiProviderCredentials(profileId, values, fields) {
+    const profile = this.getAiProvider(profileId);
+    if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
+    if (!values || typeof values !== "object" || Array.isArray(values)) {
+      throw new AppError("INVALID_INPUT", "AI provider credentials must be an object.");
+    }
+    return this.enqueueMutation(async () => {
+      const secrets = {};
+      const publicValues = { ...(profile.publicValues || {}) };
+      for (const field of fields) {
+        const submitted = values[field.key];
+        if (submitted === undefined || submitted === "") continue;
+        const value = boundedString(submitted, {
+          label: field.label,
+          min: 1,
+          max: field.sensitive ? 4096 : 2048
+        });
+        if (field.sensitive) secrets[field.key] = value;
+        else publicValues[field.key] = value;
+      }
+      if (Object.keys(secrets).length) await this.credentialVault.save(profileId, secrets);
+      const current = this.state.aiProviders.find((item) => item.id === profileId);
+      current.publicValues = publicValues;
+      const secretKeys = new Set(this.credentialVault.keys(profileId));
+      const ready = fields
+        .filter((field) => field.required !== false)
+        .every((field) => (field.sensitive ? secretKeys.has(field.key) : Boolean(publicValues[field.key])));
+      current.credentialStatus = ready ? "stored" : "missing";
+      current.status = "disconnected";
+      current.error = null;
+      this.audit("ai_provider", `Updated secure credentials for ${current.name}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  getAiProviderCredentials(profileId) {
+    const profile = this.getAiProvider(profileId);
+    if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
+    return { ...(profile.publicValues || {}), ...this.credentialVault.get(profileId) };
+  }
+
+  async removeAiProviderCredentials(profileId) {
+    const profile = this.getAiProvider(profileId);
+    if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
+    return this.enqueueMutation(async () => {
+      await this.credentialVault.remove(profileId);
+      const current = this.state.aiProviders.find((item) => item.id === profileId);
+      current.publicValues = {};
+      current.credentialStatus = "missing";
+      current.status = "disconnected";
+      current.error = null;
+      current.lastValidatedAt = null;
+      this.audit("ai_provider", `Removed secure credentials for ${profile.name}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async setAiProviderResult(profileId, result) {
+    this.getAiProvider(profileId);
+    return this.enqueueMutation(async () => {
+      const profile = this.state.aiProviders.find((item) => item.id === profileId);
+      profile.status = result.status;
+      profile.error = result.error || null;
+      profile.lastValidatedAt = result.lastValidatedAt || new Date().toISOString();
+      this.audit("ai_provider", `${profile.name} connection updated to ${profile.status}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async setAiWorkload(workloadId, selection) {
+    return this.enqueueMutation(async () => {
+      this.state.aiWorkloads[workloadId] = clone(selection);
+      this.audit("ai_workload", `Updated the ${workloadId} AI workload assignment.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
   async removeIntegrationCredentials(integrationId) {
     requireKnownIntegration(integrationId);
     if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
@@ -194,8 +318,19 @@ class ProduDashStore {
   async resetDashboardData() {
     return this.enqueueMutation(async () => {
       const credentialSettings = clone(this.state.credentialSettings);
+      const aiProviders = clone(this.state.aiProviders).map((profile) => ({
+        ...profile,
+        status: "disconnected",
+        error: null,
+        lastValidatedAt: null
+      }));
+      const aiWorkloads = clone(this.state.aiWorkloads);
+      const advisorSettings = clone(this.state.advisorSettings);
       this.state = createInitialState();
       this.state.credentialSettings = credentialSettings;
+      this.state.aiProviders = aiProviders;
+      this.state.aiWorkloads = aiWorkloads;
+      this.state.advisorSettings = advisorSettings;
       this.audit("system", "Dashboard data reset. Secure credentials were retained.");
       this.persist();
       return this.getAppState();
@@ -208,7 +343,7 @@ class ProduDashStore {
       const baseName = path.basename(this.filePath);
       if (fs.existsSync(this.userDataPath)) {
         for (const entry of fs.readdirSync(this.userDataPath)) {
-          if (entry === baseName || entry.startsWith(`${baseName}.`)) {
+          if (entry === baseName || entry === `${baseName}.bak` || entry.startsWith(`${baseName}.recovery-`)) {
             fs.unlinkSync(path.join(this.userDataPath, entry));
           }
         }
@@ -250,7 +385,7 @@ class ProduDashStore {
     });
   }
 
-  async draftAiReply(conversationId, prompt, geminiConnector) {
+  async draftAiReply(conversationId, prompt, providerConnector) {
     requireId(conversationId, "Conversation");
     const instruction = boundedString(prompt, { label: "Draft instruction", min: 1, max: 2000 });
     const conversation = clone(this.getConversation(conversationId));
@@ -258,7 +393,7 @@ class ProduDashStore {
     if (this.state.approvals.some((item) => item.conversationId === conversationId && item.type === "reply" && item.status === "pending")) {
       throw new AppError("PENDING_APPROVAL_EXISTS", "Resolve the existing reply draft before creating another.");
     }
-    const result = await geminiConnector.draftReply(conversation, instruction, business);
+    const result = await providerConnector.draftReply(conversation, instruction, business);
     return this.enqueueMutation(async () => {
       if (
         this.state.approvals.some((item) => item.conversationId === conversationId && item.type === "reply" && item.status === "pending")

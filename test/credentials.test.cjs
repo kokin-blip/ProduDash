@@ -86,15 +86,35 @@ test("missing encrypted vault is restored from its protected backup", async (t) 
   assert.ok(notices.some((notice) => notice.code === "CREDENTIALS_RECOVERED"));
 });
 
+test("removing credentials rotates the encrypted backup without the deleted secret", async (t) => {
+  const directory = createDirectory();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const vault = new CredentialVault(directory, fakeEncryption());
+  await vault.initialize();
+  await vault.save("gemini", { apiKey: "AIza-delete-me" });
+  await vault.remove("gemini");
+  fs.unlinkSync(path.join(directory, "produdash-credentials.enc.json"));
+  const recovered = new CredentialVault(directory, fakeEncryption());
+  await recovered.initialize();
+  assert.deepEqual(recovered.get("gemini"), {});
+});
+
 test("reset retains credentials while delete-all removes them", async (t) => {
   const harness = await createHarness();
   t.after(harness.cleanup);
-  await harness.store.saveIntegrationCredentials("gemini", { apiKey: "AIza-test-key" });
+  await harness.store.saveAiProviderCredentials("gemini", { apiKey: "AIza-test-key" }, [
+    { key: "apiKey", label: "API key", sensitive: true, required: true }
+  ]);
   let state = await harness.store.resetDashboardData();
-  assert.equal(state.credentialSettings.find((item) => item.id === "gemini").status, "stored");
+  assert.equal(state.aiProviders.find((item) => item.id === "gemini").credentialStatus, "stored");
+  fs.writeFileSync(path.join(harness.directory, "produdash-credentials.enc.json.recovery-test"), "protected");
   state = await harness.store.deleteAllLocalData();
-  assert.equal(state.credentialSettings.find((item) => item.id === "gemini").status, "missing");
+  assert.equal(state.aiProviders.find((item) => item.id === "gemini").credentialStatus, "missing");
   assert.equal(fs.existsSync(path.join(harness.directory, "produdash-credentials.enc.json")), false);
+  assert.equal(
+    fs.readdirSync(harness.directory).some((entry) => entry.startsWith("produdash-credentials")),
+    false
+  );
 });
 
 test("planned integrations reject credentials until a real connector exists", async (t) => {

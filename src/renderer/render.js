@@ -1,5 +1,5 @@
 import { escapeHtml, statusLabel } from "./format.js";
-import { getBusiness, integrationReady, ui } from "./state.js";
+import { getBusiness, integrationReady, providerCredentialsStored, ui, workloadReady } from "./state.js";
 import { renderAnalytics } from "./views/analytics.js";
 import { renderDashboard, renderOrdersView, renderSignalsView } from "./views/dashboard.js";
 import { renderInbox } from "./views/inbox.js";
@@ -17,7 +17,7 @@ const VIEW_META = {
   integrations: [
     "Integrations",
     "Connections and local data",
-    "Validate Shopify and Gemini, review planned providers, and manage local data."
+    "Validate Shopify and AI providers, assign workloads, and manage local data."
   ]
 };
 
@@ -69,7 +69,7 @@ function renderNav() {
     else item.removeAttribute("aria-current");
   });
   const footer = document.querySelector(".sidebar-footer");
-  const connected = integrationReady("shopify") && integrationReady("gemini");
+  const connected = integrationReady("shopify") && workloadReady("inboxDrafting");
   footer.querySelector("strong").textContent = connected ? "Core apps connected" : "Connections required";
   document.querySelector(".sidebar-footer span:last-child").textContent = "Official APIs only";
   footer.querySelector(".status-dot").classList.toggle("connected", connected);
@@ -111,12 +111,12 @@ function renderHeader() {
 
   const syncButton = document.querySelector("#syncButton");
   const connectButton = document.querySelector("#trainButton");
-  const hasRefreshable = ui.appState.credentialSettings.some(
-    (setting) => ["shopify", "gemini"].includes(setting.id) && setting.status === "stored"
-  );
+  const hasRefreshable =
+    ui.appState.credentialSettings.some((setting) => setting.id === "shopify" && setting.status === "stored") ||
+    ui.appState.aiProviders.some((profile) => providerCredentialsStored(profile.id));
   syncButton.textContent = ui.pending.has("refresh-connections") ? "Refreshing…" : "Refresh connections";
   syncButton.disabled = !hasRefreshable || ui.pending.has("refresh-connections");
-  syncButton.title = hasRefreshable ? "" : "Store Shopify or Gemini credentials first.";
+  syncButton.title = hasRefreshable ? "" : "Store Shopify or AI provider credentials first.";
   syncButton.hidden = needsSetup || !["overview", "orders", "signals", "integrations"].includes(ui.activeSection);
   syncButton.className = ui.activeSection === "integrations" ? "primary-button" : "ghost-button";
 

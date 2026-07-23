@@ -1,5 +1,5 @@
 import { escapeHtml, formatUsd, statusLabel } from "../format.js";
-import { asArray, getApprovals, getConversations, getSelectedConversation, integrationReady, isPending } from "../state.js";
+import { asArray, getApprovals, getConversations, getSelectedConversation, isPending, workloadReady } from "../state.js";
 import { renderApprovals } from "./dashboard.js";
 import { renderStatusBadge } from "./shared.js";
 
@@ -9,6 +9,7 @@ export function renderInbox() {
   const approvals = selected ? getApprovals().filter((approval) => approval.conversationId === selected.id) : [];
   const messages = asArray(selected?.messages);
   const drafting = selected ? isPending(`draft-${selected.id}`) : false;
+  const providerReady = workloadReady("inboxDrafting");
   return `
     <section class="inbox-view">
       <aside class="panel conversation-pane">
@@ -72,9 +73,9 @@ export function renderInbox() {
               <form class="chat-composer" data-draft-form aria-busy="${drafting}">
                 <label class="sr-only" for="draftPrompt">Draft instructions</label>
                 <input id="draftPrompt" name="prompt" type="text" maxlength="2000" autocomplete="off" placeholder="${
-                  integrationReady("gemini") ? "Tell Gemini what to draft" : "Validate Gemini before drafting"
-                }" ${integrationReady("gemini") && !drafting ? "" : "disabled"} />
-                <button type="submit" data-pending-label="Drafting…" ${integrationReady("gemini") && !drafting ? "" : "disabled"}>${
+                  providerReady ? "Tell your assigned AI provider what to draft" : "Assign and validate an Inbox Drafting provider"
+                }" ${providerReady && !drafting ? "" : "disabled"} />
+                <button type="submit" data-pending-label="Drafting…" ${providerReady && !drafting ? "" : "disabled"}>${
                   drafting ? "Drafting…" : "Draft for approval"
                 }</button>
               </form>
@@ -89,7 +90,7 @@ export function renderInbox() {
 
 function renderOrderDraft(orderDraft, currency = "USD") {
   if (!orderDraft || typeof orderDraft !== "object") {
-    return `<div class="order-draft"><strong>No order detected</strong><span>Gemini has not extracted an order from this conversation.</span></div>`;
+    return `<div class="order-draft"><strong>No order detected</strong><span>The assigned AI provider has not extracted an order from this conversation.</span></div>`;
   }
   return `
     <div class="order-draft">

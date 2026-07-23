@@ -1,6 +1,6 @@
 import { api } from "./api.js";
 import { renderApp } from "./render.js";
-import { getConversations, getSelectedConversation, setAppState, ui } from "./state.js";
+import { getConversations, getSelectedConversation, setAppState, setClipLibrary, ui } from "./state.js";
 
 let handlersBound = false;
 
@@ -17,8 +17,9 @@ async function runAction(key, trigger, action, options = {}) {
   ui.error = null;
   const pendingUi = setPendingUi(trigger);
   try {
-    const nextState = await action();
-    if (nextState) setAppState(nextState);
+    const result = await action();
+    if (options.applyResult) options.applyResult(result);
+    else if (result) setAppState(result);
   } catch (error) {
     if (options.refreshOnError) {
       try {
@@ -98,6 +99,20 @@ function restorePendingUi(pendingUi) {
 }
 
 async function handleClick(event) {
+  const studioTab = event.target.closest("[data-studio-tab]");
+  if (studioTab) {
+    ui.studioTab = studioTab.dataset.studioTab;
+    renderApp();
+    return;
+  }
+
+  const clipButton = event.target.closest("[data-library-clip]");
+  if (clipButton) {
+    ui.selectedClipId = clipButton.dataset.libraryClip;
+    renderApp();
+    return;
+  }
+
   const businessButton = event.target.closest("[data-business]");
   if (businessButton) {
     ui.selectedBusinessId = businessButton.dataset.business;
@@ -171,17 +186,117 @@ async function handleClick(event) {
     return;
   }
 
+  const testProviderButton = event.target.closest("[data-test-ai-provider]");
+  if (testProviderButton) {
+    const profileId = testProviderButton.dataset.testAiProvider;
+    await runAction(`test-ai-provider-${profileId}`, testProviderButton, () => api.testAiProvider(profileId), {
+      refreshOnError: true
+    });
+    return;
+  }
+
+  const removeProviderButton = event.target.closest("[data-remove-ai-provider]");
+  if (removeProviderButton) {
+    const profileId = removeProviderButton.dataset.removeAiProvider;
+    if (!window.confirm("Remove this AI provider’s encrypted credentials? Its public profile and workload assignments will remain."))
+      return;
+    await runAction(`remove-ai-provider-${profileId}`, removeProviderButton, () => api.removeAiProviderCredentials(profileId));
+    return;
+  }
+
+  const addFoldersButton = event.target.closest("[data-add-clip-folders]");
+  if (addFoldersButton) {
+    await runAction("add-clip-folders", addFoldersButton, () => api.chooseClipFolders(), {
+      applyResult: setClipLibrary
+    });
+    return;
+  }
+
+  const addFilesButton = event.target.closest("[data-add-clip-files]");
+  if (addFilesButton) {
+    await runAction("add-clip-files", addFilesButton, () => api.chooseClipFiles(), {
+      applyResult: setClipLibrary
+    });
+    return;
+  }
+
+  const rescanFolderButton = event.target.closest("[data-rescan-clip-folder]");
+  if (rescanFolderButton) {
+    const folderId = rescanFolderButton.dataset.rescanClipFolder;
+    await runAction(`rescan-folder-${folderId}`, rescanFolderButton, () => api.rescanClipFolder(folderId), {
+      applyResult: setClipLibrary
+    });
+    return;
+  }
+
+  const relocateFolderButton = event.target.closest("[data-relocate-clip-folder]");
+  if (relocateFolderButton) {
+    const folderId = relocateFolderButton.dataset.relocateClipFolder;
+    await runAction(`relocate-folder-${folderId}`, relocateFolderButton, () => api.relocateClipFolder(folderId), {
+      applyResult: setClipLibrary
+    });
+    return;
+  }
+
+  const removeFolderButton = event.target.closest("[data-remove-clip-folder]");
+  if (removeFolderButton) {
+    const folderId = removeFolderButton.dataset.removeClipFolder;
+    if (!window.confirm("Remove this folder from the Clip Library? ProduDash will not delete any media files.")) return;
+    await runAction(`remove-folder-${folderId}`, removeFolderButton, () => api.removeClipFolder(folderId), {
+      applyResult: setClipLibrary
+    });
+    return;
+  }
+
+  const removeClipButton = event.target.closest("[data-remove-clip]");
+  if (removeClipButton) {
+    const clipId = removeClipButton.dataset.removeClip;
+    if (!window.confirm("Remove this video from the Clip Library index? ProduDash will not delete the media file.")) return;
+    await runAction(`remove-clip-${clipId}`, removeClipButton, () => api.removeClip(clipId), {
+      applyResult: setClipLibrary
+    });
+    return;
+  }
+
+  const revealClipButton = event.target.closest("[data-reveal-clip]");
+  if (revealClipButton) {
+    await runAction(
+      `reveal-clip-${revealClipButton.dataset.revealClip}`,
+      revealClipButton,
+      () => api.openClipInFolder(revealClipButton.dataset.revealClip),
+      { render: false, applyResult: () => {} }
+    );
+    return;
+  }
+
+  const libraryPageButton = event.target.closest("[data-library-offset]");
+  if (libraryPageButton) {
+    ui.libraryFilters.offset = Number(libraryPageButton.dataset.libraryOffset) || 0;
+    await runAction("query-clip-library", libraryPageButton, () => api.getClipLibrary(ui.libraryFilters), {
+      applyResult: setClipLibrary
+    });
+    return;
+  }
+
   const resetButton = event.target.closest("[data-reset-dashboard]");
   if (resetButton) {
     if (!window.confirm("Reset imported dashboard data? Encrypted credentials will be retained.")) return;
-    await runAction("reset-dashboard", resetButton, () => api.resetDashboardData());
+    await runAction("reset-dashboard", resetButton, async () => {
+      const state = await api.resetDashboardData();
+      setClipLibrary(await api.getClipLibrary({ limit: ui.libraryFilters.limit }));
+      return state;
+    });
     return;
   }
 
   const deleteButton = event.target.closest("[data-delete-all]");
   if (deleteButton) {
     if (!window.confirm("Permanently delete all ProduDash dashboard data and credentials from this computer?")) return;
-    await runAction("delete-all", deleteButton, () => api.deleteAllLocalData());
+    await runAction("delete-all", deleteButton, async () => {
+      const state = await api.deleteAllLocalData();
+      setClipLibrary(await api.getClipLibrary({ limit: ui.libraryFilters.limit }));
+      return state;
+    });
     return;
   }
 
@@ -252,6 +367,60 @@ async function handleSubmit(event) {
     for (const input of form.querySelectorAll("input[name]")) values[input.name] = input.value;
     await runAction(`credentials-${integrationId}`, event.submitter, () => api.saveIntegrationCredentials(integrationId, values), {
       refreshOnError: true
+    });
+    return;
+  }
+
+  if (form.matches("[data-ai-provider-form]")) {
+    event.preventDefault();
+    const profileId = form.dataset.aiProviderForm;
+    const values = {};
+    for (const input of form.querySelectorAll("input[name]")) values[input.name] = input.value;
+    await runAction(`ai-provider-${profileId}`, event.submitter, () => api.saveAiProviderCredentials(profileId, values), {
+      refreshOnError: true
+    });
+    return;
+  }
+
+  if (form.matches("[data-workload-form]")) {
+    event.preventDefault();
+    const workloadId = form.dataset.workloadForm;
+    const value = form.elements.assignment.value;
+    let selection;
+    if (value === "same_as_advisor" || value === "unassigned") selection = { mode: value };
+    else {
+      const [profileId, modelId] = value.split("::");
+      selection = { mode: "provider", profileId, modelId };
+    }
+    await runAction(`workload-${workloadId}`, event.submitter, () => api.setAiWorkload(workloadId, selection));
+    return;
+  }
+
+  if (form.matches("[data-library-search-form]")) {
+    event.preventDefault();
+    ui.libraryFilters = {
+      ...ui.libraryFilters,
+      query: form.elements.query.value,
+      folderId: form.elements.folderId.value,
+      status: form.elements.status.value,
+      sort: form.elements.sort.value,
+      offset: 0
+    };
+    await runAction("query-clip-library", event.submitter, () => api.getClipLibrary(ui.libraryFilters), {
+      applyResult: setClipLibrary
+    });
+    return;
+  }
+
+  if (form.matches("[data-clip-tags-form]")) {
+    event.preventDefault();
+    const clipId = form.dataset.clipTagsForm;
+    const tags = form.elements.tags.value
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+    await runAction(`clip-tags-${clipId}`, event.submitter, () => api.updateClipTags(clipId, tags), {
+      applyResult: setClipLibrary
     });
     return;
   }

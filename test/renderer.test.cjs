@@ -22,19 +22,52 @@ async function setupRenderer() {
   ]);
   const [stateModule, renderModule, formatModule] = await rendererModules;
   stateModule.ui.activeSection = "overview";
+  stateModule.ui.studioTab = "library";
   stateModule.ui.error = null;
   stateModule.ui.pending.clear();
+  stateModule.ui.providerCatalog = [
+    {
+      id: "gemini",
+      name: "Google Gemini",
+      credentialFields: [{ key: "apiKey", label: "Gemini API key", placeholder: "AIza…", sensitive: true }]
+    }
+  ];
+  stateModule.setClipLibrary({ folders: [], clips: [], total: 0, offset: 0, limit: 40, notices: [] });
   return { dom, ...stateModule, ...renderModule, ...formatModule };
 }
 
 function baseState(overrides = {}) {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     businesses: [],
     conversations: [],
     approvals: [],
     integrations: [],
     credentialSettings: [],
+    aiProviders: [
+      {
+        id: "gemini",
+        providerType: "gemini",
+        name: "Google Gemini",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: "gemini-3.6-flash",
+        models: [
+          {
+            id: "gemini-3.6-flash",
+            name: "Gemini 3.6 Flash",
+            capabilities: ["text_generation", "structured_output", "streaming"]
+          }
+        ]
+      }
+    ],
+    aiWorkloads: {
+      advisor: { mode: "provider", profileId: "gemini", modelId: "gemini-3.6-flash" },
+      inboxDrafting: { mode: "provider", profileId: "gemini", modelId: "gemini-3.6-flash" },
+      clipAnalysis: { mode: "same_as_advisor" },
+      transcription: { mode: "unassigned" }
+    },
+    advisorSettings: { displayName: "Advisor" },
     creatorPlatforms: [],
     analyticsSources: [],
     clipperJobs: [],
@@ -69,7 +102,7 @@ test("renderer shows a connection-required state with no businesses", async () =
   assert.equal(document.querySelector("#pageTitle").textContent, "Set up ProduDash");
   assert.match(document.querySelector("#viewRoot").textContent, /Connect the essentials/i);
   assert.match(document.querySelector("#viewRoot").textContent, /Human approval required/i);
-  assert.equal(document.querySelector('[data-section="integrations"]:disabled').textContent.trim(), "Connect Gemini");
+  assert.equal(document.querySelector('[data-section="integrations"]:disabled').textContent.trim(), "Connect AI provider");
   assert.ok(document.querySelector("details.disclosure"));
 });
 
@@ -149,23 +182,17 @@ test("stored Shopify credentials remain distinct from a verified connection", as
   assert.doesNotMatch(document.querySelector("#viewRoot").textContent, /Store identity and recent commerce data were verified/i);
 });
 
-test("Gemini setup action unlocks only after Shopify is connected", async () => {
+test("assigned AI provider setup action unlocks only after Shopify is connected", async () => {
   const renderer = await setupRenderer();
   renderer.setAppState(
     baseState({
-      integrations: [
-        { id: "shopify", name: "Shopify", status: "connected" },
-        { id: "gemini", name: "Gemini", status: "disconnected" }
-      ],
-      credentialSettings: [
-        { id: "shopify", name: "Shopify", status: "stored", fields: [] },
-        { id: "gemini", name: "Gemini", status: "missing", fields: [] }
-      ]
+      integrations: [{ id: "shopify", name: "Shopify", status: "connected" }],
+      credentialSettings: [{ id: "shopify", name: "Shopify", status: "stored", fields: [] }]
     })
   );
   renderer.renderApp();
-  const geminiStep = [...document.querySelectorAll(".setup-step")].find((item) => /Connect Gemini/i.test(item.textContent));
-  assert.equal(geminiStep.querySelector("button").disabled, false);
+  const providerStep = [...document.querySelectorAll(".setup-step")].find((item) => /Connect Google Gemini/i.test(item.textContent));
+  assert.equal(providerStep.querySelector("button").disabled, false);
 });
 
 test("connected dashboard uses supported metrics, semantic orders, and a compact all-clear state", async () => {
@@ -263,32 +290,23 @@ test("rapid native view transitions skip stale renders and keep the latest secti
 
 test("keyed setup status badges animate only when their real value changes", async () => {
   const renderer = await setupRenderer();
-  const credentialSettings = [
-    { id: "shopify", name: "Shopify", status: "stored", fields: [] },
-    { id: "gemini", name: "Gemini", status: "missing", fields: [] }
-  ];
+  const credentialSettings = [{ id: "shopify", name: "Shopify", status: "stored", fields: [] }];
   renderer.setAppState(
     baseState({
-      integrations: [
-        { id: "shopify", name: "Shopify", status: "disconnected" },
-        { id: "gemini", name: "Gemini", status: "disconnected" }
-      ],
+      integrations: [{ id: "shopify", name: "Shopify", status: "disconnected" }],
       credentialSettings
     })
   );
   renderer.renderApp();
   renderer.setAppState(
     baseState({
-      integrations: [
-        { id: "shopify", name: "Shopify", status: "connected" },
-        { id: "gemini", name: "Gemini", status: "disconnected" }
-      ],
+      integrations: [{ id: "shopify", name: "Shopify", status: "connected" }],
       credentialSettings
     })
   );
   renderer.renderApp();
   assert.ok(document.querySelector('[data-status-key="setup-shopify"]').classList.contains("status-changed"));
-  assert.equal(document.querySelector('[data-status-key="setup-gemini"]').classList.contains("status-changed"), false);
+  assert.equal(document.querySelector('[data-status-key="setup-ai-provider"]').classList.contains("status-changed"), false);
 
   renderer.renderApp();
   assert.equal(document.querySelector('[data-status-key="setup-shopify"]').classList.contains("status-changed"), false);
@@ -328,6 +346,100 @@ test("integration forms expose busy state and planned providers never accept cre
   assert.equal(shopifyForm.querySelector("button[type=submit]").disabled, true);
   assert.equal(document.querySelectorAll('[data-credentials-form="instagram"]').length, 0);
   assert.doesNotMatch(document.querySelector(".planned-list").textContent, /Secret/);
+});
+
+test("AI provider profiles render verified capabilities and capability-compatible workloads", async () => {
+  const renderer = await setupRenderer();
+  renderer.setAppState(
+    baseState({
+      integrations: [{ id: "shopify", name: "Shopify", status: "disconnected" }],
+      credentialSettings: [{ id: "shopify", name: "Shopify", status: "missing", fields: [] }]
+    })
+  );
+  renderer.ui.activeSection = "integrations";
+  renderer.renderApp();
+  const providerForm = document.querySelector('[data-ai-provider-form="gemini"]');
+  assert.ok(providerForm);
+  assert.match(providerForm.textContent, /structured output/i);
+  assert.equal(providerForm.querySelector('input[name="apiKey"]').type, "password");
+  const inboxAssignment = document.querySelector('[data-workload-form="inboxDrafting"] select');
+  assert.match(inboxAssignment.textContent, /Gemini 3.6 Flash/);
+  const transcription = document.querySelector('[data-workload-form="transcription"] select');
+  assert.doesNotMatch(transcription.textContent, /Gemini 3.6 Flash/);
+  assert.match(transcription.textContent, /Unassigned/);
+});
+
+test("Content Studio keeps seven-row navigation and renders a safe read-only Clip Library", async () => {
+  const renderer = await setupRenderer();
+  const maliciousName = `<img src=x onerror="window.libraryPwned=true">.mp4`;
+  renderer.setAppState(baseState());
+  renderer.setClipLibrary({
+    folders: [
+      {
+        id: "folder-1",
+        name: "Campaign footage",
+        status: "offline",
+        clipCount: 1,
+        lastScannedAt: "bad-date",
+        error: "External drive is offline"
+      }
+    ],
+    clips: [
+      {
+        id: "media-1",
+        name: maliciousName,
+        extension: "mp4",
+        status: "missing",
+        duration: null,
+        size: 42,
+        tags: ["launch"],
+        previewUrl: null,
+        thumbnailUrl: null,
+        error: "File unavailable"
+      }
+    ],
+    total: 1,
+    offset: 0,
+    limit: 40,
+    notices: []
+  });
+  renderer.ui.activeSection = "studio";
+  renderer.ui.studioTab = "library";
+  renderer.renderApp();
+  assert.equal(document.querySelectorAll(".nav-item").length, 7);
+  assert.equal(document.querySelectorAll('[role="tab"]').length, 3);
+  assert.equal(document.querySelector('[role="tab"][aria-selected="true"]').textContent.trim(), "Library");
+  assert.match(document.querySelector(".clip-row").textContent, /<img src=x/);
+  assert.equal(document.querySelector(".clip-row img"), null);
+  assert.equal(window.libraryPwned, undefined);
+  assert.match(document.querySelector(".clip-detail").textContent, /File unavailable/);
+  assert.match(document.querySelector(".library-folders").textContent, /External drive is offline/);
+  assert.equal(document.querySelector("[data-remove-clip]").textContent.trim(), "Remove from library");
+});
+
+test("Studio planning tabs preserve legacy clip plans without implying render support", async () => {
+  const renderer = await setupRenderer();
+  renderer.setAppState(
+    baseState({
+      clipperJobs: [
+        {
+          id: "legacy-1",
+          title: "Old plan",
+          status: "legacy_plan",
+          legacy: true,
+          createdAt: "2026-07-23T00:00:00.000Z"
+        }
+      ]
+    })
+  );
+  renderer.ui.activeSection = "studio";
+  renderer.ui.studioTab = "create";
+  renderer.renderApp();
+  assert.ok(document.querySelector("[data-clip-form]"));
+  assert.match(document.querySelector(".studio-list").textContent, /Legacy plan/);
+  renderer.ui.studioTab = "publishing";
+  renderer.renderApp();
+  assert.ok(document.querySelector("[data-post-form]"));
 });
 
 test("status tones are allowlisted and errors receive focus", async () => {
@@ -407,6 +519,9 @@ test("focused theme removes glass effects and keeps the restrictive CSP", () => 
   assert.match(css, /--accent: #7aa2f7/);
   assert.doesNotMatch(css, /(?:linear|radial)-gradient|backdrop-filter|glassDrift|surfaceSheen/);
   assert.doesNotMatch(html, /unsafe-inline|unsafe-eval/);
+  assert.match(html, /img-src 'self' data: produdash-media:/);
+  assert.match(html, /media-src 'self' produdash-media:/);
+  assert.match(html, /connect-src 'none'/);
   assert.match(html, /class="logo-p"/);
   assert.match(html, /class="logo-d"/);
   assert.doesNotMatch(html, /linearGradient/);

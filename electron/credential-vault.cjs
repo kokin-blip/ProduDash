@@ -122,17 +122,36 @@ class CredentialVault {
     if (Object.keys(values).length) this.cache[integrationId] = { ...values };
     else delete this.cache[integrationId];
     await this.writeEncrypted(this.cache);
+    if (!Object.keys(values).length) await this.writeEncrypted(this.cache);
   }
 
   async remove(integrationId) {
     delete this.cache[integrationId];
     await this.writeEncrypted(this.cache);
+    await this.writeEncrypted(this.cache);
+  }
+
+  async removeMany(integrationIds) {
+    for (const integrationId of integrationIds) delete this.cache[integrationId];
+    await this.writeEncrypted(this.cache);
+    await this.writeEncrypted(this.cache);
   }
 
   async clearAll() {
     this.cache = {};
-    for (const target of [this.filePath, `${this.filePath}.bak`, this.legacyPath]) {
-      if (fs.existsSync(target)) fs.unlinkSync(target);
+    const directory = path.dirname(this.filePath);
+    if (!fs.existsSync(directory)) return;
+    const encryptedName = path.basename(this.filePath);
+    const legacyName = path.basename(this.legacyPath);
+    for (const entry of fs.readdirSync(directory)) {
+      if (
+        entry === encryptedName ||
+        entry === `${encryptedName}.bak` ||
+        entry.startsWith(`${encryptedName}.recovery-`) ||
+        entry === legacyName
+      ) {
+        fs.unlinkSync(path.join(directory, entry));
+      }
     }
   }
 }

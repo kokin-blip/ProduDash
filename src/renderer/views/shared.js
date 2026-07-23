@@ -1,5 +1,5 @@
 import { escapeHtml, statusLabel, statusTone } from "../format.js";
-import { credentialStored, ui } from "../state.js";
+import { credentialStored, providerCredentialsStored, resolveWorkload, ui, workloadReady } from "../state.js";
 
 export function renderStatusBadge(value, label = statusLabel(value), key = "") {
   const statusAttributes = key ? ` data-status-key="${escapeHtml(key)}" data-status-value="${escapeHtml(value || "unknown")}"` : "";
@@ -30,7 +30,14 @@ export function renderStatusMessages() {
 
 export function renderConnectionFirst() {
   const shopify = connectionState("shopify");
-  const gemini = connectionState("gemini");
+  const inboxAssignment = resolveWorkload("inboxDrafting");
+  const aiProfile =
+    inboxAssignment?.mode === "provider" ? ui.appState.aiProviders.find((profile) => profile.id === inboxAssignment.profileId) : null;
+  const ai = {
+    status: aiProfile?.status || "disconnected",
+    stored: aiProfile ? providerCredentialsStored(aiProfile.id) : false,
+    name: aiProfile?.name || "AI provider"
+  };
   const shopifyReady = shopify.status === "connected";
   return `
     <section class="setup-view">
@@ -41,7 +48,7 @@ export function renderConnectionFirst() {
             <p>Start with your store, then add draft-only AI assistance.</p>
           </div>
           ${renderStatusBadge(
-            shopifyReady && gemini.status === "connected" ? "connected" : "pending",
+            shopifyReady && workloadReady("inboxDrafting") ? "connected" : "pending",
             "Setup in progress",
             "setup-progress"
           )}
@@ -64,17 +71,17 @@ export function renderConnectionFirst() {
           })}
           ${renderSetupStep({
             number: "2",
-            title: "Connect Gemini",
+            title: `Connect ${ai.name}`,
             description:
-              gemini.status === "connected"
-                ? "Gemini is available for structured, approval-only drafts."
+              ai.status === "connected"
+                ? "Your assigned provider is available for structured, approval-only drafts."
                 : "Enable structured drafts, summaries, and recommendations after your store is connected.",
-            status: gemini.status,
-            statusLabel: gemini.status === "connected" ? "Connected" : gemini.stored ? "Needs verification" : "Not connected",
-            action: gemini.status === "connected" ? "Review Gemini" : "Connect Gemini",
+            status: ai.status,
+            statusLabel: ai.status === "connected" ? "Connected" : ai.stored ? "Needs verification" : "Not connected",
+            action: ai.status === "connected" ? "Review AI provider" : "Connect AI provider",
             disabled: !shopifyReady,
             disabledReason: "Connect Shopify first",
-            statusKey: "setup-gemini"
+            statusKey: "setup-ai-provider"
           })}
           <li class="setup-step">
             <span class="step-number">3</span>
@@ -150,7 +157,7 @@ export function renderCompliancePanel(title = "Security and workflow boundaries"
         </div>
         <div class="policy-row">
           <span aria-hidden="true">OK</span>
-          <div><strong>Actions remain approval-gated</strong><p>Gemini only drafts and classifies. Profit and conversion remain unavailable without real source data.</p></div>
+          <div><strong>Actions remain approval-gated</strong><p>AI providers only draft and classify. Profit and conversion remain unavailable without real source data.</p></div>
         </div>
       </div>
     </details>
@@ -158,8 +165,8 @@ export function renderCompliancePanel(title = "Security and workflow boundaries"
 }
 
 export function renderIntegrationCards() {
-  return ui.appState.integrations
-    .filter((integration) => ["shopify", "gemini"].includes(integration.id))
+  const commerce = ui.appState.integrations
+    .filter((integration) => integration.id === "shopify")
     .map((integration) => {
       const credentials = ui.appState.credentialSettings.find((setting) => setting.id === integration.id);
       const stored = credentials?.status === "stored";
@@ -178,4 +185,24 @@ export function renderIntegrationCards() {
       `;
     })
     .join("");
+  const providers = ui.appState.aiProviders
+    .map(
+      (profile) => `
+        <div class="integration-row">
+          <div class="integration-name">
+            <strong>${escapeHtml(profile.name)}</strong>
+            <span>Provider-neutral AI profile · ${escapeHtml(profile.selectedModelId || "No model selected")}</span>
+            ${profile.error ? `<p class="inline-error">${escapeHtml(profile.error)}</p>` : ""}
+          </div>
+          <div class="integration-meta">
+            ${renderStatusBadge(profile.status, undefined, `health-ai-${profile.id}`)}
+            <small>${escapeHtml(profile.lastValidatedAt || "Never validated")} · ${
+              providerCredentialsStored(profile.id) ? "Credentials stored" : "Credentials missing"
+            }</small>
+          </div>
+        </div>
+      `
+    )
+    .join("");
+  return commerce + providers;
 }

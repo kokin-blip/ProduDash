@@ -1,6 +1,6 @@
 # ProduDash
 
-ProduDash is a local-first Electron dashboard for merchant operations. The secure MVP connects Shopify data, validates a Gemini API key for approval-only drafting, and keeps incomplete social, publishing, analytics, and media features visibly separated from working functionality.
+ProduDash is a local-first Electron dashboard for merchant operations. The secure MVP connects Shopify data, routes approval-only drafting through provider-neutral AI profiles, and indexes local video in a read-only Clip Library. Incomplete social, publishing, analytics, and media-processing features remain visibly separated from working functionality.
 
 ## What works
 
@@ -9,9 +9,11 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - Shopify GraphQL Admin API connection and refresh using API version `2026-07`.
 - Up to 100 recent products and 100 recent orders per refresh, with cursor pagination and safe partial-sync reporting.
 - Locally derived revenue, order, fulfillment, and zero-inventory signals based only on imported Shopify data.
-- Gemini `gemini-3.6-flash` connection validation and structured customer-support drafts.
+- Capability-based AI provider profiles, model metadata, and independent Advisor, Inbox Drafting, Clip Analysis, and Transcription workload assignments.
+- Gemini `gemini-3.6-flash` as the first tested provider adapter, with connection validation and schema-validated customer-support drafts.
 - Human approval gates for AI drafts and local post-export plans.
 - Hardened Electron renderer isolation, restrictive CSP, trusted IPC senders, blocked navigation/windows, and normalized errors.
+- A separate atomic and recoverable Clip Library index with folder/loose-file imports, recursive scans, search, filters, tags, cached thumbnails, opaque previews, and visible missing/offline/corrupt/unsupported states.
 - Local clip and post planning queues that state clearly that no media processing or external publishing occurs.
 
 ## What is not implemented
@@ -19,7 +21,9 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - Social inbox imports or external message sending.
 - Automatic order creation, payments, refunds, discounts, or fulfillment.
 - TikTok, Instagram, Facebook, YouTube, or Stripe API connectors.
-- Media analysis, clipping, rendered export files, or external publishing.
+- Media analysis, transcription, clipping, rendered export files, or external publishing. The Clip Library is read-only.
+- OpenAI, Anthropic, or custom OpenAI-compatible adapters; the provider contract is in place, but these adapters are later milestones.
+- Frog Advisor chat and tools.
 - Social analytics or Shopify profit/conversion figures without real cost and traffic inputs.
 - Hosted accounts, cross-device synchronization, OAuth callbacks, webhooks, or token refresh.
 - Signed installers, notarization, automatic updates, or production release packaging.
@@ -34,7 +38,7 @@ Each installation is one local workspace. Application state is stored beneath El
 - Windows uses DPAPI-backed protection.
 - Linux requires an available secure secret provider. ProduDash refuses to save secrets when Electron reports the insecure `basic_text` backend.
 
-The encrypted credential file contains a versioned ciphertext envelope. Public metadata such as a canonical `name.myshopify.com` domain is kept separately so the renderer can describe the connection without receiving tokens.
+The encrypted credential file contains a versioned ciphertext envelope. Public metadata such as a canonical `name.myshopify.com` domain, AI profile type, models, verified capabilities, status, and workload assignments is kept separately so the renderer can describe connections without receiving tokens.
 
 Legacy `produdash-credentials.json` values are encrypted and the plaintext file is removed after a successful migration. JavaScript and SSD storage cannot guarantee forensic secure erasure of historical filesystem blocks or external backups.
 
@@ -57,23 +61,39 @@ Credential presence is not connection success. The UI reports `connected`, `degr
 
 Public distribution must replace manual custom-app tokens with a hosted OAuth flow, HMAC verification, least-privilege scopes, webhook verification, and token lifecycle management.
 
-## Connect Gemini
+## Configure AI providers
 
 1. Create a Gemini API key in Google AI Studio.
 2. Open **Integrations** in ProduDash.
-3. Enter the key and choose **Save and validate**.
+3. Under **AI providers**, enter the key and choose **Save and validate**.
+4. Review the model’s verified capabilities and choose compatible assignments under **Workload assignments**.
 
-ProduDash makes a small structured validation request before marking Gemini connected. Draft requests include only the selected business, bounded operator instruction, and the latest bounded messages from one conversation.
+ProduDash makes a small structured validation request before marking a profile connected. Stored credentials are not treated as a successful connection. “Same as advisor” resolves only when the Advisor model has the capabilities required by the inheriting workload.
 
-Gemini output is schema-validated before storage. It can produce a draft, intent, summary, possible order details, a recommended action, and risk flags. It cannot send a message or perform an external side effect.
+Inbox draft requests include only the selected business, a bounded operator instruction, and the latest bounded messages from one conversation. Output is schema-validated before storage. It can contain a draft, intent, summary, possible order details, a recommended action, and risk flags. It cannot send a message or perform an external side effect, and ProduDash never silently switches providers.
+
+## Clip Library
+
+Open **Content Studio → Library** to add folders or loose video files. ProduDash:
+
+- Recursively scans MP4, MOV, M4V, WebM, and MKV files with bounded concurrency.
+- Skips symlinks and hidden folders.
+- Uses bundled, version-pinned ffprobe/FFmpeg binaries only for metadata inspection and cached thumbnail creation.
+- Keeps tags across rescans and exposes previews through an opaque local `produdash-media` protocol with byte-range support.
+- Records unsupported, corrupt, permission-denied, missing, and detached-drive states per file.
+- Stores security-scoped bookmarks in the encrypted credential vault when a macOS App Store sandbox requires them.
+
+The library never copies, uploads, modifies, or deletes source media. Removing a video or folder removes only its ProduDash index record and cached thumbnail.
+
+The bundled binaries are included for development, CI, local inspection, and thumbnail generation. External distribution remains blocked until the owner completes legal review of the applicable FFmpeg/ffprobe GPL obligations or supplies approved replacement builds.
 
 ## Reset and deletion
 
-- **Reset dashboard data** clears imported businesses, snapshots, local plans, approvals, and audits while retaining encrypted credentials. Integrations return to a disconnected state until refreshed.
+- **Reset dashboard data** clears imported businesses, snapshots, local plans, approvals, audits, advisor history when introduced, the Clip Library index, and cached thumbnails. AI profiles, workload assignments, and encrypted credentials remain. Integrations return to a disconnected state until refreshed.
 - **Remove** on an integration deletes that integration’s credentials and marks its snapshots disconnected; already imported Shopify snapshots remain for local reference.
-- **Delete all data and credentials** removes ProduDash state, backups, recovery snapshots, and the encrypted credential vault, then creates a clean local workspace.
+- **Delete all data and credentials** removes ProduDash state, provider metadata, indexes, cached thumbnails, stored bookmarks, backups, recovery snapshots, and the encrypted credential vault, then creates a clean local workspace.
 
-All destructive operations require explicit confirmation in the renderer.
+All destructive operations require explicit confirmation in the renderer. Reset, removal, and delete-all never delete user-owned source or generated media files.
 
 ## Development
 
@@ -100,7 +120,7 @@ npm run validate
 npm audit --omit=dev
 ```
 
-`npm run validate` runs syntax, lint, formatting, unit/integration/renderer tests, and the Electron smoke test. Tests use injected provider and encryption fakes; they never require or contact live Shopify or Gemini accounts.
+`npm run validate` runs syntax, lint, formatting, unit/integration/renderer tests, a real tiny bundled-binary media inspection, and the Electron smoke test. Provider tests use injected clients and encryption fakes; they never require or contact live Shopify or Gemini accounts.
 
 The browser-only `npm run web` command can display static assets but cannot use local persistence or credentials because the secure preload bridge is available only in Electron.
 

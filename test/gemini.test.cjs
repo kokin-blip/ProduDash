@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { GeminiConnector, MODEL } = require("../electron/connectors/gemini.cjs");
+const { buildDraftPrompt, DRAFT_SCHEMA, validateDraftResult } = require("../electron/ai/draft-contract.cjs");
 
 function clientReturning(value, capture = {}) {
   return {
@@ -37,7 +38,7 @@ test("Gemini returns only validated approval-draft fields with bounded context",
         capture
       )
   });
-  const result = await connector.draftReply(
+  const prompt = buildDraftPrompt(
     {
       channel: "Instagram",
       intent: "Purchase",
@@ -45,8 +46,9 @@ test("Gemini returns only validated approval-draft fields with bounded context",
       messages: Array.from({ length: 30 }, (_, index) => ({ role: "customer", text: `Message ${index}` }))
     },
     "Draft safely.",
-    { name: "Store", geminiApiKey: "AIza-test-key" }
+    { name: "Store" }
   );
+  const result = validateDraftResult(await connector.generateStructured("AIza-test-key", prompt, DRAFT_SCHEMA, "draft"));
   assert.equal(result.draft, "Please use secure checkout.");
   assert.equal(result.orderDetails, null);
   assert.ok(capture.request.input.length < 21_000);
@@ -74,12 +76,16 @@ test("Gemini rejects invalid structured order fields", async () => {
       })
   });
   await assert.rejects(
-    () =>
-      connector.draftReply({ messages: [] }, "Draft safely.", {
-        name: "Store",
-        geminiApiKey: "AIza-test-key"
-      }),
-    (error) => error.code === "GEMINI_INVALID_RESPONSE"
+    async () =>
+      validateDraftResult(
+        await connector.generateStructured(
+          "AIza-test-key",
+          buildDraftPrompt({ messages: [] }, "Draft safely.", { name: "Store" }),
+          DRAFT_SCHEMA,
+          "draft"
+        )
+      ),
+    (error) => error.code === "PROVIDER_INVALID_RESPONSE"
   );
 });
 

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, Menu, safeStorage, session } = require("electron");
+const { app, BrowserWindow, dialog, Menu, protocol, safeStorage, session, shell } = require("electron");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { createConnectors } = require("./connectors.cjs");
@@ -7,6 +7,18 @@ const { CredentialVault, createSafeStorageAdapter } = require("./credential-vaul
 const { AppError } = require("./errors.cjs");
 const { registerIpc } = require("./ipc.cjs");
 const { ProduDashStore } = require("./store.cjs");
+const { GeminiProviderAdapter } = require("./ai/adapters/gemini.cjs");
+const { ProviderRegistry } = require("./ai/provider-registry.cjs");
+const { ProviderService } = require("./ai/provider-service.cjs");
+const { MediaLibrary } = require("./media/media-library.cjs");
+const { createMediaProtocolHandler } = require("./media/media-protocol.cjs");
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "produdash-media",
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+  }
+]);
 
 const indexPath = path.join(__dirname, "..", "index.html");
 const appUrl = pathToFileURL(indexPath).href;
@@ -68,8 +80,17 @@ if (hasSingleInstanceLock) {
         }
       }
       const connectors = createConnectors();
-      const connections = new ConnectionService({ store, ...connectors });
-      registerIpc({ store, connections, appUrl });
+      const providerRegistry = new ProviderRegistry([new GeminiProviderAdapter({ connector: connectors.gemini })]);
+      const providers = new ProviderService({ store, registry: providerRegistry });
+      await providers.initialize();
+      const mediaLibrary = new MediaLibrary(app.getPath("userData"), {
+        credentialVault: store.credentialVault,
+        startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
+      });
+      store.notices.push(...mediaLibrary.getNotices());
+      const connections = new ConnectionService({ store, shopify: connectors.shopify, providerService: providers });
+      protocol.handle("produdash-media", createMediaProtocolHandler(mediaLibrary));
+      registerIpc({ store, connections, providers, mediaLibrary, appUrl, shell });
       Menu.setApplicationMenu(null);
       createWindow();
     } catch (error) {

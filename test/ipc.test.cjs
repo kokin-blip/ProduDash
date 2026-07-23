@@ -3,7 +3,7 @@ const test = require("node:test");
 const { createHandlers } = require("../electron/ipc.cjs");
 
 function fixtures(isTrustedSender) {
-  const state = { schemaVersion: 3 };
+  const state = { schemaVersion: 4 };
   const store = {
     getAppState: () => state,
     approveAiAction: async () => state,
@@ -41,7 +41,35 @@ test("IPC rejects untrusted senders before invoking privileged handlers", async 
 test("IPC returns normalized success envelopes", async () => {
   const handlers = fixtures(() => true);
   const response = await handlers["produdash:getAppState"]({});
-  assert.deepEqual(response, { ok: true, data: { schemaVersion: 3 } });
+  assert.deepEqual(response, { ok: true, data: { schemaVersion: 4 } });
+});
+
+test("dashboard reset and delete-all clear only ProduDash library metadata", async () => {
+  const events = [];
+  const state = { schemaVersion: 4 };
+  const handlers = createHandlers({
+    store: {
+      resetDashboardData: async () => {
+        events.push("reset-state");
+        return state;
+      },
+      deleteAllLocalData: async () => {
+        events.push("delete-state");
+        return state;
+      }
+    },
+    connections: {},
+    providers: {},
+    mediaLibrary: {
+      clear: async (options) => events.push(options?.removeIndex ? "remove-index" : "clear-index")
+    },
+    isTrustedSender: () => true
+  });
+  assert.equal((await handlers["produdash:resetDashboardData"]({})).ok, true);
+  assert.deepEqual(events, ["clear-index", "reset-state"]);
+  events.length = 0;
+  assert.equal((await handlers["produdash:deleteAllLocalData"]({})).ok, true);
+  assert.deepEqual(events, ["remove-index", "delete-state"]);
 });
 
 test("IPC returns controlled errors without stacks or secrets", async () => {

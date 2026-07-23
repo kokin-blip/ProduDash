@@ -1,6 +1,6 @@
 function createInitialState() {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     selectedBusinessId: null,
     selectedConversationId: null,
     integrations: [
@@ -12,15 +12,6 @@ function createInitialState() {
         lastSync: "Not connected",
         allowedUse: "Read store metrics, products, orders, fulfillment, and payment status after merchant authorization.",
         compliance: "Use OAuth, verify HMAC callbacks, request minimum scopes, and receive changes through webhooks."
-      },
-      {
-        id: "gemini",
-        name: "Gemini",
-        status: "disconnected",
-        detail: "Add a server-side Gemini key for drafts, classification, summaries, and extraction.",
-        lastSync: "Not connected",
-        allowedUse: "Generate drafts and structured internal recommendations only.",
-        compliance: "Never expose the key in the renderer. Keep human approval before customer-facing actions."
       },
       {
         id: "instagram",
@@ -91,24 +82,6 @@ function createInitialState() {
             label: "Admin API access token",
             type: "password",
             placeholder: "shpat_...",
-            sensitive: true
-          }
-        ]
-      },
-      {
-        id: "gemini",
-        name: "Gemini",
-        status: "missing",
-        updatedAt: null,
-        configuredFields: [],
-        publicValues: {},
-        note: "Use the user's own Gemini API key for draft-only AI features.",
-        fields: [
-          {
-            key: "apiKey",
-            label: "Gemini API key",
-            type: "password",
-            placeholder: "AIza...",
             sensitive: true
           }
         ]
@@ -232,6 +205,53 @@ function createInitialState() {
         ]
       }
     ],
+    aiProviders: [
+      {
+        id: "gemini",
+        providerType: "gemini",
+        name: "Google Gemini",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: "gemini-3.6-flash",
+        models: [
+          {
+            id: "gemini-3.6-flash",
+            name: "Gemini 3.6 Flash",
+            capabilities: [
+              "text_generation",
+              "streaming",
+              "structured_output",
+              "tool_calling",
+              "image_understanding",
+              "native_video_understanding"
+            ]
+          }
+        ],
+        lastValidatedAt: null,
+        error: null
+      }
+    ],
+    aiWorkloads: {
+      advisor: {
+        mode: "provider",
+        profileId: "gemini",
+        modelId: "gemini-3.6-flash"
+      },
+      inboxDrafting: {
+        mode: "provider",
+        profileId: "gemini",
+        modelId: "gemini-3.6-flash"
+      },
+      clipAnalysis: {
+        mode: "same_as_advisor"
+      },
+      transcription: {
+        mode: "unassigned"
+      }
+    },
+    advisorSettings: {
+      displayName: "Advisor"
+    },
     creatorPlatforms: [
       {
         id: "tiktok",
@@ -258,6 +278,7 @@ function createInitialState() {
         requirements: ["Google OAuth consent", "Upload quota available", "Channel authorization"]
       }
     ],
+    mediaJobs: [],
     clipperJobs: [],
     postQueue: [],
     analyticsSources: [

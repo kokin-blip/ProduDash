@@ -65,6 +65,25 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
   assert.equal(await page.locator('[data-section="integrations"]').getAttribute("aria-current"), "page");
   assert.equal(await page.locator('[data-credentials-form="shopify"]').getAttribute("aria-busy"), "false");
   assert.equal(await page.locator('[data-credentials-form="instagram"]').count(), 0);
+  assert.equal(await page.locator('[data-ai-provider-form="gemini"]').count(), 1);
+  assert.equal(await page.locator('[data-workload-form="inboxDrafting"]').count(), 1);
+
+  await page.click('[data-section="studio"]');
+  await page.waitForTimeout(250);
+  assert.equal(await page.locator('[role="tab"]').count(), 3);
+  assert.equal(await page.locator('[role="tab"][aria-selected="true"]').textContent(), "Library");
+  assert.match(await page.locator(".studio-tab-panel").textContent(), /No matching videos/);
+  assert.equal(await hasHorizontalOverflow(page), false);
+  await page.screenshot({ path: path.join(artifactPath, "library-empty-1440x960.png"), fullPage: true });
+  await resizeWindow(application, 1120, 760);
+  assert.equal(await hasHorizontalOverflow(page), false);
+  await page.screenshot({ path: path.join(artifactPath, "library-empty-1120x760.png"), fullPage: true });
+  await resizeWindow(application, 1440, 960);
+  await page.click('[data-studio-tab="create"]');
+  assert.equal(await page.locator("[data-clip-form]").count(), 1);
+  await page.click('[data-studio-tab="publishing"]');
+  assert.equal(await page.locator("[data-post-form]").count(), 1);
+  await page.click('[data-section="integrations"]');
 
   await page.locator("details.disclosure:not(.danger-zone) > summary").click();
   assert.equal(await page.locator("details.disclosure:not(.danger-zone)").getAttribute("open"), "");
@@ -214,7 +233,7 @@ async function renderConnectedFixture(page) {
     const state = await import("./src/renderer/state.js");
     const render = await import("./src/renderer/render.js");
     const fixture = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       selectedBusinessId: "business-1",
       businesses: [
         {
@@ -283,19 +302,33 @@ async function renderConnectedFixture(page) {
           status: "connected",
           detail: "Store identity and recent commerce data verified.",
           lastSync: "Just now"
-        },
-        {
-          id: "gemini",
-          name: "Gemini",
-          status: "connected",
-          detail: "Structured approval-only drafts enabled.",
-          lastSync: "Just now"
         }
       ],
-      credentialSettings: [
-        { id: "shopify", name: "Shopify", status: "stored", fields: [] },
-        { id: "gemini", name: "Gemini", status: "stored", fields: [] }
+      credentialSettings: [{ id: "shopify", name: "Shopify", status: "stored", fields: [] }],
+      aiProviders: [
+        {
+          id: "gemini",
+          providerType: "gemini",
+          name: "Google Gemini",
+          status: "connected",
+          credentialStatus: "stored",
+          selectedModelId: "gemini-3.6-flash",
+          models: [
+            {
+              id: "gemini-3.6-flash",
+              name: "Gemini 3.6 Flash",
+              capabilities: ["text_generation", "structured_output"]
+            }
+          ]
+        }
       ],
+      aiWorkloads: {
+        advisor: { mode: "provider", profileId: "gemini", modelId: "gemini-3.6-flash" },
+        inboxDrafting: { mode: "provider", profileId: "gemini", modelId: "gemini-3.6-flash" },
+        clipAnalysis: { mode: "same_as_advisor" },
+        transcription: { mode: "unassigned" }
+      },
+      advisorSettings: { displayName: "Advisor" },
       creatorPlatforms: [],
       analyticsSources: [],
       clipperJobs: [],
