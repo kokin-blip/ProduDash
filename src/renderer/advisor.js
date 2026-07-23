@@ -17,9 +17,11 @@ const ADVISOR_ART = Object.freeze({
   warning: "./assets/advisor/states/advisor-warning.png"
 });
 const ADVISOR_AVATAR = "./assets/advisor/states/advisor-avatar.png";
+let previousArtState = null;
+let previousOpenState = false;
 
-function advisorArtSource() {
-  return ADVISOR_ART[ui.advisorStatus] || ADVISOR_ART.idle;
+function advisorArtState() {
+  return Object.hasOwn(ADVISOR_ART, ui.advisorStatus) ? ui.advisorStatus : "idle";
 }
 
 function advisorProvider() {
@@ -104,6 +106,8 @@ export function renderAdvisor() {
   const provider = advisorProvider();
   const consented = hasCurrentConsent(provider);
   const busy = Boolean(ui.advisorRequest);
+  const artState = advisorArtState();
+  const animateArt = ui.advisorOpen && (!previousOpenState || previousArtState !== artState);
   const displayName = ui.appState.advisorSettings?.displayName || "Advisor";
   const providerLabel = provider ? `${provider.name} · ${provider.modelId}` : "No provider assigned";
   const stateLabel =
@@ -128,7 +132,7 @@ export function renderAdvisor() {
       aria-controls="advisorPanel"
       aria-label="${escapeHtml(ui.advisorOpen ? `Close ${displayName}` : `Open ${displayName}`)}"
     >
-      <img class="advisor-launcher-avatar" src="${ADVISOR_AVATAR}" alt="" />
+      <img class="advisor-launcher-avatar${animateArt ? " is-reacting" : ""}" src="${ADVISOR_AVATAR}" alt="" />
       <span>${escapeHtml(displayName)}</span>
     </button>
     <aside
@@ -139,7 +143,12 @@ export function renderAdvisor() {
     >
       <header class="advisor-header">
         <div class="advisor-identity">
-          <img class="advisor-state-art" src="${advisorArtSource()}" alt="" />
+          <img
+            class="advisor-state-art${animateArt ? " is-reacting" : ""}"
+            src="${ADVISOR_ART[artState]}"
+            data-advisor-art-state="${artState}"
+            alt=""
+          />
           <div>
             <span class="advisor-kicker">Read-only operations assistant</span>
             <h2>${escapeHtml(displayName)}</h2>
@@ -209,6 +218,8 @@ export function renderAdvisor() {
       </details>
     </aside>
   `;
+  previousArtState = artState;
+  previousOpenState = ui.advisorOpen;
   if (ui.advisorOpen) {
     window.requestAnimationFrame(() => {
       const history = root.querySelector("#advisorHistory");

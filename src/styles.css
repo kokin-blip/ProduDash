@@ -2441,6 +2441,75 @@ tbody tr:hover {
   }
 }
 
+@keyframes advisor-avatar-react {
+  0% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: translateY(-1px) scale(1.06, 0.94);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes advisor-idle-arrive {
+  from {
+    opacity: 0.72;
+    transform: translateY(3px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes advisor-thinking-react {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+
+  50% {
+    transform: rotate(1.2deg) translateY(-1px);
+  }
+}
+
+@keyframes advisor-success-react {
+  0% {
+    transform: translateY(2px) scale(0.97);
+  }
+
+  52% {
+    transform: translateY(-2px) scale(1.035);
+  }
+
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes advisor-warning-react {
+  0% {
+    transform: translateX(0) rotate(0deg);
+  }
+
+  38% {
+    transform: translateX(-2px) rotate(-1.5deg);
+  }
+
+  70% {
+    transform: translateX(1px) rotate(0.6deg);
+  }
+
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+}
+
 .advisor-launcher {
   position: fixed;
   z-index: 30;
@@ -2482,6 +2551,10 @@ tbody tr:hover {
   width: 28px;
   height: 28px;
   object-fit: contain;
+}
+
+.advisor-launcher-avatar.is-reacting {
+  animation: advisor-avatar-react var(--motion-surface) var(--ease-out) both;
 }
 
 .advisor-panel {
@@ -2540,6 +2613,26 @@ tbody tr:hover {
   flex: 0 0 48px;
   object-fit: contain;
   object-position: center;
+}
+
+.advisor-state-art.is-reacting {
+  transform-origin: 50% 76%;
+}
+
+.advisor-state-art.is-reacting[data-advisor-art-state="idle"] {
+  animation: advisor-idle-arrive var(--motion-surface) var(--ease-out) both;
+}
+
+.advisor-state-art.is-reacting[data-advisor-art-state="thinking"] {
+  animation: advisor-thinking-react calc(var(--motion-surface) * 2) var(--ease-out) 2;
+}
+
+.advisor-state-art.is-reacting[data-advisor-art-state="success"] {
+  animation: advisor-success-react calc(var(--motion-surface) * 2) var(--ease-out) both;
+}
+
+.advisor-state-art.is-reacting[data-advisor-art-state="warning"] {
+  animation: advisor-warning-react calc(var(--motion-view) * 2) var(--ease-out) both;
 }
 
 .advisor-header h2 {
@@ -2875,6 +2968,12 @@ tbody tr:hover {
 
   .button-spinner {
     animation: none !important;
+  }
+
+  .advisor-launcher-avatar,
+  .advisor-state-art {
+    animation: none !important;
+    transform: none !important;
   }
 
   ::view-transition-old(main-content),

@@ -738,16 +738,33 @@ test("Advisor panel is accessible, provider-scoped, escaped, and reduced-motion 
   assert.equal(document.querySelector('#advisorPanel img[src="x"]'), null);
   assert.match(document.querySelector(".advisor-launcher-avatar").getAttribute("src"), /advisor-avatar\.png$/);
   assert.match(document.querySelector(".advisor-state-art").getAttribute("src"), /advisor-idle\.png$/);
+  assert.equal(document.querySelector(".advisor-state-art").dataset.advisorArtState, "idle");
+  renderer.renderApp();
+  assert.equal(document.querySelector(".advisor-state-art").classList.contains("is-reacting"), false);
   for (const state of ["thinking", "success", "warning"]) {
     renderer.ui.advisorStatus = state;
     renderer.renderApp();
-    assert.match(document.querySelector(".advisor-state-art").getAttribute("src"), new RegExp(`advisor-${state}\\.png$`));
+    const art = document.querySelector(".advisor-state-art");
+    assert.match(art.getAttribute("src"), new RegExp(`advisor-${state}\\.png$`));
+    assert.equal(art.dataset.advisorArtState, state);
+    assert.equal(art.classList.contains("is-reacting"), true);
   }
   for (const asset of ["idle", "thinking", "success", "warning", "avatar"]) {
     assert.equal(fs.existsSync(path.join(projectRoot, `assets/advisor/states/advisor-${asset}.png`)), true);
   }
   const css = fs.readFileSync(path.join(projectRoot, "src/styles.css"), "utf8");
   assert.match(css, /\.advisor-panel/);
+  for (const animation of [
+    "advisor-avatar-react",
+    "advisor-idle-arrive",
+    "advisor-thinking-react",
+    "advisor-success-react",
+    "advisor-warning-react"
+  ]) {
+    assert.match(css, new RegExp(`@keyframes ${animation}`));
+  }
+  assert.doesNotMatch(css, /advisor-(?:avatar|idle|thinking|success|warning)[^{]*\{[^}]*animation:[^;}]*infinite/s);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.advisor-state-art[\s\S]*animation: none !important/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.advisor-panel/);
   assert.doesNotMatch(css, /transition:\s*all/);
 });
