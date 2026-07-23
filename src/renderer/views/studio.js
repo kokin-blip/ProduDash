@@ -11,8 +11,8 @@ const STUDIO_TABS = [
 export function renderStudio() {
   return `
     <div class="inline-message neutral planning-banner">
-      <strong>Read-only media library</strong>
-      <span>ProduDash can index and preview local videos. Clip processing and publishing remain local planning only in this milestone.</span>
+      <strong>Local media workspace</strong>
+      <span>ProduDash can inspect and create clips on this computer. No source media is uploaded, and publishing still requires a future official connector.</span>
     </div>
     <div class="studio-tabs" role="tablist" aria-label="Content Studio">
       ${STUDIO_TABS.map(
@@ -241,34 +241,145 @@ function renderClipDetail(clip) {
 }
 
 function renderCreateClips() {
-  const jobs = asArray(ui.appState.clipperJobs);
+  const jobs = asArray(ui.appState.mediaJobs);
+  const legacyPlans = asArray(ui.appState.clipperJobs);
+  const availableClips = asArray(ui.clipLibrary.clips).filter((clip) => clip.status === "available");
+  const secureStorageUnavailable = asArray(ui.appState.systemNotices).some((notice) => notice.code === "SECURE_STORAGE_UNAVAILABLE");
   return `
     <section class="studio-grid single-workflow">
       <article class="panel">
         <div class="section-heading">
-          <div><h2>Record a clip idea</h2><p>Describe a local plan without processing the source media.</p></div>
-          ${renderStatusBadge("planned", "Planning only")}
+          <div><h2>Create local clips</h2><p>Analyze one indexed video, review deterministic candidates, then render approved clips.</p></div>
+          ${renderStatusBadge(
+            secureStorageUnavailable ? "error" : "available",
+            secureStorageUnavailable ? "Secure storage required" : "Local processing"
+          )}
         </div>
-        <form class="studio-form" data-clip-form>
-          <label><span>Clip title</span><input name="title" maxlength="120" required autocomplete="off" /></label>
+        <form class="studio-form" data-media-job-form>
           <label>
             <span>Source video</span>
-            <div class="file-input-row">
-              <input name="source" maxlength="2048" required autocomplete="off" placeholder="Local file path" />
-              <button class="text-button" type="button" data-browse-video>Browse</button>
-            </div>
+            <select name="sourceMediaId" required>
+              <option value="">Choose from Clip Library</option>
+              ${availableClips.map((clip) => `<option value="${escapeHtml(clip.id)}">${escapeHtml(clip.name)}</option>`).join("")}
+            </select>
           </label>
-          <label><span>Clip goal</span><input name="goal" maxlength="500" autocomplete="off" /></label>
-          <label><span>Target length</span><input name="targetLength" maxlength="80" value="30-45 seconds" required autocomplete="off" /></label>
+          <label><span>Job title</span><input name="title" maxlength="120" required autocomplete="off" /></label>
+          <label><span>Clip goal</span><input name="goal" maxlength="500" autocomplete="off" placeholder="Optional local context" /></label>
+          <div class="media-settings-grid">
+            <label><span>Maximum clips</span><input name="maxClips" type="number" min="1" max="20" value="3" required /></label>
+            <label><span>Target seconds</span><input name="targetDuration" type="number" min="5" max="180" value="30" required /></label>
+            <label><span>Aspect</span><select name="targetAspect">
+              <option value="original">Original</option><option value="vertical">Vertical 9:16</option>
+              <option value="square">Square 1:1</option><option value="landscape">Landscape 16:9</option>
+            </select></label>
+            <label><span>Aspect treatment</span><select name="aspectTreatment">
+              <option value="fit_pad">Fit and pad</option><option value="original">Keep original</option>
+              <option value="center_crop">Center crop</option>
+            </select></label>
+          </div>
+          <label><span>Captions</span><select name="captionMode">
+            <option value="off">Off</option><option value="srt">SRT file</option><option value="srt_burned">SRT + burned in</option>
+          </select></label>
+          <label><span>Caption text</span><textarea name="captionText" maxlength="2000" placeholder="Required only when captions are enabled"></textarea></label>
           ${renderPlatformChecks()}
-          <button class="primary-button" type="submit" data-pending-label="Creating…">Create local plan</button>
+          <div class="media-output-picker">
+            <div><strong>Output folder</strong><span>${escapeHtml(
+              ui.mediaOutputSelection?.name || "Choose where ProduDash should create a collision-free job folder."
+            )}</span></div>
+            <button class="ghost-button" type="button" data-choose-media-output data-pending-label="Choosing…" ${
+              secureStorageUnavailable ? "disabled" : ""
+            }>Choose folder</button>
+          </div>
+          ${
+            availableClips.length && !secureStorageUnavailable
+              ? `<button class="primary-button" type="submit" data-pending-label="Queueing…">Analyze locally</button>`
+              : secureStorageUnavailable
+                ? `<div class="inline-message error"><strong>Local jobs are unavailable</strong><span>ProduDash requires secure OS encryption before it can remember protected media paths.</span></div>`
+                : `<div class="inline-message warning"><strong>Add a source first</strong><span>Add an available video in the Library tab before creating a job.</span></div>`
+          }
         </form>
       </article>
       <article class="panel">
-        <div class="section-heading"><div><h2>Clip plans</h2><p>${jobs.length} local records</p></div></div>
-        <div class="studio-list">${jobs.length ? jobs.map(renderClipJob).join("") : `<div class="quiet-state compact"><p>No clip plans yet.</p></div>`}</div>
+        <div class="section-heading"><div><h2>Media jobs</h2><p>${jobs.length} durable local job${jobs.length === 1 ? "" : "s"} · one runs at a time</p></div></div>
+        <div class="studio-list">${jobs.length ? jobs.map(renderMediaJob).join("") : `<div class="quiet-state compact"><p>No media jobs yet.</p></div>`}</div>
       </article>
     </section>
+    ${
+      legacyPlans.length
+        ? `<details class="disclosure legacy-plans">
+            <summary><span><strong>Legacy clip plans</strong><small>${legacyPlans.length} planning-only record${
+              legacyPlans.length === 1 ? "" : "s"
+            } · recreate with a library source to render</small></span><span class="disclosure-icon" aria-hidden="true">+</span></summary>
+            <div class="disclosure-content studio-list">${legacyPlans.map(renderClipJob).join("")}</div>
+          </details>`
+        : ""
+    }
+  `;
+}
+
+function renderMediaJob(job) {
+  const status = job.status || "queued";
+  const canCancel = ["queued", "render_queued", "processing", "awaiting_review", "failed", "interrupted"].includes(status);
+  const canRetry = ["failed", "interrupted", "canceled"].includes(status) && (job.retryable || status === "canceled");
+  return `
+    <div class="media-job">
+      <div class="media-job-heading">
+        <div><strong>${escapeHtml(job.title)}</strong><span>${escapeHtml(job.sourceName || "Indexed source")} → ${escapeHtml(
+          job.outputFolderName
+        )}</span></div>
+        ${renderStatusBadge(status)}
+      </div>
+      <div class="media-progress" aria-label="${escapeHtml(statusLabel(job.stage || status))}: ${Math.round(Number(job.progress || 0))}%">
+        <progress max="100" value="${Math.max(0, Math.min(100, Number(job.progress || 0)))}"></progress>
+        <span>${escapeHtml(statusLabel(job.stage || status))} · ${Math.round(Number(job.progress || 0))}%</span>
+      </div>
+      ${job.error ? `<div class="inline-message error"><strong>Job needs attention</strong><span>${escapeHtml(job.error)}</span></div>` : ""}
+      ${
+        asArray(job.warnings).length
+          ? `<ul class="media-warnings">${asArray(job.warnings)
+              .map((warning) => `<li>${escapeHtml(warning)}</li>`)
+              .join("")}</ul>`
+          : ""
+      }
+      ${status === "awaiting_review" ? renderCandidateReview(job) : ""}
+      ${
+        asArray(job.artifacts).length
+          ? `<div class="artifact-list">${asArray(job.artifacts)
+              .map((artifact) => `<span>${escapeHtml(artifact.kind)} · ${escapeHtml(artifact.name)}</span>`)
+              .join("")}</div>`
+          : ""
+      }
+      <div class="approval-actions">
+        ${canCancel ? `<button class="text-button danger-text" type="button" data-cancel-media-job="${escapeHtml(job.id)}" data-pending-label="Canceling…">Cancel</button>` : ""}
+        ${canRetry ? `<button class="ghost-button small" type="button" data-retry-media-job="${escapeHtml(job.id)}" data-pending-label="Queueing…">Retry</button>` : ""}
+        ${status === "completed" ? `<button class="text-button" type="button" data-reveal-media-job="${escapeHtml(job.id)}">Show output</button>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderCandidateReview(job) {
+  return `
+    <form class="candidate-review" data-media-candidates-form="${escapeHtml(job.id)}">
+      <fieldset>
+        <legend>Human approval required</legend>
+        ${asArray(job.candidates)
+          .map(
+            (candidate, index) => `
+              <label>
+                <input type="checkbox" name="candidateIds" value="${escapeHtml(candidate.id)}" ${index === 0 ? "checked" : ""} />
+                <span><strong>${escapeHtml(candidate.title)}</strong><small>${formatDuration(candidate.start)}–${formatDuration(
+                  candidate.end
+                )} · confidence ${Math.round(Number(candidate.confidence || 0) * 100)}%</small><small>${escapeHtml(
+                  candidate.rationale || "Deterministic local interval."
+                )}</small></span>
+              </label>
+            `
+          )
+          .join("")}
+      </fieldset>
+      <button class="primary-button small" type="submit" data-pending-label="Approving…">Approve and render selected</button>
+    </form>
   `;
 }
 

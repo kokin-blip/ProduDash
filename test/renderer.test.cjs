@@ -284,7 +284,7 @@ test("rapid native view transitions skip stale renders and keep the latest secti
   updates[0]();
   assert.equal(document.querySelector("#pageTitle").textContent, "Set up ProduDash");
   updates[1]();
-  assert.equal(document.querySelector("#pageTitle").textContent, "Local planning only");
+  assert.equal(document.querySelector("#pageTitle").textContent, "Local media workspace");
   assert.equal(document.querySelector(".nav-list").dataset.activeSection, "studio");
 });
 
@@ -417,7 +417,7 @@ test("Content Studio keeps seven-row navigation and renders a safe read-only Cli
   assert.equal(document.querySelector("[data-remove-clip]").textContent.trim(), "Remove from library");
 });
 
-test("Studio planning tabs preserve legacy clip plans without implying render support", async () => {
+test("Studio creates deterministic local jobs while preserving legacy plans as non-renderable", async () => {
   const renderer = await setupRenderer();
   renderer.setAppState(
     baseState({
@@ -435,11 +435,65 @@ test("Studio planning tabs preserve legacy clip plans without implying render su
   renderer.ui.activeSection = "studio";
   renderer.ui.studioTab = "create";
   renderer.renderApp();
-  assert.ok(document.querySelector("[data-clip-form]"));
-  assert.match(document.querySelector(".studio-list").textContent, /Legacy plan/);
+  assert.ok(document.querySelector("[data-media-job-form]"));
+  assert.match(document.querySelector(".legacy-plans").textContent, /Legacy plan/);
+  assert.match(document.querySelector(".legacy-plans").textContent, /recreate with a library source to render/i);
   renderer.ui.studioTab = "publishing";
   renderer.renderApp();
   assert.ok(document.querySelector("[data-post-form]"));
+});
+
+test("Studio safely renders durable job progress, candidate approval, and partial artifacts", async () => {
+  const renderer = await setupRenderer();
+  renderer.setAppState(
+    baseState({
+      creatorPlatforms: [{ id: "tiktok", name: "TikTok" }],
+      mediaJobs: [
+        {
+          id: "mediajob-1",
+          title: `<img src=x onerror="window.mediaPwned=1">`,
+          sourceMediaId: "media-1",
+          sourceName: `source"><script>bad()</script>.mp4`,
+          outputFolderName: "safe-output",
+          status: "awaiting_review",
+          stage: "candidate_review",
+          progress: 75,
+          settings: {},
+          candidates: [
+            {
+              id: "candidate-1",
+              title: "<svg onload=bad()>",
+              start: 0,
+              end: 8,
+              confidence: 0.8,
+              rationale: "<script>not markup</script>"
+            }
+          ],
+          selectedCandidateIds: [],
+          warnings: ["Local warning"],
+          artifacts: [{ kind: "video", name: "partial.mp4" }],
+          error: null
+        }
+      ]
+    })
+  );
+  renderer.setClipLibrary({
+    folders: [],
+    clips: [{ id: "media-1", name: "Source.mp4", status: "available" }],
+    total: 1,
+    offset: 0,
+    limit: 40,
+    notices: []
+  });
+  renderer.ui.activeSection = "studio";
+  renderer.ui.studioTab = "create";
+  renderer.renderApp();
+  assert.equal(document.querySelector(".media-job img"), null);
+  assert.equal(window.mediaPwned, undefined);
+  assert.match(document.querySelector(".media-job").textContent, /<img src=x/);
+  assert.equal(document.querySelectorAll("[data-media-candidates-form] input").length, 1);
+  assert.equal(document.querySelector("progress").value, 75);
+  assert.match(document.querySelector(".artifact-list").textContent, /partial\.mp4/);
 });
 
 test("status tones are allowlisted and errors receive focus", async () => {

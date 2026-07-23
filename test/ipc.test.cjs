@@ -13,7 +13,6 @@ function fixtures(isTrustedSender) {
     deleteAllLocalData: async () => state,
     saveIntegrationCredentials: async () => ({ credentialSettings: [] }),
     removeIntegrationCredentials: async () => state,
-    createClipJob: async () => state,
     createPostPlan: async () => state,
     approvePostPlan: async () => state,
     markPostExported: async () => state
@@ -23,7 +22,24 @@ function fixtures(isTrustedSender) {
     refreshIntegration: async () => state,
     refreshConnections: async () => state
   };
-  return createHandlers({ store, connections, isTrustedSender, chooseSourceVideo: async () => null });
+  const providers = { getCatalog: () => [] };
+  const mediaLibrary = { query: () => ({ clips: [] }) };
+  const mediaJobs = {
+    create: async () => state,
+    approveCandidates: async () => state,
+    cancel: async () => state,
+    retry: async () => state
+  };
+  return createHandlers({
+    store,
+    connections,
+    providers,
+    mediaLibrary,
+    mediaJobs,
+    isTrustedSender,
+    chooseMediaOutputFolder: async () => ({ id: "output-1", name: "Clips" }),
+    openMediaJobOutput: async () => ({ jobId: "mediajob-1" })
+  });
 }
 
 test("IPC rejects untrusted senders before invoking privileged handlers", async () => {
@@ -63,13 +79,26 @@ test("dashboard reset and delete-all clear only ProduDash library metadata", asy
     mediaLibrary: {
       clear: async (options) => events.push(options?.removeIndex ? "remove-index" : "clear-index")
     },
+    mediaJobs: {
+      clear: async () => events.push("clear-jobs")
+    },
     isTrustedSender: () => true
   });
   assert.equal((await handlers["produdash:resetDashboardData"]({})).ok, true);
-  assert.deepEqual(events, ["clear-index", "reset-state"]);
+  assert.deepEqual(events, ["clear-jobs", "clear-index", "reset-state"]);
   events.length = 0;
   assert.equal((await handlers["produdash:deleteAllLocalData"]({})).ok, true);
-  assert.deepEqual(events, ["remove-index", "delete-state"]);
+  assert.deepEqual(events, ["clear-jobs", "remove-index", "delete-state"]);
+});
+
+test("media job IPC keeps output selection and lifecycle operations in normalized envelopes", async () => {
+  const handlers = fixtures(() => true);
+  assert.equal((await handlers["produdash:chooseMediaOutputFolder"]({})).data.id, "output-1");
+  assert.equal((await handlers["produdash:createMediaJob"]({}, { title: "Local job" })).ok, true);
+  assert.equal((await handlers["produdash:approveMediaCandidates"]({}, { jobId: "mediajob-1", candidateIds: ["candidate-1"] })).ok, true);
+  assert.equal((await handlers["produdash:cancelMediaJob"]({}, { jobId: "mediajob-1" })).ok, true);
+  assert.equal((await handlers["produdash:retryMediaJob"]({}, { jobId: "mediajob-1" })).ok, true);
+  assert.equal((await handlers["produdash:openMediaJobOutput"]({}, { jobId: "mediajob-1" })).ok, true);
 });
 
 test("IPC returns controlled errors without stacks or secrets", async () => {
@@ -80,8 +109,7 @@ test("IPC returns controlled errors without stacks or secrets", async () => {
       }
     },
     connections: {},
-    isTrustedSender: () => true,
-    chooseSourceVideo: async () => null
+    isTrustedSender: () => true
   });
   const response = await handlers["produdash:getAppState"]({});
   assert.equal(response.ok, false);

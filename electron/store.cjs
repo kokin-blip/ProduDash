@@ -10,6 +10,7 @@ const {
   requireId,
   requireKnownIntegration,
   validateClipPayload,
+  validateMediaJobPayload,
   validatePostPayload
 } = require("./validation.cjs");
 
@@ -486,6 +487,83 @@ class ProduDashStore {
       });
       this.audit("clipper", `Created local-only clip plan: ${input.title}.`);
       this.persist();
+      return this.getAppState();
+    });
+  }
+
+  getMediaJob(jobId) {
+    requireId(jobId, "Media job");
+    const job = this.state.mediaJobs.find((item) => item.id === jobId);
+    if (!job) throw new AppError("MEDIA_JOB_NOT_FOUND", "Media job not found.");
+    return clone(job);
+  }
+
+  async createMediaJobSummary(summary) {
+    requireId(summary?.id, "Media job");
+    validateMediaJobPayload({
+      ...summary?.settings,
+      sourceMediaId: summary?.sourceMediaId,
+      outputSelectionId: "validated-selection",
+      title: summary?.title,
+      goal: summary?.goal,
+      platforms: summary?.settings?.platforms
+    });
+    return this.enqueueMutation(async () => {
+      if (this.state.mediaJobs.some((job) => job.id === summary.id)) {
+        throw new AppError("MEDIA_JOB_EXISTS", "A media job with this identifier already exists.");
+      }
+      this.state.mediaJobs.unshift(clone(summary));
+      this.audit("media_job", `Queued deterministic media job: ${summary.title}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async updateMediaJobSummary(jobId, patch, auditDetail = "") {
+    requireId(jobId, "Media job");
+    const allowed = new Set([
+      "status",
+      "stage",
+      "progress",
+      "candidates",
+      "selectedCandidateIds",
+      "warnings",
+      "artifacts",
+      "error",
+      "retryable",
+      "startedAt",
+      "updatedAt",
+      "completedAt"
+    ]);
+    if (!patch || typeof patch !== "object" || Array.isArray(patch) || Object.keys(patch).some((key) => !allowed.has(key))) {
+      throw new AppError("INVALID_INPUT", "Media job update is invalid.");
+    }
+    return this.enqueueMutation(async () => {
+      const job = this.state.mediaJobs.find((item) => item.id === jobId);
+      if (!job) throw new AppError("MEDIA_JOB_NOT_FOUND", "Media job not found.");
+      Object.assign(job, clone(patch), { updatedAt: patch.updatedAt || new Date().toISOString() });
+      if (auditDetail) this.audit("media_job", auditDetail);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async interruptActiveMediaJobs() {
+    return this.enqueueMutation(async () => {
+      let changed = false;
+      for (const job of this.state.mediaJobs) {
+        if (!["processing", "canceling"].includes(job.status)) continue;
+        job.status = "interrupted";
+        job.stage = "interrupted";
+        job.error = "ProduDash closed before this media job finished. Retry to continue from validated local artifacts.";
+        job.retryable = true;
+        job.updatedAt = new Date().toISOString();
+        changed = true;
+      }
+      if (changed) {
+        this.audit("media_job", "Marked unfinished media work as interrupted after restart.");
+        this.persist();
+      }
       return this.getAppState();
     });
   }

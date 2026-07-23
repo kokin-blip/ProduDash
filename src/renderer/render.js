@@ -12,7 +12,11 @@ const VIEW_META = {
   inbox: ["AI Inbox", "Approval-only drafts", "Review imported conversations and prepare replies that always require human approval."],
   orders: ["Orders", "Shopify snapshot", "Review the most recent orders returned by your connected store."],
   signals: ["Signals", "Attention and activity", "Review verified issues and recent local actions."],
-  studio: ["Content Studio", "Local planning only", "Prepare clip and post plans without processing media or publishing externally."],
+  studio: [
+    "Content Studio",
+    "Local media workspace",
+    "Index videos, create human-approved clips locally, and prepare post plans without publishing externally."
+  ],
   analytics: ["Analytics", "Official sources required", "Social reporting remains unavailable until approved connectors are implemented."],
   integrations: [
     "Integrations",

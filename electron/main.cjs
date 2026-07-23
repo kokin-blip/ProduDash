@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, Menu, protocol, safeStorage, session, shell } = require("electron");
+const { app, BrowserWindow, dialog, Menu, protocol, safeStorage, session, shell, utilityProcess } = require("electron");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { createConnectors } = require("./connectors.cjs");
@@ -11,7 +11,9 @@ const { GeminiProviderAdapter } = require("./ai/adapters/gemini.cjs");
 const { ProviderRegistry } = require("./ai/provider-registry.cjs");
 const { ProviderService } = require("./ai/provider-service.cjs");
 const { MediaLibrary } = require("./media/media-library.cjs");
+const { MediaJobService } = require("./media/media-job-service.cjs");
 const { createMediaProtocolHandler } = require("./media/media-protocol.cjs");
+const { MediaUtilityRunner } = require("./media/utility-runner.cjs");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -87,10 +89,21 @@ if (hasSingleInstanceLock) {
         credentialVault: store.credentialVault,
         startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
       });
+      const mediaJobs = new MediaJobService({
+        store,
+        mediaLibrary,
+        credentialVault: store.credentialVault,
+        runner: new MediaUtilityRunner({ utilityProcess }),
+        startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark),
+        onEvent: (event) => {
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("produdash:mediaJobEvent", event);
+        }
+      });
       store.notices.push(...mediaLibrary.getNotices());
       const connections = new ConnectionService({ store, shopify: connectors.shopify, providerService: providers });
       protocol.handle("produdash-media", createMediaProtocolHandler(mediaLibrary));
-      registerIpc({ store, connections, providers, mediaLibrary, appUrl, shell });
+      registerIpc({ store, connections, providers, mediaLibrary, mediaJobs, appUrl, shell });
+      await mediaJobs.initialize();
       Menu.setApplicationMenu(null);
       createWindow();
     } catch (error) {

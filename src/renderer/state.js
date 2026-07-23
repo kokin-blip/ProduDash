@@ -11,6 +11,7 @@ export const ui = {
   clipLibrary: emptyClipLibrary(),
   libraryFilters: { query: "", folderId: "", status: "", sort: "modified_desc", offset: 0, limit: 40 },
   selectedClipId: null,
+  mediaOutputSelection: null,
   pending: new Set(),
   error: null
 };

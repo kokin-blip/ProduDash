@@ -220,6 +220,45 @@ async function handleClick(event) {
     return;
   }
 
+  const chooseMediaOutputButton = event.target.closest("[data-choose-media-output]");
+  if (chooseMediaOutputButton) {
+    await runAction(
+      "choose-media-output",
+      chooseMediaOutputButton,
+      async () => {
+        ui.mediaOutputSelection = await api.chooseMediaOutputFolder();
+        return null;
+      },
+      { applyResult: () => {} }
+    );
+    return;
+  }
+
+  const cancelMediaJobButton = event.target.closest("[data-cancel-media-job]");
+  if (cancelMediaJobButton) {
+    const jobId = cancelMediaJobButton.dataset.cancelMediaJob;
+    if (!window.confirm("Cancel this local media job? Generated media already completed will not be deleted.")) return;
+    await runAction(`cancel-media-${jobId}`, cancelMediaJobButton, () => api.cancelMediaJob(jobId));
+    return;
+  }
+
+  const retryMediaJobButton = event.target.closest("[data-retry-media-job]");
+  if (retryMediaJobButton) {
+    const jobId = retryMediaJobButton.dataset.retryMediaJob;
+    await runAction(`retry-media-${jobId}`, retryMediaJobButton, () => api.retryMediaJob(jobId));
+    return;
+  }
+
+  const revealMediaJobButton = event.target.closest("[data-reveal-media-job]");
+  if (revealMediaJobButton) {
+    const jobId = revealMediaJobButton.dataset.revealMediaJob;
+    await runAction(`reveal-media-${jobId}`, revealMediaJobButton, () => api.openMediaJobOutput(jobId), {
+      render: false,
+      applyResult: () => {}
+    });
+    return;
+  }
+
   const rescanFolderButton = event.target.closest("[data-rescan-clip-folder]");
   if (rescanFolderButton) {
     const folderId = rescanFolderButton.dataset.rescanClipFolder;
@@ -300,21 +339,6 @@ async function handleClick(event) {
     return;
   }
 
-  const browseVideoButton = event.target.closest("[data-browse-video]");
-  if (browseVideoButton) {
-    await runAction(
-      "choose-video",
-      browseVideoButton,
-      async () => {
-        const filePath = await api.chooseSourceVideo();
-        if (filePath) browseVideoButton.closest("[data-clip-form]").elements.source.value = filePath;
-        return null;
-      },
-      { render: false }
-    );
-    return;
-  }
-
   if (event.target.closest("#syncButton")) {
     await runAction("refresh-connections", event.target.closest("#syncButton"), () => api.refreshConnections());
     return;
@@ -330,17 +354,39 @@ async function handleSubmit(event) {
   const form = event.target;
   if (!(form instanceof HTMLElement)) return;
 
-  if (form.matches("[data-clip-form]")) {
+  if (form.matches("[data-media-job-form]")) {
     event.preventDefault();
-    const submitter = event.submitter;
-    await runAction("create-clip", submitter, () =>
-      api.createClipJob({
+    const outputSelection = ui.mediaOutputSelection;
+    if (!outputSelection) {
+      ui.error = "Choose an output folder before creating the media job.";
+      renderApp();
+      return;
+    }
+    await runAction("create-media-job", event.submitter, async () => {
+      const state = await api.createMediaJob({
+        sourceMediaId: form.elements.sourceMediaId.value,
+        outputSelectionId: outputSelection.id,
         title: form.elements.title.value,
-        source: form.elements.source.value,
         goal: form.elements.goal.value,
-        targetLength: form.elements.targetLength.value,
+        maxClips: form.elements.maxClips.value,
+        targetDuration: form.elements.targetDuration.value,
+        captionMode: form.elements.captionMode.value,
+        captionText: form.elements.captionText.value,
+        aspectTreatment: form.elements.aspectTreatment.value,
+        targetAspect: form.elements.targetAspect.value,
         platforms: getCheckedValues(form, "platforms")
-      })
+      });
+      ui.mediaOutputSelection = null;
+      return state;
+    });
+    return;
+  }
+
+  if (form.matches("[data-media-candidates-form]")) {
+    event.preventDefault();
+    const jobId = form.dataset.mediaCandidatesForm;
+    await runAction(`approve-media-${jobId}`, event.submitter, () =>
+      api.approveMediaCandidates(jobId, getCheckedValues(form, "candidateIds"))
     );
     return;
   }

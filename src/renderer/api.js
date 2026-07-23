@@ -49,9 +49,14 @@ export const api = {
   removeClip: (clipId) => unwrap(client().removeClip(clipId)),
   updateClipTags: (clipId, tags) => unwrap(client().updateClipTags(clipId, tags)),
   openClipInFolder: (clipId) => unwrap(client().openClipInFolder(clipId)),
-  createClipJob: (payload) => unwrap(client().createClipJob(payload)),
+  chooseMediaOutputFolder: () => unwrap(client().chooseMediaOutputFolder()),
+  createMediaJob: (payload) => unwrap(client().createMediaJob(payload)),
+  approveMediaCandidates: (jobId, candidateIds) => unwrap(client().approveMediaCandidates(jobId, candidateIds)),
+  cancelMediaJob: (jobId) => unwrap(client().cancelMediaJob(jobId)),
+  retryMediaJob: (jobId) => unwrap(client().retryMediaJob(jobId)),
+  openMediaJobOutput: (jobId) => unwrap(client().openMediaJobOutput(jobId)),
+  onMediaJobEvent: (callback) => client().onMediaJobEvent(callback),
   createPostPlan: (payload) => unwrap(client().createPostPlan(payload)),
   approvePostPlan: (planId, mode) => unwrap(client().approvePostPlan(planId, mode)),
-  markPostExported: (planId) => unwrap(client().markPostExported(planId)),
-  chooseSourceVideo: () => unwrap(client().chooseSourceVideo())
+  markPostExported: (planId) => unwrap(client().markPostExported(planId))
 };

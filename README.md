@@ -1,6 +1,6 @@
 # ProduDash
 
-ProduDash is a local-first Electron dashboard for merchant operations. The secure MVP connects Shopify data, routes approval-only drafting through provider-neutral AI profiles, and indexes local video in a read-only Clip Library. Incomplete social, publishing, analytics, and media-processing features remain visibly separated from working functionality.
+ProduDash is a local-first Electron dashboard for merchant operations. The secure MVP connects Shopify data, routes approval-only drafting through provider-neutral AI profiles, indexes local video, and creates human-approved clips with isolated local media tools. Incomplete social, publishing, cloud media analysis, and analytics features remain visibly separated from working functionality.
 
 ## What works
 
@@ -14,14 +14,15 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - Human approval gates for AI drafts and local post-export plans.
 - Hardened Electron renderer isolation, restrictive CSP, trusted IPC senders, blocked navigation/windows, and normalized errors.
 - A separate atomic and recoverable Clip Library index with folder/loose-file imports, recursive scans, search, filters, tags, cached thumbnails, opaque previews, and visible missing/offline/corrupt/unsupported states.
-- Local clip and post planning queues that state clearly that no media processing or external publishing occurs.
+- A durable one-at-a-time local media queue with deterministic silence/scene inspection, candidate review, cancel/retry behavior, H.264/AAC rendering, optional SRT/burned captions, thumbnails, safe manifests, and automatic Clip Library import.
+- Local post planning queues that state clearly that no external publishing occurs.
 
 ## What is not implemented
 
 - Social inbox imports or external message sending.
 - Automatic order creation, payments, refunds, discounts, or fulfillment.
 - TikTok, Instagram, Facebook, YouTube, or Stripe API connectors.
-- Media analysis, transcription, clipping, rendered export files, or external publishing. The Clip Library is read-only.
+- Cloud media analysis, transcription, AI scoring, or external publishing. Batch B clip candidate generation is deterministic and local.
 - OpenAI, Anthropic, or custom OpenAI-compatible adapters; the provider contract is in place, but these adapters are later milestones.
 - Frog Advisor chat and tools.
 - Social analytics or Shopify profit/conversion figures without real cost and traffic inputs.
@@ -87,9 +88,28 @@ The library never copies, uploads, modifies, or deletes source media. Removing a
 
 The bundled binaries are included for development, CI, local inspection, and thumbnail generation. External distribution remains blocked until the owner completes legal review of the applicable FFmpeg/ffprobe GPL obligations or supplies approved replacement builds.
 
+## Create local clips
+
+Open **Content Studio → Create clips**, select an available library video, and choose a destination folder. ProduDash creates a collision-free job directory and:
+
+1. Validates the source and available disk space.
+2. Extracts a local analysis track, detects sustained silence and scene boundaries, and samples review frames.
+3. Generates bounded deterministic candidates and pauses for explicit human approval.
+4. Renders only approved candidates as H.264/AAC MP4 files.
+5. Optionally creates an SRT file or SRT plus burned-in captions.
+6. Creates thumbnails and a safe manifest, then imports completed video artifacts into the Clip Library.
+
+Only one media job processes at a time. Additional jobs remain queued. Coarse stage progress is persisted without writing on every FFmpeg event. If ProduDash closes mid-job, the job is marked interrupted at the next launch and can retry from validated durable artifacts; it never claims to resume a terminated process.
+
+Temporary work lives in a hidden `.produdash-job` directory inside the selected job folder and is removed after complete success. Cancellation first requests graceful termination, then uses bounded force termination if needed. Partial generated artifacts remain user-owned, are reported without exposing absolute paths, and can be reused during an explicit retry. ProduDash never overwrites an unrecognized output file.
+
+Public app state contains only opaque media IDs, output folder names, stages, settings, warnings, and safe artifact filenames. Source/output paths and macOS security-scoped bookmarks are stored only in the encrypted credential vault. Manifests omit absolute paths, credentials, provider payloads, and hidden reasoning.
+
+Aspect treatment can keep the original frame, fit/pad, or center crop; fit/pad is the safe default. Caption mode defaults to Off. This deterministic milestone does not upload audio, frames, transcripts, or video to any AI provider.
+
 ## Reset and deletion
 
-- **Reset dashboard data** clears imported businesses, snapshots, local plans, approvals, audits, advisor history when introduced, the Clip Library index, and cached thumbnails. AI profiles, workload assignments, and encrypted credentials remain. Integrations return to a disconnected state until refreshed.
+- **Reset dashboard data** clears imported businesses, snapshots, local plans, media-job records and protected path references, approvals, audits, advisor history when introduced, the Clip Library index, and cached thumbnails. AI profiles, workload assignments, and encrypted provider/integration credentials remain. Integrations return to a disconnected state until refreshed.
 - **Remove** on an integration deletes that integration’s credentials and marks its snapshots disconnected; already imported Shopify snapshots remain for local reference.
 - **Delete all data and credentials** removes ProduDash state, provider metadata, indexes, cached thumbnails, stored bookmarks, backups, recovery snapshots, and the encrypted credential vault, then creates a clean local workspace.
 
@@ -120,7 +140,7 @@ npm run validate
 npm audit --omit=dev
 ```
 
-`npm run validate` runs syntax, lint, formatting, unit/integration/renderer tests, a real tiny bundled-binary media inspection, and the Electron smoke test. Provider tests use injected clients and encryption fakes; they never require or contact live Shopify or Gemini accounts.
+`npm run validate` runs syntax, lint, formatting, unit/integration/renderer tests, real tiny bundled-binary analysis/render tests, and the Electron smoke test. Provider tests use injected clients and encryption fakes; they never require or contact live Shopify or Gemini accounts.
 
 The browser-only `npm run web` command can display static assets but cannot use local persistence or credentials because the secure preload bridge is available only in Electron.
 
@@ -143,4 +163,5 @@ Relevant primary documentation:
 - [Shopify GraphQL orders query](https://shopify.dev/docs/api/admin-graphql/latest/queries/orders)
 - [Gemini structured output](https://ai.google.dev/gemini-api/docs/structured-output)
 - [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)
+- [Electron utilityProcess](https://www.electronjs.org/docs/latest/api/utility-process)
 - [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security)

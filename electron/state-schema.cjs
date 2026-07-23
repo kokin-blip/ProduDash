@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const path = require("node:path");
 const { AppError } = require("./errors.cjs");
 const { createInitialState } = require("./initial-state.cjs");
 const { preserveFile, readJson, writeJsonAtomic } = require("./atomic-json.cjs");
@@ -203,6 +204,85 @@ function validateState(state) {
       (assignment.mode === "unassigned" && workloadId !== "transcription")
     ) {
       throw new AppError("INVALID_STATE", "The saved AI workload mode is not valid for this workload.");
+    }
+  }
+  const mediaJobIds = new Set();
+  const mediaJobStatuses = new Set([
+    "queued",
+    "render_queued",
+    "processing",
+    "awaiting_review",
+    "canceling",
+    "canceled",
+    "interrupted",
+    "failed",
+    "completed"
+  ]);
+  for (const job of state.mediaJobs) {
+    if (
+      typeof job.id !== "string" ||
+      !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(job.id) ||
+      mediaJobIds.has(job.id) ||
+      typeof job.title !== "string" ||
+      typeof job.sourceMediaId !== "string" ||
+      typeof job.outputFolderName !== "string" ||
+      !mediaJobStatuses.has(job.status) ||
+      typeof job.stage !== "string" ||
+      !Number.isFinite(job.progress) ||
+      job.progress < 0 ||
+      job.progress > 100 ||
+      !job.settings ||
+      typeof job.settings !== "object" ||
+      Array.isArray(job.settings) ||
+      Object.hasOwn(job, "sourcePath") ||
+      Object.hasOwn(job, "outputPath") ||
+      Object.hasOwn(job, "tempPath") ||
+      Object.hasOwn(job, "outputBookmark")
+    ) {
+      throw new AppError("INVALID_STATE", "The saved media job summaries are invalid.");
+    }
+    mediaJobIds.add(job.id);
+    if (
+      !Array.isArray(job.candidates) ||
+      !Array.isArray(job.selectedCandidateIds) ||
+      !Array.isArray(job.warnings) ||
+      !Array.isArray(job.artifacts)
+    ) {
+      throw new AppError("INVALID_STATE", "The saved media job collections are invalid.");
+    }
+    const candidateIds = new Set();
+    for (const candidate of job.candidates) {
+      if (
+        !candidate ||
+        typeof candidate.id !== "string" ||
+        candidateIds.has(candidate.id) ||
+        typeof candidate.title !== "string" ||
+        !Number.isFinite(candidate.start) ||
+        !Number.isFinite(candidate.end) ||
+        candidate.start < 0 ||
+        candidate.end <= candidate.start ||
+        !Number.isFinite(candidate.confidence) ||
+        candidate.confidence < 0 ||
+        candidate.confidence > 1
+      ) {
+        throw new AppError("INVALID_STATE", "The saved media job candidates are invalid.");
+      }
+      candidateIds.add(candidate.id);
+    }
+    if (job.selectedCandidateIds.some((candidateId) => !candidateIds.has(candidateId))) {
+      throw new AppError("INVALID_STATE", "A media job selection references an unavailable candidate.");
+    }
+    if (
+      job.artifacts.some(
+        (artifact) =>
+          !artifact ||
+          !["video", "caption", "thumbnail", "manifest"].includes(artifact.kind) ||
+          typeof artifact.name !== "string" ||
+          artifact.name !== path.basename(artifact.name) ||
+          Object.hasOwn(artifact, "path")
+      )
+    ) {
+      throw new AppError("INVALID_STATE", "The saved media job artifacts are invalid.");
     }
   }
   if (

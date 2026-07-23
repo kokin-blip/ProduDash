@@ -2,12 +2,18 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 const test = require("node:test");
 const { _electron: electron } = require("playwright");
+const { getMediaBinaries } = require("../electron/media/binaries.cjs");
 
 test("Electron starts securely and shows the connection-first workflow", { timeout: 60_000 }, async (t) => {
   const projectRoot = path.join(__dirname, "..");
   const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), "produdash-smoke-"));
+  const fixturePath = path.join(userDataPath, "smoke-source.mp4");
+  const mediaOutputPath = path.join(userDataPath, "generated");
+  fs.mkdirSync(mediaOutputPath);
+  createMediaFixture(fixturePath);
   const artifactPath = path.join(projectRoot, "test-results", "smoke");
   fs.mkdirSync(artifactPath, { recursive: true });
   let application;
@@ -79,8 +85,50 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
   assert.equal(await hasHorizontalOverflow(page), false);
   await page.screenshot({ path: path.join(artifactPath, "library-empty-1120x760.png"), fullPage: true });
   await resizeWindow(application, 1440, 960);
+  await application.evaluate(
+    ({ dialog }, selections) => {
+      const queue = [
+        { canceled: false, filePaths: [selections.fixturePath], bookmarks: [] },
+        { canceled: false, filePaths: [selections.mediaOutputPath], bookmarks: [] }
+      ];
+      dialog.showOpenDialog = async () => queue.shift() || { canceled: true, filePaths: [], bookmarks: [] };
+    },
+    { fixturePath, mediaOutputPath }
+  );
+  await page.click("[data-add-clip-files]");
+  await page.waitForSelector(".clip-row");
   await page.click('[data-studio-tab="create"]');
-  assert.equal(await page.locator("[data-clip-form]").count(), 1);
+  assert.equal(await page.locator("[data-media-job-form]").count(), 1);
+  const secureStorageUnavailable = await page.evaluate(async () => {
+    const response = await window.produdash.getAppState();
+    return response.data.systemNotices.some((notice) => notice.code === "SECURE_STORAGE_UNAVAILABLE");
+  });
+  if (!secureStorageUnavailable) {
+    await page.click("[data-choose-media-output]");
+    await page.locator('[data-media-job-form] select[name="sourceMediaId"]').selectOption({ index: 1 });
+    await page.locator('[data-media-job-form] input[name="title"]').fill("Smoke clip");
+    await page.locator('[data-media-job-form] input[name="targetDuration"]').fill("5");
+    await page.locator("[data-media-job-form]").evaluate((form) => form.requestSubmit());
+    await page.waitForFunction(
+      () => {
+        const status = document.querySelector(".media-job .status-badge")?.textContent || "";
+        return status.includes("awaiting review") || status.includes("failed");
+      },
+      null,
+      { timeout: 30_000 }
+    );
+    assert.match(await page.locator(".media-job").textContent(), /awaiting review/);
+    await page.screenshot({ path: path.join(artifactPath, "media-review-1440x960.png"), fullPage: true });
+    await page.locator('[data-media-candidates-form] button[type="submit"]').click();
+    await page.waitForFunction(() => document.querySelector(".media-job .status-badge")?.textContent.includes("completed"), null, {
+      timeout: 30_000
+    });
+    assert.equal(await page.locator(".artifact-list").count(), 1);
+    await page.screenshot({ path: path.join(artifactPath, "media-complete-1440x960.png"), fullPage: true });
+    const generatedJobPath = path.join(mediaOutputPath, fs.readdirSync(mediaOutputPath)[0]);
+    assert.equal(fs.existsSync(path.join(generatedJobPath, "produdash-manifest.json")), true);
+    assert.equal(fs.existsSync(path.join(generatedJobPath, ".produdash-job")), false);
+  }
   await page.click('[data-studio-tab="publishing"]');
   assert.equal(await page.locator("[data-post-form]").count(), 1);
   await page.click('[data-section="integrations"]');
@@ -226,6 +274,36 @@ async function setZoomFactor(application, factor) {
 
 async function hasHorizontalOverflow(page) {
   return page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+}
+
+function createMediaFixture(filePath) {
+  const { ffmpegPath } = getMediaBinaries();
+  const result = spawnSync(
+    ffmpegPath,
+    [
+      "-nostdin",
+      "-y",
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc2=size=320x180:rate=24",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=frequency=660:sample_rate=48000",
+      "-t",
+      "6",
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      "-c:a",
+      "aac",
+      filePath
+    ],
+    { encoding: "utf8" }
+  );
+  assert.equal(result.status, 0, result.stderr);
 }
 
 async function renderConnectedFixture(page) {

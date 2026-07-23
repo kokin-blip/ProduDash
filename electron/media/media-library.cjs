@@ -531,6 +531,19 @@ class MediaLibrary {
     };
   }
 
+  getClipSummary(clipId) {
+    requireId(clipId, "Clip");
+    const clip = this.index.clips.find((item) => item.id === clipId);
+    if (!clip) throw new AppError("CLIP_NOT_FOUND", "Clip not found.");
+    return {
+      id: clip.id,
+      name: clip.name,
+      status: clip.status,
+      duration: clip.duration,
+      previewable: clip.previewable
+    };
+  }
+
   resolveClipPath(clipId) {
     requireId(clipId, "Clip");
     const clip = this.index.clips.find((item) => item.id === clipId);

@@ -13,12 +13,14 @@ function createHandlers({
   connections,
   providers,
   mediaLibrary,
+  mediaJobs,
   isTrustedSender,
-  chooseSourceVideo,
   chooseClipFolders,
   chooseClipFiles,
+  chooseMediaOutputFolder,
   relocateClipFolder,
-  openClipInFolder
+  openClipInFolder,
+  openMediaJobOutput
 }) {
   const trusted = isTrustedSender || (() => false);
   const handlers = {
@@ -29,12 +31,22 @@ function createHandlers({
     "produdash:rejectAiAction": async (_event, payload) => store.rejectAiAction(payload?.actionId),
     "produdash:completeCommand": async (_event, payload) => store.completeCommand(payload?.commandId),
     "produdash:resetDashboardData": async () => {
-      if (mediaLibrary) await mediaLibrary.clear();
-      return store.resetDashboardData();
+      try {
+        if (mediaJobs) await mediaJobs.clear();
+        if (mediaLibrary) await mediaLibrary.clear();
+        return await store.resetDashboardData();
+      } finally {
+        mediaJobs?.resume?.();
+      }
     },
     "produdash:deleteAllLocalData": async () => {
-      if (mediaLibrary) await mediaLibrary.clear({ removeIndex: true });
-      return store.deleteAllLocalData();
+      try {
+        if (mediaJobs) await mediaJobs.clear();
+        if (mediaLibrary) await mediaLibrary.clear({ removeIndex: true });
+        return await store.deleteAllLocalData();
+      } finally {
+        mediaJobs?.resume?.();
+      }
     },
     "produdash:saveIntegrationCredentials": async (_event, payload) => {
       const state = await store.saveIntegrationCredentials(payload?.integrationId, payload?.values);
@@ -60,11 +72,15 @@ function createHandlers({
     "produdash:removeClip": async (_event, payload) => mediaLibrary.removeClip(payload?.clipId),
     "produdash:updateClipTags": async (_event, payload) => mediaLibrary.updateTags(payload?.clipId, payload?.tags),
     "produdash:openClipInFolder": async (event, payload) => openClipInFolder(event, payload?.clipId),
-    "produdash:createClipJob": async (_event, payload) => store.createClipJob(payload),
+    "produdash:chooseMediaOutputFolder": async (event) => chooseMediaOutputFolder(event),
+    "produdash:createMediaJob": async (_event, payload) => mediaJobs.create(payload),
+    "produdash:approveMediaCandidates": async (_event, payload) => mediaJobs.approveCandidates(payload?.jobId, payload?.candidateIds),
+    "produdash:cancelMediaJob": async (_event, payload) => mediaJobs.cancel(payload?.jobId),
+    "produdash:retryMediaJob": async (_event, payload) => mediaJobs.retry(payload?.jobId),
+    "produdash:openMediaJobOutput": async (event, payload) => openMediaJobOutput(event, payload?.jobId),
     "produdash:createPostPlan": async (_event, payload) => store.createPostPlan(payload),
     "produdash:approvePostPlan": async (_event, payload) => store.approvePostPlan(payload?.planId, payload?.mode),
-    "produdash:markPostExported": async (_event, payload) => store.markPostExported(payload?.planId),
-    "produdash:chooseSourceVideo": async (event) => chooseSourceVideo(event)
+    "produdash:markPostExported": async (_event, payload) => store.markPostExported(payload?.planId)
   };
 
   return Object.fromEntries(
@@ -83,7 +99,7 @@ function createHandlers({
   );
 }
 
-function registerIpc({ store, connections, providers, mediaLibrary, appUrl, shell }) {
+function registerIpc({ store, connections, providers, mediaLibrary, mediaJobs, appUrl, shell }) {
   const folderDialogOptions = {
     title: "Add folders to Clip Library",
     properties: ["openDirectory", "multiSelections"],
@@ -126,29 +142,33 @@ function registerIpc({ store, connections, providers, mediaLibrary, appUrl, shel
     shell.showItemInFolder(mediaLibrary.resolveClipPath(clipId));
     return { clipId };
   };
-  const chooseSourceVideo = async (event) => {
+  const chooseMediaOutputFolder = async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(window, {
-      title: "Choose source video",
-      properties: ["openFile"],
-      filters: [
-        { name: "Video files", extensions: ["mp4", "mov", "m4v", "webm", "avi", "mkv"] },
-        { name: "All files", extensions: ["*"] }
-      ]
+      title: "Choose a folder for generated clips",
+      properties: ["openDirectory", "createDirectory"],
+      securityScopedBookmarks: true
     });
-    return result.canceled ? null : result.filePaths[0];
+    if (result.canceled) return null;
+    return mediaJobs.rememberOutputSelection({
+      path: result.filePaths[0],
+      bookmark: result.bookmarks?.[0] || null
+    });
   };
+  const openMediaJobOutput = async (_event, jobId) => mediaJobs.revealOutput(jobId, (outputPath) => shell.showItemInFolder(outputPath));
   const handlers = createHandlers({
     store,
     connections,
     providers,
     mediaLibrary,
+    mediaJobs,
     isTrustedSender: createTrustedSender(appUrl),
-    chooseSourceVideo,
     chooseClipFolders,
     chooseClipFiles,
+    chooseMediaOutputFolder,
     relocateClipFolder,
-    openClipInFolder
+    openClipInFolder,
+    openMediaJobOutput
   });
   for (const [channel, handler] of Object.entries(handlers)) {
     ipcMain.removeHandler(channel);
