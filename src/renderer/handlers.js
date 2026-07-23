@@ -15,7 +15,7 @@ async function runAction(key, trigger, action, options = {}) {
   if (ui.pending.has(key)) return;
   ui.pending.add(key);
   ui.error = null;
-  if (trigger) trigger.disabled = true;
+  const pendingUi = setPendingUi(trigger);
   try {
     const nextState = await action();
     if (nextState) setAppState(nextState);
@@ -30,12 +30,71 @@ async function runAction(key, trigger, action, options = {}) {
     ui.error = error?.message || "ProduDash could not complete that request.";
   } finally {
     ui.pending.delete(key);
-    if (options.render === false && !ui.error) {
-      if (trigger) trigger.disabled = false;
-    } else {
+    restorePendingUi(pendingUi);
+    if (options.render !== false || ui.error) {
       renderApp();
+      if (!ui.error && trigger) document.querySelector("#pageTitle")?.focus();
     }
   }
+}
+
+function setPendingUi(trigger) {
+  if (!trigger) return null;
+  const container = trigger.closest("form");
+  const controls = container ? [...container.querySelectorAll("button, input, select, textarea")] : [trigger];
+  const states = controls.map((control) => ({ control, disabled: control.disabled }));
+  const originalInlineSize = trigger.style.inlineSize;
+  const originalAriaBusy = trigger.getAttribute("aria-busy");
+  const originalAriaLabel = trigger.getAttribute("aria-label");
+  const originalContainerBusy = container?.getAttribute("aria-busy") ?? null;
+  const width = trigger.getBoundingClientRect().width;
+  if (width > 0) trigger.style.inlineSize = `${Math.ceil(width)}px`;
+  controls.forEach((control) => {
+    control.disabled = true;
+  });
+  if (container) container.setAttribute("aria-busy", "true");
+  const label = trigger.dataset.pendingLabel;
+  const originalLabel = trigger.textContent;
+  trigger.setAttribute("aria-busy", "true");
+  trigger.classList.add("is-pending");
+  if (label) {
+    const spinner = document.createElement("span");
+    spinner.className = "button-spinner";
+    spinner.setAttribute("aria-hidden", "true");
+    const pendingLabel = document.createElement("span");
+    pendingLabel.className = "pending-label";
+    pendingLabel.textContent = label;
+    trigger.replaceChildren(spinner, pendingLabel);
+    trigger.setAttribute("aria-label", label);
+  }
+  return {
+    container,
+    states,
+    trigger,
+    originalLabel,
+    originalInlineSize,
+    originalAriaBusy,
+    originalAriaLabel,
+    originalContainerBusy
+  };
+}
+
+function restorePendingUi(pendingUi) {
+  if (!pendingUi) return;
+  pendingUi.states.forEach(({ control, disabled }) => {
+    control.disabled = disabled;
+  });
+  if (pendingUi.container) {
+    if (pendingUi.originalContainerBusy === null) pendingUi.container.removeAttribute("aria-busy");
+    else pendingUi.container.setAttribute("aria-busy", pendingUi.originalContainerBusy);
+  }
+  if (pendingUi.originalAriaBusy === null) pendingUi.trigger.removeAttribute("aria-busy");
+  else pendingUi.trigger.setAttribute("aria-busy", pendingUi.originalAriaBusy);
+  pendingUi.trigger.classList.remove("is-pending");
+  pendingUi.trigger.style.inlineSize = pendingUi.originalInlineSize;
+  if (pendingUi.originalAriaLabel === null) pendingUi.trigger.removeAttribute("aria-label");
+  else pendingUi.trigger.setAttribute("aria-label", pendingUi.originalAriaLabel);
+  pendingUi.trigger.textContent = pendingUi.originalLabel;
 }
 
 async function handleClick(event) {
@@ -43,21 +102,23 @@ async function handleClick(event) {
   if (businessButton) {
     ui.selectedBusinessId = businessButton.dataset.business;
     ui.selectedConversationId = getConversations()[0]?.id || null;
-    renderApp();
-    return;
-  }
-
-  const navButton = event.target.closest("[data-section]");
-  if (navButton) {
-    ui.activeSection = navButton.dataset.section;
-    renderApp();
+    renderApp({ animateView: true });
     return;
   }
 
   const conversationButton = event.target.closest("[data-conversation]");
   if (conversationButton) {
     ui.selectedConversationId = conversationButton.dataset.conversation;
+    if (conversationButton.dataset.section) ui.activeSection = conversationButton.dataset.section;
     renderApp();
+    return;
+  }
+
+  const navButton = event.target.closest("[data-section]");
+  if (navButton) {
+    const changedSection = ui.activeSection !== navButton.dataset.section;
+    ui.activeSection = navButton.dataset.section;
+    renderApp({ animateView: changedSection });
     return;
   }
 
@@ -146,7 +207,7 @@ async function handleClick(event) {
 
   if (event.target.closest("#trainButton")) {
     ui.activeSection = "integrations";
-    renderApp();
+    renderApp({ animateView: true });
   }
 }
 

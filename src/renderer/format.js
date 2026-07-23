@@ -43,3 +43,12 @@ export function levelClass(value) {
   const normalized = String(value || "").toLowerCase();
   return ["low", "medium", "high", "critical"].includes(normalized) ? normalized : "medium";
 }
+
+export function statusTone(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (["connected", "complete", "completed", "enabled", "export_ready", "approved"].includes(normalized)) return "success";
+  if (["degraded", "warning", "needs_approval", "stored", "pending"].includes(normalized)) return "warning";
+  if (["error", "failed", "critical", "blocked"].includes(normalized)) return "danger";
+  if (["disconnected", "missing", "planned", "waiting_for_connection", "unknown"].includes(normalized)) return "neutral";
+  return "neutral";
+}

@@ -1,18 +1,20 @@
 import { escapeHtml, formatUsd, statusLabel } from "../format.js";
-import { asArray, getApprovals, getConversations, getSelectedConversation, integrationReady } from "../state.js";
+import { asArray, getApprovals, getConversations, getSelectedConversation, integrationReady, isPending } from "../state.js";
 import { renderApprovals } from "./dashboard.js";
+import { renderStatusBadge } from "./shared.js";
 
 export function renderInbox() {
   const conversations = getConversations();
   const selected = getSelectedConversation() || conversations[0] || null;
   const approvals = selected ? getApprovals().filter((approval) => approval.conversationId === selected.id) : [];
   const messages = asArray(selected?.messages);
+  const drafting = selected ? isPending(`draft-${selected.id}`) : false;
   return `
-    <section class="detail-grid">
-      <article class="panel">
-        <div class="panel-heading compact">
-          <div><p class="eyebrow">AI Inbox</p><h2>Officially imported threads</h2></div>
-          <span class="mini-badge">${conversations.length} threads</span>
+    <section class="inbox-view">
+      <aside class="panel conversation-pane">
+        <div class="section-heading">
+          <div><h2>Imported conversations</h2><p>Official social providers only.</p></div>
+          ${renderStatusBadge("neutral", `${conversations.length} threads`)}
         </div>
         <div class="conversation-list">
           ${
@@ -23,47 +25,62 @@ export function renderInbox() {
                       <button class="conversation-item ${conversation.id === selected?.id ? "active" : ""}" type="button" data-conversation="${escapeHtml(
                         conversation.id
                       )}">
-                        <span>${escapeHtml(conversation.channel || "Unknown")} · ${escapeHtml(statusLabel(conversation.status))}</span>
-                        <strong>${escapeHtml(conversation.customer || "Customer")}</strong>
-                        <p>${escapeHtml(conversation.intent || "Unclassified")} · ${escapeHtml(conversation.risk || "Human review")}</p>
+                        <span>
+                          <strong>${escapeHtml(conversation.customer || "Customer")}</strong>
+                          <small>${escapeHtml(conversation.channel || "Unknown")} · ${escapeHtml(
+                            conversation.intent || "Unclassified"
+                          )}</small>
+                        </span>
+                        ${renderStatusBadge(conversation.status || "unknown")}
                       </button>
                     `
                   )
                   .join("")
-              : `<div class="empty-state">No social provider is connected. ProduDash does not scrape or invent conversations.</div>`
+              : `<div class="quiet-state"><p>No social provider is connected. ProduDash does not scrape or invent conversations.</p></div>`
           }
         </div>
-      </article>
-      <article class="panel detail-panel">
+      </aside>
+      <article class="panel conversation-detail">
         ${
           selected
             ? `
-              <div class="panel-heading compact">
-                <div><p class="eyebrow">${escapeHtml(selected.channel || "Unknown")}</p><h2>${escapeHtml(selected.customer || "Customer")}</h2></div>
-                <span class="mini-badge">${escapeHtml(statusLabel(selected.status))}</span>
+              <div class="section-heading">
+                <div><h2>${escapeHtml(selected.customer || "Customer")}</h2><p>${escapeHtml(
+                  selected.channel || "Unknown channel"
+                )} · ${escapeHtml(selected.risk || "Human review")}</p></div>
+                ${renderStatusBadge(selected.status || "unknown")}
               </div>
-              <div class="chat-window detail-chat">
-                ${messages
-                  .map(
-                    (message) => `
-                      <div class="message ${message.role === "customer" ? "customer" : "ai"}">
-                        <span>${escapeHtml(message.role === "ai_draft" ? "Approved draft — not sent" : message.role || "message")}</span>
-                        <p>${escapeHtml(message.text)}</p>
-                      </div>
-                    `
-                  )
-                  .join("")}
+              <div class="chat-window" aria-label="Conversation messages">
+                ${
+                  messages.length
+                    ? messages
+                        .map(
+                          (message) => `
+                            <div class="message ${message.role === "customer" ? "customer" : "ai"}">
+                              <span>${escapeHtml(
+                                message.role === "ai_draft" ? "Approved draft — not sent" : statusLabel(message.role || "message")
+                              )}</span>
+                              <p>${escapeHtml(message.text)}</p>
+                            </div>
+                          `
+                        )
+                        .join("")
+                    : `<div class="quiet-state compact"><p>No messages were imported for this conversation.</p></div>`
+                }
               </div>
               ${renderOrderDraft(selected.orderDraft, selected.currency)}
-              <form class="chat-composer" data-draft-form>
-                <input name="prompt" type="text" maxlength="2000" autocomplete="off" placeholder="${
+              <form class="chat-composer" data-draft-form aria-busy="${drafting}">
+                <label class="sr-only" for="draftPrompt">Draft instructions</label>
+                <input id="draftPrompt" name="prompt" type="text" maxlength="2000" autocomplete="off" placeholder="${
                   integrationReady("gemini") ? "Tell Gemini what to draft" : "Validate Gemini before drafting"
-                }" ${integrationReady("gemini") ? "" : "disabled"} />
-                <button type="submit" ${integrationReady("gemini") ? "" : "disabled"}>Draft for approval</button>
+                }" ${integrationReady("gemini") && !drafting ? "" : "disabled"} />
+                <button type="submit" data-pending-label="Drafting…" ${integrationReady("gemini") && !drafting ? "" : "disabled"}>${
+                  drafting ? "Drafting…" : "Draft for approval"
+                }</button>
               </form>
-              <div class="approval-stack">${renderApprovals(approvals)}</div>
+              <section class="approval-stack" aria-label="Draft approvals">${renderApprovals(approvals)}</section>
             `
-            : `<div class="empty-state">Select an imported conversation to create an approval-only draft.</div>`
+            : `<div class="quiet-state conversation-empty"><p>Select an imported conversation to create an approval-only draft.</p></div>`
         }
       </article>
     </section>

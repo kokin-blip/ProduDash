@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Glassy business and social operations dashboard prototype.",
+  "description": "Secure local operations workspace for connected commerce and approval-gated AI workflows.",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "electron .",

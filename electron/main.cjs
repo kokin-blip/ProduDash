@@ -25,8 +25,6 @@ function createWindow() {
     backgroundColor: "#0f1418",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 22, y: 20 },
-    vibrancy: "under-window",
-    visualEffectState: "active",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
