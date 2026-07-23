@@ -2,9 +2,40 @@ import { api } from "./api.js";
 import { renderApp } from "./render.js";
 import { getConversations, getSelectedConversation, setAppState, ui } from "./state.js";
 
+let handlersBound = false;
+
 export function bindHandlers() {
+  if (handlersBound) return;
+  handlersBound = true;
   document.addEventListener("click", handleClick);
   document.addEventListener("submit", handleSubmit);
+}
+
+async function runAction(key, trigger, action, options = {}) {
+  if (ui.pending.has(key)) return;
+  ui.pending.add(key);
+  ui.error = null;
+  if (trigger) trigger.disabled = true;
+  try {
+    const nextState = await action();
+    if (nextState) setAppState(nextState);
+  } catch (error) {
+    if (options.refreshOnError) {
+      try {
+        setAppState(await api.getAppState());
+      } catch {
+        // Preserve the original controlled error.
+      }
+    }
+    ui.error = error?.message || "ProduDash could not complete that request.";
+  } finally {
+    ui.pending.delete(key);
+    if (options.render === false && !ui.error) {
+      if (trigger) trigger.disabled = false;
+    } else {
+      renderApp();
+    }
+  }
 }
 
 async function handleClick(event) {
@@ -23,13 +54,6 @@ async function handleClick(event) {
     return;
   }
 
-  const modeButton = event.target.closest("[data-mode]");
-  if (modeButton) {
-    ui.selectedMode = modeButton.dataset.mode;
-    renderApp();
-    return;
-  }
-
   const conversationButton = event.target.closest("[data-conversation]");
   if (conversationButton) {
     ui.selectedConversationId = conversationButton.dataset.conversation;
@@ -37,139 +61,151 @@ async function handleClick(event) {
     return;
   }
 
-  const completeButton = event.target.closest("[data-complete-command]");
-  if (completeButton) {
-    setAppState(await api.completeCommand(completeButton.dataset.completeCommand));
-    renderApp();
-    return;
-  }
-
   const approveButton = event.target.closest("[data-approve-approval]");
   if (approveButton) {
-    setAppState(await api.approveAiAction(approveButton.dataset.approveApproval));
-    renderApp();
+    await runAction(`approve-${approveButton.dataset.approveApproval}`, approveButton, () =>
+      api.approveAiAction(approveButton.dataset.approveApproval)
+    );
     return;
   }
 
   const rejectButton = event.target.closest("[data-reject-approval]");
   if (rejectButton) {
-    setAppState(await api.rejectAiAction(rejectButton.dataset.rejectApproval));
-    renderApp();
+    await runAction(`reject-${rejectButton.dataset.rejectApproval}`, rejectButton, () =>
+      api.rejectAiAction(rejectButton.dataset.rejectApproval)
+    );
     return;
   }
 
   const approvePostButton = event.target.closest("[data-approve-post]");
   if (approvePostButton) {
-    setAppState(await api.approvePostPlan(approvePostButton.dataset.approvePost));
-    renderApp();
+    await runAction(`approve-post-${approvePostButton.dataset.approvePost}`, approvePostButton, () =>
+      api.approvePostPlan(approvePostButton.dataset.approvePost, approvePostButton.dataset.approvalMode)
+    );
     return;
   }
 
   const exportPostButton = event.target.closest("[data-export-post]");
   if (exportPostButton) {
-    setAppState(await api.markPostExported(exportPostButton.dataset.exportPost));
-    renderApp();
+    await runAction(`export-post-${exportPostButton.dataset.exportPost}`, exportPostButton, () =>
+      api.markPostExported(exportPostButton.dataset.exportPost)
+    );
     return;
   }
 
-  const browseVideoButton = event.target.closest("[data-browse-video]");
-  if (browseVideoButton) {
-    const filePath = await api.chooseSourceVideo();
-    if (filePath) {
-      const form = browseVideoButton.closest("[data-clip-form]");
-      form.elements.source.value = filePath;
-    }
+  const refreshIntegrationButton = event.target.closest("[data-refresh-integration]");
+  if (refreshIntegrationButton) {
+    const integrationId = refreshIntegrationButton.dataset.refreshIntegration;
+    await runAction(`refresh-${integrationId}`, refreshIntegrationButton, () => api.refreshIntegration(integrationId), {
+      refreshOnError: true
+    });
     return;
   }
 
   const removeCredentialsButton = event.target.closest("[data-remove-credentials]");
   if (removeCredentialsButton) {
-    setAppState(await api.removeIntegrationCredentials(removeCredentialsButton.dataset.removeCredentials));
-    renderApp();
+    const integrationId = removeCredentialsButton.dataset.removeCredentials;
+    if (!window.confirm("Remove these credentials? Imported snapshots will remain but will be marked disconnected.")) return;
+    await runAction(`remove-${integrationId}`, removeCredentialsButton, () => api.removeIntegrationCredentials(integrationId));
     return;
   }
 
-  if (event.target.closest("[data-reset-local]") || event.target.closest("#trainButton")?.textContent === "Clear local state") {
-    setAppState(await api.resetLocalData());
-    ui.selectedBusinessId = ui.appState.selectedBusinessId;
-    ui.selectedConversationId = ui.appState.selectedConversationId;
-    renderApp();
+  const resetButton = event.target.closest("[data-reset-dashboard]");
+  if (resetButton) {
+    if (!window.confirm("Reset imported dashboard data? Encrypted credentials will be retained.")) return;
+    await runAction("reset-dashboard", resetButton, () => api.resetDashboardData());
+    return;
+  }
+
+  const deleteButton = event.target.closest("[data-delete-all]");
+  if (deleteButton) {
+    if (!window.confirm("Permanently delete all ProduDash dashboard data and credentials from this computer?")) return;
+    await runAction("delete-all", deleteButton, () => api.deleteAllLocalData());
+    return;
+  }
+
+  const browseVideoButton = event.target.closest("[data-browse-video]");
+  if (browseVideoButton) {
+    await runAction(
+      "choose-video",
+      browseVideoButton,
+      async () => {
+        const filePath = await api.chooseSourceVideo();
+        if (filePath) browseVideoButton.closest("[data-clip-form]").elements.source.value = filePath;
+        return null;
+      },
+      { render: false }
+    );
     return;
   }
 
   if (event.target.closest("#syncButton")) {
-    setAppState(await api.getAppState());
-    renderApp();
+    await runAction("refresh-connections", event.target.closest("#syncButton"), () => api.refreshConnections());
     return;
   }
 
   if (event.target.closest("#trainButton")) {
     ui.activeSection = "integrations";
-    ui.selectedConversationId = getSelectedConversation()?.id || getConversations()[0]?.id;
     renderApp();
   }
 }
 
 async function handleSubmit(event) {
-  const clipForm = event.target.closest("[data-clip-form]");
-  if (clipForm) {
+  const form = event.target;
+  if (!(form instanceof HTMLElement)) return;
+
+  if (form.matches("[data-clip-form]")) {
     event.preventDefault();
-    setAppState(
-      await api.createClipJob({
-        title: clipForm.elements.title.value,
-        source: clipForm.elements.source.value,
-        goal: clipForm.elements.goal.value,
-        targetLength: clipForm.elements.targetLength.value,
-        platforms: getCheckedValues(clipForm, "platforms")
+    const submitter = event.submitter;
+    await runAction("create-clip", submitter, () =>
+      api.createClipJob({
+        title: form.elements.title.value,
+        source: form.elements.source.value,
+        goal: form.elements.goal.value,
+        targetLength: form.elements.targetLength.value,
+        platforms: getCheckedValues(form, "platforms")
       })
     );
-    clipForm.reset();
-    renderApp();
     return;
   }
 
-  const postForm = event.target.closest("[data-post-form]");
-  if (postForm) {
+  if (form.matches("[data-post-form]")) {
     event.preventDefault();
-    setAppState(
-      await api.createPostPlan({
-        clipJobId: postForm.elements.clipJobId.value,
-        title: postForm.elements.title.value,
-        caption: postForm.elements.caption.value,
-        scheduledFor: postForm.elements.scheduledFor.value,
-        platforms: getCheckedValues(postForm, "platforms")
+    const submitter = event.submitter;
+    await runAction("create-post", submitter, () =>
+      api.createPostPlan({
+        clipJobId: form.elements.clipJobId.value,
+        title: form.elements.title.value,
+        caption: form.elements.caption.value,
+        scheduledFor: form.elements.scheduledFor.value,
+        platforms: getCheckedValues(form, "platforms")
       })
     );
-    postForm.reset();
-    renderApp();
     return;
   }
 
-  const credentialsForm = event.target.closest("[data-credentials-form]");
-  if (credentialsForm) {
+  if (form.matches("[data-credentials-form]")) {
     event.preventDefault();
+    const integrationId = form.dataset.credentialsForm;
     const values = {};
-    for (const input of credentialsForm.querySelectorAll("input[name]")) {
-      values[input.name] = input.value;
-    }
-    setAppState(await api.saveIntegrationCredentials(credentialsForm.dataset.credentialsForm, values));
-    credentialsForm.reset();
-    renderApp();
+    for (const input of form.querySelectorAll("input[name]")) values[input.name] = input.value;
+    await runAction(`credentials-${integrationId}`, event.submitter, () => api.saveIntegrationCredentials(integrationId, values), {
+      refreshOnError: true
+    });
     return;
   }
 
-  const form = event.target.closest("[data-draft-form]");
-  if (!form) return;
-  event.preventDefault();
-  const input = form.elements.prompt;
-  const prompt = input.value.trim() || "Draft a safe approval-only customer response.";
-  const conversation = getSelectedConversation() || getConversations()[0];
-  if (!conversation) return;
-  const result = await api.draftAiReply(conversation.id, prompt);
-  setAppState(result.state);
-  ui.selectedConversationId = conversation.id;
-  input.value = "";
-  renderApp();
+  if (form.matches("[data-draft-form]")) {
+    event.preventDefault();
+    const conversation = getSelectedConversation() || getConversations()[0];
+    if (!conversation) return;
+    const prompt = form.elements.prompt.value.trim() || "Draft a safe approval-only customer response.";
+    await runAction(`draft-${conversation.id}`, event.submitter, async () => {
+      const result = await api.draftAiReply(conversation.id, prompt);
+      ui.selectedConversationId = conversation.id;
+      return result.state;
+    });
+  }
 }
 
 function getCheckedValues(form, name) {

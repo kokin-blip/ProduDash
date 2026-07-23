@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'"
+    />
     <title>ProduDash</title>
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
@@ -25,8 +29,20 @@
                   <stop offset="1" stop-color="#77aee8" />
                 </linearGradient>
               </defs>
-              <rect x="5" y="5" width="38" height="38" rx="12" fill="rgba(8, 12, 17, 0.42)" stroke="url(#brandLogoGradient)" stroke-width="1.35" />
-              <path fill="url(#brandLogoGradient)" d="M15 32V16h9.2c4.2 0 7 2.6 7 6.4s-2.8 6.3-7 6.3h-4.6V32H15Zm4.6-7.4h4.2c1.8 0 2.9-.8 2.9-2.2s-1.1-2.3-2.9-2.3h-4.2v4.5Z" />
+              <rect
+                x="5"
+                y="5"
+                width="38"
+                height="38"
+                rx="12"
+                fill="rgba(8, 12, 17, 0.42)"
+                stroke="url(#brandLogoGradient)"
+                stroke-width="1.35"
+              />
+              <path
+                fill="url(#brandLogoGradient)"
+                d="M15 32V16h9.2c4.2 0 7 2.6 7 6.4s-2.8 6.3-7 6.3h-4.6V32H15Zm4.6-7.4h4.2c1.8 0 2.9-.8 2.9-2.2s-1.1-2.3-2.9-2.3h-4.2v4.5Z"
+              />
               <path fill="url(#brandLogoGradient)" d="M31.4 32V16h2.9v16h-2.9Z" />
               <circle fill="url(#brandLogoGradient)" cx="34.2" cy="24" r="2.1" />
             </svg>

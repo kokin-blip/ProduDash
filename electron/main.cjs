@@ -1,13 +1,22 @@
-const { app, BrowserWindow, Menu } = require("electron");
-const path = require("path");
-const { createMockConnectors } = require("./connectors.cjs");
+const { app, BrowserWindow, dialog, Menu, safeStorage, session } = require("electron");
+const path = require("node:path");
+const { pathToFileURL } = require("node:url");
+const { createConnectors } = require("./connectors.cjs");
+const { ConnectionService } = require("./connections.cjs");
+const { CredentialVault, createSafeStorageAdapter } = require("./credential-vault.cjs");
+const { AppError } = require("./errors.cjs");
 const { registerIpc } = require("./ipc.cjs");
 const { ProduDashStore } = require("./store.cjs");
 
-let store;
+const indexPath = path.join(__dirname, "..", "index.html");
+const appUrl = pathToFileURL(indexPath).href;
+let mainWindow;
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) app.quit();
 
 function createWindow() {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1440,
     height: 960,
     minWidth: 1120,
@@ -26,24 +35,59 @@ function createWindow() {
     }
   });
 
-  mainWindow.loadFile(path.join(__dirname, "..", "index.html"));
+  mainWindow.webContents.on("will-navigate", (event, navigationUrl) => {
+    if (navigationUrl !== appUrl) event.preventDefault();
+  });
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.loadFile(indexPath);
 }
 
-app.whenReady().then(() => {
-  store = new ProduDashStore(app.getPath("userData"));
-  registerIpc({ store, connectors: createMockConnectors(store) });
-  Menu.setApplicationMenu(null);
-  createWindow();
+if (hasSingleInstanceLock) {
+  app.on("second-instance", () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  });
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+  app.whenReady().then(async () => {
+    try {
+      session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+      session.defaultSession.setPermissionCheckHandler(() => false);
+
+      const credentialVault = new CredentialVault(app.getPath("userData"), createSafeStorageAdapter(safeStorage));
+      const store = new ProduDashStore(app.getPath("userData"), { credentialVault });
+      try {
+        await store.initialize();
+      } catch (error) {
+        if (error instanceof AppError && error.code === "SECURE_STORAGE_UNAVAILABLE") {
+          store.credentialVault = null;
+          store.notices.push({
+            code: error.code,
+            message: "Secure credential storage is unavailable. Connections are disabled, but local planning remains available."
+          });
+        } else {
+          throw error;
+        }
+      }
+      const connectors = createConnectors();
+      const connections = new ConnectionService({ store, ...connectors });
+      registerIpc({ store, connections, appUrl });
+      Menu.setApplicationMenu(null);
       createWindow();
+    } catch (error) {
+      dialog.showErrorBox(
+        "ProduDash could not start",
+        error instanceof AppError ? error.message : "Local application data could not be opened safely."
+      );
+      app.quit();
     }
   });
-});
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+}

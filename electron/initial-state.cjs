@@ -1,6 +1,6 @@
 function createInitialState() {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     selectedBusinessId: null,
     selectedConversationId: null,
     integrations: [
@@ -46,7 +46,8 @@ function createInitialState() {
         status: "disconnected",
         detail: "Use approved TikTok APIs for analytics, messaging, and content posting when available.",
         lastSync: "Not connected",
-        allowedUse: "Manage eligible business messaging, reporting, and creator-approved video publishing through TikTok-approved API access.",
+        allowedUse:
+          "Manage eligible business messaging, reporting, and creator-approved video publishing through TikTok-approved API access.",
         compliance: "Use Content Posting API flows only. Do not automate private accounts or scrape TikTok surfaces."
       },
       {
@@ -75,6 +76,7 @@ function createInitialState() {
         status: "missing",
         updatedAt: null,
         configuredFields: [],
+        publicValues: {},
         note: "For a private/local setup, paste credentials from a Shopify custom app. Production app distribution should use OAuth.",
         fields: [
           {
@@ -99,6 +101,7 @@ function createInitialState() {
         status: "missing",
         updatedAt: null,
         configuredFields: [],
+        publicValues: {},
         note: "Use the user's own Gemini API key for draft-only AI features.",
         fields: [
           {
@@ -116,6 +119,7 @@ function createInitialState() {
         status: "missing",
         updatedAt: null,
         configuredFields: [],
+        publicValues: {},
         note: "Meta/Instagram messaging still requires approved apps, scopes, and platform review.",
         fields: [
           {
@@ -140,6 +144,7 @@ function createInitialState() {
         status: "missing",
         updatedAt: null,
         configuredFields: [],
+        publicValues: {},
         note: "Facebook Page/Messenger access must come through approved Meta permissions.",
         fields: [
           {
@@ -157,6 +162,7 @@ function createInitialState() {
         status: "missing",
         updatedAt: null,
         configuredFields: [],
+        publicValues: {},
         note: "TikTok APIs require approved API access before ProduDash can use these credentials.",
         fields: [
           {
@@ -181,6 +187,7 @@ function createInitialState() {
         status: "missing",
         updatedAt: null,
         configuredFields: [],
+        publicValues: {},
         note: "Use Google OAuth client credentials for YouTube uploads and analytics.",
         fields: [
           {
@@ -205,6 +212,7 @@ function createInitialState() {
         status: "missing",
         updatedAt: null,
         configuredFields: [],
+        publicValues: {},
         note: "Use Stripe keys only for hosted payment links and webhook verification. Never store card data.",
         fields: [
           {

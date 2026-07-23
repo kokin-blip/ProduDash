@@ -1,29 +1,59 @@
 const { BrowserWindow, dialog, ipcMain } = require("electron");
+const { AppError, errorResponse } = require("./errors.cjs");
 
-function registerIpc({ store, connectors }) {
-  ipcMain.handle("produdash:getAppState", () => store.getAppState());
-  ipcMain.handle("produdash:saveBusinessSettings", (_event, businessId, settings) =>
-    store.saveBusinessSettings(businessId, settings)
+function createTrustedSender(appUrl) {
+  return (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    return Boolean(window && event.senderFrame && event.senderFrame === window.webContents.mainFrame && event.senderFrame.url === appUrl);
+  };
+}
+
+function createHandlers({ store, connections, isTrustedSender, chooseSourceVideo }) {
+  const trusted = isTrustedSender || (() => false);
+  const handlers = {
+    "produdash:getAppState": async () => store.getAppState(),
+    "produdash:draftAiReply": async (_event, payload) => connections.draftAiReply(payload?.conversationId, payload?.prompt),
+    "produdash:approveAiAction": async (_event, payload) => store.approveAiAction(payload?.actionId),
+    "produdash:rejectAiAction": async (_event, payload) => store.rejectAiAction(payload?.actionId),
+    "produdash:completeCommand": async (_event, payload) => store.completeCommand(payload?.commandId),
+    "produdash:resetDashboardData": async () => store.resetDashboardData(),
+    "produdash:deleteAllLocalData": async () => store.deleteAllLocalData(),
+    "produdash:saveIntegrationCredentials": async (_event, payload) => {
+      const state = await store.saveIntegrationCredentials(payload?.integrationId, payload?.values);
+      const setting = state.credentialSettings.find((item) => item.id === payload?.integrationId);
+      if (setting?.status === "stored" && ["shopify", "gemini"].includes(payload.integrationId)) {
+        return connections.refreshIntegration(payload.integrationId);
+      }
+      return state;
+    },
+    "produdash:removeIntegrationCredentials": async (_event, payload) => store.removeIntegrationCredentials(payload?.integrationId),
+    "produdash:refreshIntegration": async (_event, payload) => connections.refreshIntegration(payload?.integrationId),
+    "produdash:refreshConnections": async () => connections.refreshConnections(),
+    "produdash:createClipJob": async (_event, payload) => store.createClipJob(payload),
+    "produdash:createPostPlan": async (_event, payload) => store.createPostPlan(payload),
+    "produdash:approvePostPlan": async (_event, payload) => store.approvePostPlan(payload?.planId, payload?.mode),
+    "produdash:markPostExported": async (_event, payload) => store.markPostExported(payload?.planId),
+    "produdash:chooseSourceVideo": async (event) => chooseSourceVideo(event)
+  };
+
+  return Object.fromEntries(
+    Object.entries(handlers).map(([channel, handler]) => [
+      channel,
+      async (event, payload) => {
+        if (!trusted(event))
+          return errorResponse(new AppError("UNTRUSTED_IPC_SENDER", "The request did not come from the ProduDash application."));
+        try {
+          return { ok: true, data: await handler(event, payload) };
+        } catch (error) {
+          return errorResponse(error);
+        }
+      }
+    ])
   );
-  ipcMain.handle("produdash:listConversations", (_event, businessId) => connectors.social.listConversations(businessId));
-  ipcMain.handle("produdash:draftAiReply", (_event, conversationId, prompt) =>
-    store.draftAiReply(conversationId, prompt, connectors.gemini)
-  );
-  ipcMain.handle("produdash:approveAiAction", (_event, actionId) => store.approveAiAction(actionId));
-  ipcMain.handle("produdash:rejectAiAction", (_event, actionId) => store.rejectAiAction(actionId));
-  ipcMain.handle("produdash:completeCommand", (_event, commandId) => store.completeCommand(commandId));
-  ipcMain.handle("produdash:resetLocalData", () => store.resetLocalData());
-  ipcMain.handle("produdash:saveIntegrationCredentials", (_event, integrationId, values) =>
-    store.saveIntegrationCredentials(integrationId, values)
-  );
-  ipcMain.handle("produdash:removeIntegrationCredentials", (_event, integrationId) =>
-    store.removeIntegrationCredentials(integrationId)
-  );
-  ipcMain.handle("produdash:createClipJob", (_event, payload) => store.createClipJob(payload));
-  ipcMain.handle("produdash:createPostPlan", (_event, payload) => store.createPostPlan(payload));
-  ipcMain.handle("produdash:approvePostPlan", (_event, planId) => store.approvePostPlan(planId));
-  ipcMain.handle("produdash:markPostExported", (_event, planId) => store.markPostExported(planId));
-  ipcMain.handle("produdash:chooseSourceVideo", async (event) => {
+}
+
+function registerIpc({ store, connections, appUrl }) {
+  const chooseSourceVideo = async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(window, {
       title: "Choose source video",
@@ -34,13 +64,17 @@ function registerIpc({ store, connectors }) {
       ]
     });
     return result.canceled ? null : result.filePaths[0];
+  };
+  const handlers = createHandlers({
+    store,
+    connections,
+    isTrustedSender: createTrustedSender(appUrl),
+    chooseSourceVideo
   });
-  ipcMain.handle("produdash:shopifySnapshot", (_event, businessId) => ({
-    products: connectors.shopify.listProducts(businessId),
-    orders: connectors.shopify.listOrders(businessId),
-    metrics: connectors.shopify.getMetrics(businessId),
-    signals: connectors.shopify.listSignals(businessId)
-  }));
+  for (const [channel, handler] of Object.entries(handlers)) {
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, handler);
+  }
 }
 
-module.exports = { registerIpc };
+module.exports = { createHandlers, createTrustedSender, registerIpc };

@@ -1,299 +1,416 @@
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 const { createInitialState } = require("./initial-state.cjs");
+const { AppError } = require("./errors.cjs");
+const { clone, loadRecoverableState } = require("./state-schema.cjs");
+const { writeJsonAtomic } = require("./atomic-json.cjs");
+const {
+  boundedString,
+  normalizeShopifyDomain,
+  requireId,
+  requireKnownIntegration,
+  validateClipPayload,
+  validatePostPayload
+} = require("./validation.cjs");
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
+const AUDIT_LIMIT = 500;
 
 function createId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function withInitialDefaults(state) {
-  const initial = createInitialState();
-  return {
-    ...initial,
-    ...state,
-    integrations: initial.integrations.map((integration) => {
-      const existing = state.integrations?.find((item) => item.id === integration.id);
-      return existing ? { ...integration, ...existing } : integration;
-    }),
-    credentialSettings: initial.credentialSettings.map((setting) => {
-      const existing = state.credentialSettings?.find((item) => item.id === setting.id);
-      return existing ? { ...setting, ...existing, fields: setting.fields } : setting;
-    }),
-    creatorPlatforms: initial.creatorPlatforms.map((platform) => {
-      const existing = state.creatorPlatforms?.find((item) => item.id === platform.id);
-      return existing ? { ...platform, ...existing } : platform;
-    }),
-    analyticsSources: initial.analyticsSources.map((source) => {
-      const existing = state.analyticsSources?.find((item) => item.id === source.id);
-      return existing ? { ...source, ...existing } : source;
-    }),
-    clipperJobs: state.clipperJobs || [],
-    postQueue: state.postQueue || []
-  };
+function integrationById(state, integrationId) {
+  const integration = state.integrations.find((item) => item.id === integrationId);
+  if (!integration) throw new AppError("INTEGRATION_NOT_FOUND", "Integration not found.");
+  return integration;
 }
 
 class ProduDashStore {
-  constructor(userDataPath) {
+  constructor(userDataPath, options = {}) {
+    this.userDataPath = userDataPath;
     this.filePath = path.join(userDataPath, "produdash-state.json");
-    this.credentialsPath = path.join(userDataPath, "produdash-credentials.json");
-    this.state = this.load();
-    this.syncCredentialStatus();
+    this.credentialVault = options.credentialVault;
+    const loaded = loadRecoverableState(this.filePath);
+    this.state = loaded.state;
+    this.notices = loaded.notices;
+    this.mutationQueue = Promise.resolve();
   }
 
-  load() {
-    try {
-      if (fs.existsSync(this.filePath)) {
-        const persisted = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
-        if (persisted.schemaVersion === 2) return withInitialDefaults(persisted);
-      }
-    } catch {
-      // Fall through to a clean initial state if local data is corrupt.
-    }
-    const initial = createInitialState();
-    this.write(initial);
-    return initial;
-  }
-
-  write(nextState = this.state) {
-    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    fs.writeFileSync(this.filePath, JSON.stringify(nextState, null, 2));
-  }
-
-  resetLocalData() {
-    const credentialSettings = clone(this.state.credentialSettings || []);
-    this.state = createInitialState();
-    this.state.credentialSettings = credentialSettings;
-    this.audit("system", "Local connection state cleared.");
-    this.write();
-    return this.getAppState();
+  async initialize() {
+    if (!this.credentialVault) return;
+    const notices = await this.credentialVault.initialize();
+    this.notices.push(...notices);
+    await this.syncCredentialStatus();
   }
 
   getAppState() {
-    return clone(this.state);
+    return { ...clone(this.state), systemNotices: clone(this.notices) };
   }
 
   getBusiness(businessId) {
     const business = this.state.businesses.find((item) => item.id === businessId);
-    if (!business) throw new Error(`Business not found: ${businessId}`);
+    if (!business) throw new AppError("BUSINESS_NOT_FOUND", "Business not found.");
     return business;
   }
 
-  saveBusinessSettings(businessId, settings) {
-    const business = this.getBusiness(businessId);
-    if (Array.isArray(settings.aiPolicy)) business.aiPolicy = settings.aiPolicy;
-    if (Array.isArray(settings.automations)) business.automations = settings.automations;
-    if (typeof settings.aiMode === "string") business.aiMode = settings.aiMode;
-    this.audit("settings", `Updated settings for ${business.name}.`);
-    this.write();
-    return this.getAppState();
-  }
-
-  listConversations(businessId) {
-    return clone(this.state.conversations.filter((item) => item.businessId === businessId));
-  }
-
-  draftAiReply(conversationId, prompt, geminiConnector) {
+  getConversation(conversationId) {
     const conversation = this.state.conversations.find((item) => item.id === conversationId);
-    if (!conversation) throw new Error(`Conversation not found: ${conversationId}`);
-    const business = this.getBusiness(conversation.businessId);
-    const result = geminiConnector.draftReply(conversation, prompt, business);
-    const approval = {
-      id: createId("approval"),
-      businessId: business.id,
-      conversationId,
-      type: "reply",
-      status: "pending",
-      draft: result.draft,
-      riskFlags: ["human_approval_required", conversation.risk],
-      createdAt: new Date().toISOString(),
-      aiSummary: result.summary,
-      nextAction: result.nextAction
-    };
-    this.state.approvals.unshift(approval);
-    conversation.status = "needs_approval";
-    this.audit("ai_draft", `Created draft for ${conversation.customer} in ${business.name}.`);
-    this.write();
-    return { state: this.getAppState(), approval: clone(approval) };
+    if (!conversation) throw new AppError("CONVERSATION_NOT_FOUND", "Conversation not found.");
+    return conversation;
   }
 
-  approveAiAction(actionId) {
-    const approval = this.state.approvals.find((item) => item.id === actionId);
-    if (!approval) throw new Error(`Approval not found: ${actionId}`);
-    approval.status = "approved";
-    approval.resolvedAt = new Date().toISOString();
-    const conversation = this.state.conversations.find((item) => item.id === approval.conversationId);
-    if (conversation) {
-      conversation.status = "approved";
-      conversation.messages.push({ role: "ai", text: approval.draft });
-    }
-    this.audit("approval", `Approved AI ${approval.type} action ${actionId}.`);
-    this.write();
-    return this.getAppState();
+  enqueueMutation(callback) {
+    const run = this.mutationQueue.then(callback, callback);
+    this.mutationQueue = run.catch(() => {});
+    return run;
   }
 
-  rejectAiAction(actionId) {
-    const approval = this.state.approvals.find((item) => item.id === actionId);
-    if (!approval) throw new Error(`Approval not found: ${actionId}`);
-    approval.status = "rejected";
-    approval.resolvedAt = new Date().toISOString();
-    const conversation = this.state.conversations.find((item) => item.id === approval.conversationId);
-    if (conversation) conversation.status = "human_review";
-    this.audit("rejection", `Rejected AI ${approval.type} action ${actionId}.`);
-    this.write();
-    return this.getAppState();
-  }
-
-  completeCommand(commandId) {
-    for (const business of this.state.businesses) {
-      const command = business.commands.find((item) => item.id === commandId);
-      if (command) {
-        command.status = "completed";
-        command.completedAt = new Date().toISOString();
-        this.audit("command", `Completed command: ${command.title}.`);
-        this.write();
-        return this.getAppState();
-      }
-    }
-    throw new Error(`Command not found: ${commandId}`);
-  }
-
-  createClipJob(payload) {
-    const title = typeof payload?.title === "string" && payload.title.trim() ? payload.title.trim() : "Untitled clip job";
-    const platforms = Array.isArray(payload?.platforms) ? payload.platforms.filter(Boolean) : [];
-    const job = {
-      id: createId("clip"),
-      title,
-      source: typeof payload?.source === "string" ? payload.source.trim() : "",
-      goal: typeof payload?.goal === "string" ? payload.goal.trim() : "",
-      targetLength: typeof payload?.targetLength === "string" ? payload.targetLength.trim() : "30-45 seconds",
-      platforms,
-      status: "queued",
-      outputs: [],
-      createdAt: new Date().toISOString()
-    };
-    this.state.clipperJobs.unshift(job);
-    this.audit("clipper", `Queued auto-clip plan: ${job.title}.`);
-    this.write();
-    return this.getAppState();
-  }
-
-  createPostPlan(payload) {
-    const platforms = Array.isArray(payload?.platforms) ? payload.platforms.filter(Boolean) : [];
-    const plan = {
-      id: createId("post"),
-      clipJobId: payload?.clipJobId || null,
-      title: typeof payload?.title === "string" && payload.title.trim() ? payload.title.trim() : "Untitled post plan",
-      caption: typeof payload?.caption === "string" ? payload.caption.trim() : "",
-      scheduledFor: typeof payload?.scheduledFor === "string" ? payload.scheduledFor.trim() : "",
-      platforms,
-      status: "needs_approval",
-      policyGate: "Use only official publishing APIs or manual export. No browser bots, emulators, or scraped sessions.",
-      createdAt: new Date().toISOString()
-    };
-    this.state.postQueue.unshift(plan);
-    this.audit("publisher", `Created approval-gated post plan: ${plan.title}.`);
-    this.write();
-    return this.getAppState();
-  }
-
-  approvePostPlan(planId) {
-    const plan = this.state.postQueue.find((item) => item.id === planId);
-    if (!plan) throw new Error(`Post plan not found: ${planId}`);
-    plan.status = "approved_for_official_api";
-    plan.approvedAt = new Date().toISOString();
-    this.audit("publisher", `Approved post plan for official API/manual export: ${plan.title}.`);
-    this.write();
-    return this.getAppState();
-  }
-
-  markPostExported(planId) {
-    const plan = this.state.postQueue.find((item) => item.id === planId);
-    if (!plan) throw new Error(`Post plan not found: ${planId}`);
-    plan.status = "export_ready";
-    plan.exportedAt = new Date().toISOString();
-    this.audit("publisher", `Marked post plan export-ready: ${plan.title}.`);
-    this.write();
-    return this.getAppState();
-  }
-
-  readCredentials() {
-    try {
-      if (!fs.existsSync(this.credentialsPath)) return {};
-      return JSON.parse(fs.readFileSync(this.credentialsPath, "utf8"));
-    } catch {
-      return {};
-    }
-  }
-
-  writeCredentials(credentials) {
-    fs.mkdirSync(path.dirname(this.credentialsPath), { recursive: true });
-    fs.writeFileSync(this.credentialsPath, JSON.stringify(credentials, null, 2), { mode: 0o600 });
-    try {
-      fs.chmodSync(this.credentialsPath, 0o600);
-    } catch {
-      // Best effort only; some filesystems ignore POSIX permissions.
-    }
-  }
-
-  syncCredentialStatus() {
-    const credentials = this.readCredentials();
-    this.state.credentialSettings = (this.state.credentialSettings || createInitialState().credentialSettings).map((setting) => {
-      const saved = credentials[setting.id] || {};
-      const configuredFields = setting.fields
-        .filter((field) => typeof saved[field.key] === "string" && saved[field.key].trim())
-        .map((field) => field.key);
-      return {
-        ...setting,
-        status: configuredFields.length === setting.fields.length ? "configured" : "missing",
-        configuredFields,
-        updatedAt: saved.updatedAt || null
-      };
-    });
-  }
-
-  saveIntegrationCredentials(integrationId, values) {
-    const setting = this.state.credentialSettings.find((item) => item.id === integrationId);
-    if (!setting) throw new Error(`Credential setting not found: ${integrationId}`);
-
-    const allowedKeys = new Set(setting.fields.map((field) => field.key));
-    const sanitizedValues = {};
-    for (const [key, value] of Object.entries(values || {})) {
-      if (!allowedKeys.has(key)) continue;
-      if (typeof value === "string" && value.trim()) sanitizedValues[key] = value.trim();
-    }
-
-    const credentials = this.readCredentials();
-    credentials[integrationId] = {
-      ...(credentials[integrationId] || {}),
-      ...sanitizedValues,
-      updatedAt: new Date().toISOString()
-    };
-    this.writeCredentials(credentials);
-    this.syncCredentialStatus();
-    this.audit("credentials", `Updated local credentials for ${setting.name}.`);
-    this.write();
-    return this.getAppState();
-  }
-
-  removeIntegrationCredentials(integrationId) {
-    const setting = this.state.credentialSettings.find((item) => item.id === integrationId);
-    if (!setting) throw new Error(`Credential setting not found: ${integrationId}`);
-    const credentials = this.readCredentials();
-    delete credentials[integrationId];
-    this.writeCredentials(credentials);
-    this.syncCredentialStatus();
-    this.audit("credentials", `Removed local credentials for ${setting.name}.`);
-    this.write();
-    return this.getAppState();
+  persist() {
+    this.state.auditLog = this.state.auditLog.slice(0, AUDIT_LIMIT);
+    writeJsonAtomic(this.filePath, this.state);
   }
 
   audit(type, detail) {
     this.state.auditLog.unshift({ id: createId("audit"), at: new Date().toISOString(), type, detail });
+    this.state.auditLog = this.state.auditLog.slice(0, AUDIT_LIMIT);
+  }
+
+  async syncCredentialStatus() {
+    if (!this.credentialVault) return this.getAppState();
+    return this.enqueueMutation(async () => {
+      const settings = [];
+      for (const setting of this.state.credentialSettings) {
+        const vaultValues = this.credentialVault.get(setting.id);
+        const secretValues = { ...vaultValues };
+        const publicValues = setting.publicValues || {};
+        let publicMetadataMoved = false;
+        for (const field of setting.fields.filter((item) => !item.sensitive)) {
+          if (!publicValues[field.key] && typeof vaultValues[field.key] === "string" && vaultValues[field.key]) {
+            try {
+              publicValues[field.key] =
+                setting.id === "shopify" && field.key === "storeDomain"
+                  ? normalizeShopifyDomain(vaultValues[field.key])
+                  : vaultValues[field.key];
+              publicMetadataMoved = true;
+            } catch {
+              continue;
+            }
+          }
+          if (publicValues[field.key]) delete secretValues[field.key];
+        }
+        if (publicMetadataMoved) await this.credentialVault.replace(setting.id, secretValues);
+        const secretKeys = new Set(this.credentialVault.keys(setting.id));
+        const configuredFields = setting.fields
+          .filter((field) => (field.sensitive ? secretKeys.has(field.key) : Boolean(publicValues[field.key])))
+          .map((field) => field.key);
+        settings.push({
+          ...setting,
+          publicValues,
+          configuredFields,
+          status: configuredFields.length === setting.fields.length ? "stored" : "missing"
+        });
+      }
+      this.state.credentialSettings = settings;
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async saveIntegrationCredentials(integrationId, values) {
+    requireKnownIntegration(integrationId);
+    if (!["shopify", "gemini"].includes(integrationId)) {
+      throw new AppError("INTEGRATION_UNAVAILABLE", "This provider connector is planned and does not accept credentials yet.");
+    }
+    if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
+    return this.enqueueMutation(async () => {
+      const setting = this.state.credentialSettings.find((item) => item.id === integrationId);
+      if (!setting) throw new AppError("INTEGRATION_NOT_FOUND", "Credential settings were not found.");
+      if (!values || typeof values !== "object" || Array.isArray(values)) {
+        throw new AppError("INVALID_INPUT", "Credential values must be an object.");
+      }
+
+      const secrets = {};
+      const publicValues = { ...(setting.publicValues || {}) };
+      for (const field of setting.fields) {
+        const submitted = values[field.key];
+        if (submitted === undefined || submitted === "") continue;
+        const value = boundedString(submitted, { label: field.label, min: 1, max: field.sensitive ? 4096 : 253 });
+        if (integrationId === "shopify" && field.key === "storeDomain") {
+          publicValues[field.key] = normalizeShopifyDomain(value);
+        } else if (field.sensitive) {
+          secrets[field.key] = value;
+        } else {
+          publicValues[field.key] = value;
+        }
+      }
+
+      if (Object.keys(secrets).length) await this.credentialVault.save(integrationId, secrets);
+      setting.publicValues = publicValues;
+      setting.updatedAt = new Date().toISOString();
+      const secretKeys = new Set(this.credentialVault.keys(integrationId));
+      setting.configuredFields = setting.fields
+        .filter((field) => (field.sensitive ? secretKeys.has(field.key) : Boolean(publicValues[field.key])))
+        .map((field) => field.key);
+      setting.status = setting.configuredFields.length === setting.fields.length ? "stored" : "missing";
+      this.audit("credentials", `Updated secure credentials for ${setting.name}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  getIntegrationCredentials(integrationId) {
+    requireKnownIntegration(integrationId);
+    if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
+    const setting = this.state.credentialSettings.find((item) => item.id === integrationId);
+    if (!setting) throw new AppError("INTEGRATION_NOT_FOUND", "Credential settings were not found.");
+    return { ...(setting.publicValues || {}), ...this.credentialVault.get(integrationId) };
+  }
+
+  async removeIntegrationCredentials(integrationId) {
+    requireKnownIntegration(integrationId);
+    if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
+    return this.enqueueMutation(async () => {
+      const setting = this.state.credentialSettings.find((item) => item.id === integrationId);
+      if (!setting) throw new AppError("INTEGRATION_NOT_FOUND", "Credential settings were not found.");
+      await this.credentialVault.remove(integrationId);
+      setting.publicValues = {};
+      setting.configuredFields = [];
+      setting.status = "missing";
+      setting.updatedAt = new Date().toISOString();
+      const integration = integrationById(this.state, integrationId);
+      integration.status = integration.id === "stripe" ? "planned" : "disconnected";
+      integration.lastSync = "Not connected";
+      integration.error = null;
+      if (integrationId === "shopify") {
+        for (const business of this.state.businesses.filter((item) => item.source === "shopify"))
+          business.connectionStatus = "disconnected";
+      }
+      this.audit("credentials", `Removed secure credentials for ${setting.name}; imported snapshots were retained.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async resetDashboardData() {
+    return this.enqueueMutation(async () => {
+      const credentialSettings = clone(this.state.credentialSettings);
+      this.state = createInitialState();
+      this.state.credentialSettings = credentialSettings;
+      this.audit("system", "Dashboard data reset. Secure credentials were retained.");
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async deleteAllLocalData() {
+    return this.enqueueMutation(async () => {
+      if (this.credentialVault) await this.credentialVault.clearAll();
+      const baseName = path.basename(this.filePath);
+      if (fs.existsSync(this.userDataPath)) {
+        for (const entry of fs.readdirSync(this.userDataPath)) {
+          if (entry === baseName || entry.startsWith(`${baseName}.`)) {
+            fs.unlinkSync(path.join(this.userDataPath, entry));
+          }
+        }
+      }
+      this.state = createInitialState();
+      this.notices = [{ code: "ALL_DATA_DELETED", message: "All ProduDash dashboard data and credentials were deleted." }];
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async setIntegrationResult(integrationId, result) {
+    requireKnownIntegration(integrationId);
+    return this.enqueueMutation(async () => {
+      const integration = integrationById(this.state, integrationId);
+      integration.status = result.status;
+      integration.lastSync = result.lastSync || new Date().toISOString();
+      integration.error = result.error || null;
+      if (result.detail) integration.detail = result.detail;
+      this.audit("connection", result.auditDetail || `${integration.name} connection updated to ${result.status}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async applyShopifySync(snapshot) {
+    return this.enqueueMutation(async () => {
+      const integration = integrationById(this.state, "shopify");
+      const existing = this.state.businesses.find((business) => business.shopifyShopId === snapshot.business.shopifyShopId);
+      if (existing) Object.assign(existing, snapshot.business);
+      else this.state.businesses.unshift(snapshot.business);
+      integration.status = snapshot.status;
+      integration.lastSync = snapshot.syncedAt;
+      integration.error = snapshot.error || null;
+      this.state.selectedBusinessId = snapshot.business.id;
+      this.audit("shopify_sync", `Synchronized ${snapshot.business.name} through the official Shopify Admin API.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async draftAiReply(conversationId, prompt, geminiConnector) {
+    requireId(conversationId, "Conversation");
+    const instruction = boundedString(prompt, { label: "Draft instruction", min: 1, max: 2000 });
+    const conversation = clone(this.getConversation(conversationId));
+    const business = clone(this.getBusiness(conversation.businessId));
+    if (this.state.approvals.some((item) => item.conversationId === conversationId && item.type === "reply" && item.status === "pending")) {
+      throw new AppError("PENDING_APPROVAL_EXISTS", "Resolve the existing reply draft before creating another.");
+    }
+    const result = await geminiConnector.draftReply(conversation, instruction, business);
+    return this.enqueueMutation(async () => {
+      if (
+        this.state.approvals.some((item) => item.conversationId === conversationId && item.type === "reply" && item.status === "pending")
+      ) {
+        throw new AppError("PENDING_APPROVAL_EXISTS", "Resolve the existing reply draft before creating another.");
+      }
+      const currentConversation = this.getConversation(conversationId);
+      const approval = {
+        id: createId("approval"),
+        businessId: business.id,
+        conversationId,
+        type: "reply",
+        status: "pending",
+        draft: result.draft,
+        riskFlags: result.riskFlags,
+        createdAt: new Date().toISOString(),
+        aiSummary: result.summary,
+        intent: result.intent,
+        orderDetails: result.orderDetails,
+        nextAction: result.recommendedAction
+      };
+      this.state.approvals.unshift(approval);
+      currentConversation.status = "needs_approval";
+      this.audit("ai_draft", `Created an approval-only draft for ${currentConversation.customer || "a customer"}.`);
+      this.persist();
+      return { state: this.getAppState(), approval: clone(approval) };
+    });
+  }
+
+  async resolveAiAction(actionId, targetStatus) {
+    requireId(actionId, "Approval");
+    if (!["approved", "rejected"].includes(targetStatus)) throw new AppError("INVALID_INPUT", "Approval status is invalid.");
+    return this.enqueueMutation(async () => {
+      const approval = this.state.approvals.find((item) => item.id === actionId);
+      if (!approval) throw new AppError("APPROVAL_NOT_FOUND", "Approval not found.");
+      if (approval.status === targetStatus) return this.getAppState();
+      if (approval.status !== "pending") throw new AppError("INVALID_TRANSITION", "This approval has already been resolved.");
+      approval.status = targetStatus;
+      approval.resolvedAt = new Date().toISOString();
+      const conversation = this.state.conversations.find((item) => item.id === approval.conversationId);
+      if (conversation) {
+        conversation.status = targetStatus === "approved" ? "draft_approved" : "human_review";
+        if (targetStatus === "approved" && !conversation.messages.some((message) => message.approvalId === approval.id)) {
+          conversation.messages.push({ role: "ai_draft", text: approval.draft, approvalId: approval.id });
+        }
+      }
+      this.audit(
+        targetStatus === "approved" ? "approval" : "rejection",
+        `${targetStatus === "approved" ? "Approved" : "Rejected"} AI draft ${actionId}.`
+      );
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  approveAiAction(actionId) {
+    return this.resolveAiAction(actionId, "approved");
+  }
+
+  rejectAiAction(actionId) {
+    return this.resolveAiAction(actionId, "rejected");
+  }
+
+  async completeCommand(commandId) {
+    requireId(commandId, "Command");
+    return this.enqueueMutation(async () => {
+      for (const business of this.state.businesses) {
+        const command = (business.commands || []).find((item) => item.id === commandId);
+        if (!command) continue;
+        if (command.status === "completed") return this.getAppState();
+        command.status = "completed";
+        command.completedAt = new Date().toISOString();
+        this.audit("command", `Completed command: ${command.title}.`);
+        this.persist();
+        return this.getAppState();
+      }
+      throw new AppError("COMMAND_NOT_FOUND", "Command not found.");
+    });
+  }
+
+  async createClipJob(payload) {
+    const input = validateClipPayload(payload);
+    return this.enqueueMutation(async () => {
+      this.state.clipperJobs.unshift({
+        id: createId("clip"),
+        ...input,
+        status: "planned_local_only",
+        outputs: [],
+        createdAt: new Date().toISOString()
+      });
+      this.audit("clipper", `Created local-only clip plan: ${input.title}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async createPostPlan(payload) {
+    const input = validatePostPayload(payload, this.state.clipperJobs);
+    return this.enqueueMutation(async () => {
+      this.state.postQueue.unshift({
+        id: createId("post"),
+        ...input,
+        status: "needs_approval",
+        policyGate: "Human approval is required before manual export or any future official API publishing path.",
+        createdAt: new Date().toISOString()
+      });
+      this.audit("publisher", `Created approval-gated post plan: ${input.title}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async approvePostPlan(planId, mode = "manual_export") {
+    requireId(planId, "Post plan");
+    if (!["manual_export", "official_api"].includes(mode)) throw new AppError("INVALID_INPUT", "Approval mode is invalid.");
+    return this.enqueueMutation(async () => {
+      const plan = this.state.postQueue.find((item) => item.id === planId);
+      if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
+      const targetStatus = mode === "manual_export" ? "approved_for_manual_export" : "approved_for_official_api";
+      if (plan.status === targetStatus) return this.getAppState();
+      if (plan.status !== "needs_approval") throw new AppError("INVALID_TRANSITION", "This post plan cannot enter that approval path.");
+      if (mode === "official_api") {
+        if (!plan.platforms.length) throw new AppError("INVALID_INPUT", "Select at least one publishing destination.");
+        const ready = plan.platforms.every((platformId) =>
+          this.state.integrations.some((item) => item.id === platformId && item.status === "connected")
+        );
+        if (!ready) throw new AppError("INTEGRATION_NOT_READY", "Every publishing destination must be genuinely connected.");
+      }
+      plan.status = targetStatus;
+      plan.approvedAt = new Date().toISOString();
+      this.audit("publisher", `Approved ${plan.title} for ${mode === "manual_export" ? "manual export" : "official API publishing"}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async markPostExported(planId) {
+    requireId(planId, "Post plan");
+    return this.enqueueMutation(async () => {
+      const plan = this.state.postQueue.find((item) => item.id === planId);
+      if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
+      if (plan.status === "export_ready") return this.getAppState();
+      if (plan.status !== "approved_for_manual_export") {
+        throw new AppError("INVALID_TRANSITION", "Approve this plan for manual export first.");
+      }
+      plan.status = "export_ready";
+      plan.exportedAt = new Date().toISOString();
+      this.audit("publisher", `Marked approved post plan export-ready: ${plan.title}.`);
+      this.persist();
+      return this.getAppState();
+    });
   }
 }
 
-module.exports = { ProduDashStore, clone };
+module.exports = { AUDIT_LIMIT, ProduDashStore };

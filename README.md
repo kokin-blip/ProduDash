@@ -1,87 +1,126 @@
 # ProduDash
 
-ProduDash is a glassy operations dashboard concept for managing businesses, Shopify stores, social inboxes, AI customer replies, signals, orders, shipping, and payment verification from one place.
+ProduDash is a local-first Electron dashboard for merchant operations. The secure MVP connects Shopify data, validates a Gemini API key for approval-only drafting, and keeps incomplete social, publishing, analytics, and media features visibly separated from working functionality.
 
-## Current Connection-First MVP
+## What works
 
-ProduDash is now an Electron desktop app with a secure preload bridge, local JSON persistence, and connector interfaces. It intentionally starts with no fake stores, no fake inboxes, and no fake orders. The app waits for real accounts to be connected through official APIs.
+- Recoverable schema-versioned local state with atomic writes, last-known-good backups, bounded recovery snapshots, and a 500-entry audit log.
+- OS-protected credential encryption through Electron `safeStorage`; decrypted values remain in the main process.
+- Shopify GraphQL Admin API connection and refresh using API version `2026-07`.
+- Up to 100 recent products and 100 recent orders per refresh, with cursor pagination and safe partial-sync reporting.
+- Locally derived revenue, order, fulfillment, and zero-inventory signals based only on imported Shopify data.
+- Gemini `gemini-3.6-flash` connection validation and structured customer-support drafts.
+- Human approval gates for AI drafts and local post-export plans.
+- Hardened Electron renderer isolation, restrictive CSP, trusted IPC senders, blocked navigation/windows, and normalized errors.
+- Local clip and post planning queues that state clearly that no media processing or external publishing occurs.
 
-- Functional Dashboard, AI Inbox, Orders, Signals, and Integrations views with connection-required empty states.
-- Content Studio for local auto-clip job planning and approval-gated short-form posting plans.
-- In-app analytics framework for TikTok, Instagram Reels, and YouTube Shorts metrics once official APIs are connected.
-- Local persistence under Electron `userData`.
-- Secure renderer API exposed through `window.produdash`.
-- Connector contracts for Shopify, Gemini, and social platforms.
-- Manual credential settings for user-supplied API keys, stored separately from the renderer app state.
-- Draft-only AI workflow as the default automation stance.
-- Compliance-first integration copy for Shopify, Gemini, Meta, TikTok, and Stripe.
+## What is not implemented
 
-## Local Instance Model
+- Social inbox imports or external message sending.
+- Automatic order creation, payments, refunds, discounts, or fulfillment.
+- TikTok, Instagram, Facebook, YouTube, or Stripe API connectors.
+- Media analysis, clipping, rendered export files, or external publishing.
+- Social analytics or Shopify profit/conversion figures without real cost and traffic inputs.
+- Hosted accounts, cross-device synchronization, OAuth callbacks, webhooks, or token refresh.
+- Signed installers, notarization, automatic updates, or production release packaging.
 
-ProduDash does not currently need app-level user accounts or an admin account. Each downloaded Electron instance is treated as its own local workspace, with its own connected business accounts and local state.
+ProduDash never substitutes scraped data, browser automation, emulators, password-based automation, fabricated analytics, or silent mock results for these missing capabilities.
 
-A hosted backend should be added only when needed for production integrations: OAuth callbacks, server-side API secrets, webhook verification, token refresh, optional sync across devices, or centralized user management.
+## Local security model
 
-## Credentials
+Each installation is one local workspace. Application state is stored beneath Electron’s `userData` directory. Sensitive values are encrypted with the operating system’s credential facilities through asynchronous `safeStorage`:
 
-For the local MVP, users enter their own API keys in the Integrations settings screen. Saved credential values are not returned through `window.produdash.getAppState()` and are not rendered back into the UI; the app only shows whether each required field is saved.
+- macOS uses Keychain-backed protection.
+- Windows uses DPAPI-backed protection.
+- Linux requires an available secure secret provider. ProduDash refuses to save secrets when Electron reports the insecure `basic_text` backend.
 
-Current local storage is a separate Electron `userData` credentials file with restricted file permissions where supported. Before production distribution, replace this with OS credential storage such as macOS Keychain, Windows Credential Manager, or a hosted backend for OAuth-based apps.
+The encrypted credential file contains a versioned ciphertext envelope. Public metadata such as a canonical `name.myshopify.com` domain is kept separately so the renderer can describe the connection without receiving tokens.
 
-## Run Locally
+Legacy `produdash-credentials.json` values are encrypted and the plaintext file is removed after a successful migration. JavaScript and SSD storage cannot guarantee forensic secure erasure of historical filesystem blocks or external backups.
+
+## Connect Shopify
+
+The local MVP accepts credentials from a merchant-owned Shopify custom app:
+
+1. In Shopify Admin, create or select a custom app for the store.
+2. Grant the minimum required Admin API scopes:
+   - `read_products`
+   - `read_orders`
+3. Install the app and copy its Admin API access token.
+4. Open **Integrations** in ProduDash.
+5. Enter the canonical `name.myshopify.com` domain and the Admin API token.
+6. Choose **Save and validate**.
+
+ProduDash fetches shop identity first, then products and orders through the official GraphQL Admin API. Shopify normally exposes only the most recent 60 days of orders with `read_orders`; older orders require Shopify’s separately approved `read_all_orders` access.
+
+Credential presence is not connection success. The UI reports `connected`, `degraded`, or `error` only after a real provider request.
+
+Public distribution must replace manual custom-app tokens with a hosted OAuth flow, HMAC verification, least-privilege scopes, webhook verification, and token lifecycle management.
+
+## Connect Gemini
+
+1. Create a Gemini API key in Google AI Studio.
+2. Open **Integrations** in ProduDash.
+3. Enter the key and choose **Save and validate**.
+
+ProduDash makes a small structured validation request before marking Gemini connected. Draft requests include only the selected business, bounded operator instruction, and the latest bounded messages from one conversation.
+
+Gemini output is schema-validated before storage. It can produce a draft, intent, summary, possible order details, a recommended action, and risk flags. It cannot send a message or perform an external side effect.
+
+## Reset and deletion
+
+- **Reset dashboard data** clears imported businesses, snapshots, local plans, approvals, and audits while retaining encrypted credentials. Integrations return to a disconnected state until refreshed.
+- **Remove** on an integration deletes that integration’s credentials and marks its snapshots disconnected; already imported Shopify snapshots remain for local reference.
+- **Delete all data and credentials** removes ProduDash state, backups, recovery snapshots, and the encrypted credential vault, then creates a clean local workspace.
+
+All destructive operations require explicit confirmation in the renderer.
+
+## Development
+
+Requirements:
+
+- Node.js 22
+- npm 10+
 
 ```bash
 cd /Users/kokinmartinez/ProduDash
-npm install
+npm ci
 npm run app
 ```
 
-That launches ProduDash as an Electron desktop app.
-
-The browser-only preview is limited because the app depends on Electron's secure preload API:
+Validation commands:
 
 ```bash
-npm run web
-```
-
-## Checks
-
-```bash
-npm run check
+npm run check:syntax
+npm run lint
+npm run format:check
 npm test
-npm audit
-npm run build
+npm run test:smoke
+npm run validate
+npm audit --omit=dev
 ```
 
-The smoke tests verify that no fake business data loads, old demo state is ignored, local clearing keeps the app connection-first, and connector contracts stay available.
-For now, `npm run build` is a validation build; installer packaging can be added once the app identity, icon, and signing requirements are decided.
+`npm run validate` runs syntax, lint, formatting, unit/integration/renderer tests, and the Electron smoke test. Tests use injected provider and encryption fakes; they never require or contact live Shopify or Gemini accounts.
 
-## Automation and Platform Rules
+The browser-only `npm run web` command can display static assets but cannot use local persistence or credentials because the secure preload bridge is available only in Electron.
 
-ProduDash should never rely on scraping, stealth browser automation, password sharing, private-account automation, or attempts to bypass platform limits.
+## Release requirements
 
-Safe integration posture:
+Installer creation is intentionally deferred. A production release still needs:
 
-1. Shopify first: use OAuth, HMAC verification, least-privilege Admin API scopes, and webhooks.
-2. Gemini second: use each user's own key for the local app, use structured output for drafts/classification/extraction, and keep human approval before external side effects.
-3. Meta and Instagram: use approved Messenger Platform and Instagram Messaging APIs only, follow app review, user-initiated conversation limits, opt-ins, rate limits, and negative-feedback constraints.
-4. TikTok: use TikTok API for Business or Business Messaging API only if access is approved.
-5. TikTok/Reels/Shorts posting: use TikTok Content Posting APIs, Meta Instagram content publishing, and YouTube Data API uploads only after authorization. Otherwise export files for manual posting.
-6. Payments: use hosted payment links and webhooks. Do not store card data.
-7. AI clerk: keep Draft + Approval until a platform and the account owner explicitly allow a narrower auto-send workflow.
+- Final application identity and bundle identifiers.
+- Platform-specific icons.
+- Apple Developer ID signing and notarization.
+- Windows code signing.
+- Linux packaging targets and secure-secret-provider documentation.
+- An updater design and signed update metadata.
+- A hosted backend for OAuth callbacks, app-owned secrets, webhooks, and optional cross-device synchronization.
 
-## Integration Roadmap
+Relevant primary documentation:
 
-The safest production architecture is:
-
-1. Backend API layer for OAuth callbacks, app-owned secrets, webhook verification, and external API calls that cannot safely happen inside a local client.
-2. Shopify Admin API for orders, products, customers, fulfillment, and payment status.
-3. Gemini API for drafting replies, classifying intent, summarizing handoffs, and extracting order details.
-4. Meta and TikTok official APIs only after app review/access approval.
-5. Content pipeline for source video ingestion, FFmpeg/Gemini-assisted clip candidate generation, caption drafts, destination-specific validation, and local exports.
-6. Publishing connectors for TikTok Content Posting API, Meta Instagram Reels publishing, and YouTube Data API upload, all behind human approval and platform policy gates.
-7. Analytics connectors for TikTok-approved reporting, Meta insights, and YouTube Analytics/Reporting APIs.
-8. Human approval gates for customer messages, payment links, order creation, refunds, discounts, angry customers, ambiguous addresses, payment failures, and external publishing.
-9. Audit log for every AI action, including source conversation, draft, approval/rejection, final reply, payment link, order creation, post plan, upload/export status, and staff override.
-
-Never expose production API keys in a browser renderer. `.env.example` is documentation for a future hosted backend, not the preferred local-app setup.
+- [Shopify Admin API versioning](https://shopify.dev/docs/api/usage/versioning)
+- [Shopify GraphQL products query](https://shopify.dev/docs/api/admin-graphql/latest/queries/products)
+- [Shopify GraphQL orders query](https://shopify.dev/docs/api/admin-graphql/latest/queries/orders)
+- [Gemini structured output](https://ai.google.dev/gemini-api/docs/structured-output)
+- [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)
+- [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security)

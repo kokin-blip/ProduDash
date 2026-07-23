@@ -1,0 +1,26 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check:syntax
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: xvfb-run --auto-servernum npm run test:smoke
+      - run: npm audit --omit=dev

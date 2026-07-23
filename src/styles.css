@@ -26,7 +26,12 @@
   --radius-lg: 14px;
   --radius-md: 10px;
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
     sans-serif;
 }
 
@@ -41,10 +46,8 @@ body {
   margin: 0;
   overflow-x: hidden;
   background:
-    linear-gradient(180deg, rgba(210, 230, 255, 0.08), transparent 24%),
-    linear-gradient(115deg, rgba(55, 112, 177, 0.36), transparent 34%),
-    linear-gradient(260deg, rgba(105, 120, 147, 0.28), transparent 44%),
-    linear-gradient(135deg, #06182a, #0c2540 52%, #172033);
+    linear-gradient(180deg, rgba(210, 230, 255, 0.08), transparent 24%), linear-gradient(115deg, rgba(55, 112, 177, 0.36), transparent 34%),
+    linear-gradient(260deg, rgba(105, 120, 147, 0.28), transparent 44%), linear-gradient(135deg, #06182a, #0c2540 52%, #172033);
   color: var(--text);
 }
 
@@ -68,11 +71,14 @@ body::after {
   inset: 0;
   z-index: 0;
   background-image:
-    linear-gradient(rgba(222, 238, 255, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(222, 238, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(rgba(222, 238, 255, 0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(222, 238, 255, 0.07) 1px, transparent 1px),
     linear-gradient(rgba(164, 201, 242, 0.055) 1px, transparent 1px),
     linear-gradient(90deg, rgba(164, 201, 242, 0.055) 1px, transparent 1px);
-  background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
+  background-size:
+    96px 96px,
+    96px 96px,
+    24px 24px,
+    24px 24px;
   mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0.26));
   content: "";
   opacity: 0.82;
@@ -162,9 +168,7 @@ textarea {
   padding: 14px;
   border: 1px solid rgba(210, 229, 249, 0.34);
   border-radius: var(--radius-xl);
-  background:
-    linear-gradient(135deg, rgba(118, 146, 180, 0.28), rgba(57, 77, 105, 0.18)),
-    rgba(27, 48, 74, 0.54);
+  background: linear-gradient(135deg, rgba(118, 146, 180, 0.28), rgba(57, 77, 105, 0.18)), rgba(27, 48, 74, 0.54);
   box-shadow:
     0 18px 48px rgba(3, 10, 22, 0.26),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
@@ -205,9 +209,7 @@ textarea {
   gap: 12px;
   padding: 10px;
   border-radius: 14px;
-  background:
-    linear-gradient(135deg, rgba(153, 180, 213, 0.36), rgba(79, 105, 138, 0.2)),
-    rgba(74, 101, 134, 0.22);
+  background: linear-gradient(135deg, rgba(153, 180, 213, 0.36), rgba(79, 105, 138, 0.2)), rgba(74, 101, 134, 0.22);
   overflow: hidden;
   transition:
     border-color var(--motion-fast),
@@ -243,9 +245,7 @@ textarea {
   height: 46px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 13px;
-  background:
-    linear-gradient(145deg, rgba(185, 220, 255, 0.18), rgba(156, 198, 245, 0.12)),
-    rgba(255, 255, 255, 0.06);
+  background: linear-gradient(145deg, rgba(185, 220, 255, 0.18), rgba(156, 198, 245, 0.12)), rgba(255, 255, 255, 0.06);
   box-shadow:
     0 12px 26px rgba(120, 169, 222, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
@@ -502,9 +502,7 @@ h2 {
 
 .primary-button,
 .chat-composer button {
-  background:
-    linear-gradient(135deg, rgba(232, 246, 255, 0.9), rgba(148, 194, 240, 0.78)),
-    rgba(185, 220, 255, 0.24);
+  background: linear-gradient(135deg, rgba(232, 246, 255, 0.9), rgba(148, 194, 240, 0.78)), rgba(185, 220, 255, 0.24);
   color: #071a2d;
   font-weight: 800;
   border-color: rgba(238, 247, 255, 0.54);
@@ -512,9 +510,7 @@ h2 {
 
 .ghost-button,
 .text-button {
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.04)),
-    var(--panel-soft);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.04)), var(--panel-soft);
 }
 
 .primary-button:hover,
@@ -650,9 +646,7 @@ textarea:focus-visible {
   min-height: 42px;
   border-radius: 12px;
   padding: 8px 12px;
-  background:
-    linear-gradient(145deg, rgba(127, 154, 188, 0.22), rgba(49, 70, 98, 0.14)),
-    rgba(45, 73, 107, 0.32);
+  background: linear-gradient(145deg, rgba(127, 154, 188, 0.22), rgba(49, 70, 98, 0.14)), rgba(45, 73, 107, 0.32);
   box-shadow: none;
 }
 
@@ -668,9 +662,12 @@ textarea:focus-visible {
   background:
     linear-gradient(145deg, rgba(134, 161, 194, 0.28), rgba(54, 76, 105, 0.16)),
     linear-gradient(rgba(226, 240, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(226, 240, 255, 0.045) 1px, transparent 1px),
-    rgba(41, 68, 101, 0.38);
-  background-size: auto, 24px 24px, 24px 24px, auto;
+    linear-gradient(90deg, rgba(226, 240, 255, 0.045) 1px, transparent 1px), rgba(41, 68, 101, 0.38);
+  background-size:
+    auto,
+    24px 24px,
+    24px 24px,
+    auto;
   text-align: left;
   cursor: pointer;
   overflow: hidden;
@@ -742,10 +739,13 @@ textarea:focus-visible {
   border-radius: 16px;
   background:
     linear-gradient(145deg, rgba(122, 148, 181, 0.3), rgba(49, 70, 98, 0.18)),
-    linear-gradient(rgba(226, 240, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(226, 240, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(rgba(226, 240, 255, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(226, 240, 255, 0.04) 1px, transparent 1px),
     rgba(38, 63, 94, 0.4);
-  background-size: auto, 24px 24px, 24px 24px, auto;
+  background-size:
+    auto,
+    24px 24px,
+    24px 24px,
+    auto;
   transition:
     border-color var(--motion-fast),
     box-shadow var(--motion-fast),
@@ -796,9 +796,12 @@ textarea:focus-visible {
   background:
     linear-gradient(145deg, rgba(127, 154, 188, 0.32), rgba(49, 70, 98, 0.18)),
     linear-gradient(rgba(226, 240, 255, 0.042) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(226, 240, 255, 0.042) 1px, transparent 1px),
-    rgba(45, 73, 107, 0.42);
-  background-size: auto, 24px 24px, 24px 24px, auto;
+    linear-gradient(90deg, rgba(226, 240, 255, 0.042) 1px, transparent 1px), rgba(45, 73, 107, 0.42);
+  background-size:
+    auto,
+    24px 24px,
+    24px 24px,
+    auto;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transition:
     border-color var(--motion-fast),
@@ -810,10 +813,13 @@ textarea:focus-visible {
   border-color: rgba(185, 220, 255, 0.28);
   background:
     linear-gradient(145deg, rgba(142, 173, 209, 0.4), rgba(58, 84, 116, 0.22)),
-    linear-gradient(rgba(226, 240, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(226, 240, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(rgba(226, 240, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(226, 240, 255, 0.05) 1px, transparent 1px),
     rgba(58, 89, 127, 0.48);
-  background-size: auto, 24px 24px, 24px 24px, auto;
+  background-size:
+    auto,
+    24px 24px,
+    24px 24px,
+    auto;
   transform: translateY(-3px);
 }
 
@@ -857,9 +863,11 @@ textarea:focus-visible {
   padding: 10px;
   background:
     linear-gradient(rgba(226, 240, 255, 0.038) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(226, 240, 255, 0.038) 1px, transparent 1px),
-    rgba(8, 24, 42, 0.22);
-  background-size: 24px 24px, 24px 24px, auto;
+    linear-gradient(90deg, rgba(226, 240, 255, 0.038) 1px, transparent 1px), rgba(8, 24, 42, 0.22);
+  background-size:
+    24px 24px,
+    24px 24px,
+    auto;
 }
 
 .bar {
@@ -911,9 +919,7 @@ textarea:focus-visible {
   padding: 11px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background:
-    linear-gradient(145deg, rgba(127, 154, 188, 0.2), rgba(49, 70, 98, 0.14)),
-    rgba(45, 73, 107, 0.28);
+  background: linear-gradient(145deg, rgba(127, 154, 188, 0.2), rgba(49, 70, 98, 0.14)), rgba(45, 73, 107, 0.28);
 }
 
 .message p {
@@ -926,9 +932,7 @@ textarea:focus-visible {
 .message.ai {
   align-self: flex-end;
   border-color: rgba(185, 220, 255, 0.32);
-  background:
-    linear-gradient(150deg, rgba(185, 220, 255, 0.2), rgba(79, 115, 155, 0.16)),
-    rgba(45, 73, 107, 0.34);
+  background: linear-gradient(150deg, rgba(185, 220, 255, 0.2), rgba(79, 115, 155, 0.16)), rgba(45, 73, 107, 0.34);
 }
 
 .message.system {
@@ -990,9 +994,12 @@ textarea:focus-visible {
   background:
     linear-gradient(145deg, rgba(127, 154, 188, 0.24), rgba(49, 70, 98, 0.14)),
     linear-gradient(rgba(226, 240, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(226, 240, 255, 0.035) 1px, transparent 1px),
-    rgba(45, 73, 107, 0.28);
-  background-size: auto, 24px 24px, 24px 24px, auto;
+    linear-gradient(90deg, rgba(226, 240, 255, 0.035) 1px, transparent 1px), rgba(45, 73, 107, 0.28);
+  background-size:
+    auto,
+    24px 24px,
+    24px 24px,
+    auto;
   transition:
     border-color var(--motion-fast),
     background var(--motion-fast),
@@ -1018,9 +1025,12 @@ textarea:focus-visible {
   background:
     linear-gradient(145deg, rgba(148, 176, 210, 0.32), rgba(64, 91, 124, 0.2)),
     linear-gradient(rgba(226, 240, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(226, 240, 255, 0.045) 1px, transparent 1px),
-    rgba(58, 89, 127, 0.38);
-  background-size: auto, 24px 24px, 24px 24px, auto;
+    linear-gradient(90deg, rgba(226, 240, 255, 0.045) 1px, transparent 1px), rgba(58, 89, 127, 0.38);
+  background-size:
+    auto,
+    24px 24px,
+    24px 24px,
+    auto;
   transform: translateY(-2px);
 }
 
@@ -1806,4 +1816,125 @@ textarea:hover {
   .order-item > div:last-child {
     text-align: left;
   }
+}
+
+.status-stack {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.status-stack:empty {
+  display: none;
+}
+
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid rgba(155, 200, 255, 0.22);
+  border-radius: 14px;
+  background: rgba(36, 80, 112, 0.26);
+}
+
+.status-banner.error {
+  color: #ffd1d1;
+  border-color: rgba(255, 126, 126, 0.32);
+  background: rgba(112, 36, 36, 0.3);
+}
+
+.inline-error,
+.danger-button {
+  color: #ffb6b6;
+}
+
+.planned-note {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.bar-height-0 {
+  height: 0%;
+}
+
+.bar-height-5 {
+  height: 5%;
+}
+
+.bar-height-10 {
+  height: 10%;
+}
+
+.bar-height-15 {
+  height: 15%;
+}
+
+.bar-height-20 {
+  height: 20%;
+}
+
+.bar-height-25 {
+  height: 25%;
+}
+
+.bar-height-30 {
+  height: 30%;
+}
+
+.bar-height-35 {
+  height: 35%;
+}
+
+.bar-height-40 {
+  height: 40%;
+}
+
+.bar-height-45 {
+  height: 45%;
+}
+
+.bar-height-50 {
+  height: 50%;
+}
+
+.bar-height-55 {
+  height: 55%;
+}
+
+.bar-height-60 {
+  height: 60%;
+}
+
+.bar-height-65 {
+  height: 65%;
+}
+
+.bar-height-70 {
+  height: 70%;
+}
+
+.bar-height-75 {
+  height: 75%;
+}
+
+.bar-height-80 {
+  height: 80%;
+}
+
+.bar-height-85 {
+  height: 85%;
+}
+
+.bar-height-90 {
+  height: 90%;
+}
+
+.bar-height-95 {
+  height: 95%;
+}
+
+.bar-height-100 {
+  height: 100%;
 }
