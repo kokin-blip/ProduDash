@@ -127,7 +127,7 @@ function renderLibrary() {
         <span class="sr-only">Search clips</span>
         <input name="query" type="search" maxlength="200" value="${escapeHtml(
           ui.libraryFilters.query
-        )}" placeholder="Smart local search across names, tags, and metadata" />
+        )}" placeholder="Search names, tags, metadata, and local transcripts" />
       </label>
       <label>
         <span class="sr-only">Folder</span>
@@ -264,9 +264,11 @@ function renderClipRow(clip, selected) {
         }</span>
         ${
           clip.search
-            ? `<span class="clip-search-match">Local match ${Math.round(clip.search.score * 100)}% · ${escapeHtml(
-                clip.search.matchedTerms.join(", ") || "metadata"
-              )}</span>`
+            ? `<span class="clip-search-match">Local match ${Math.round(clip.search.score * 100)}% · ${
+                clip.search.timestampMatches?.length
+                  ? `${formatDuration(clip.search.timestampMatches[0].start)} · “${escapeHtml(clip.search.timestampMatches[0].excerpt)}”`
+                  : escapeHtml(clip.search.matchedTerms.join(", ") || "metadata")
+              }</span>`
             : ""
         }
       </span>

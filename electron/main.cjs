@@ -112,6 +112,7 @@ if (hasSingleInstanceLock) {
         startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
       });
       const projects = new ProjectStore(app.getPath("userData"), { mediaLibrary, appStore: store });
+      mediaLibrary.setTranscriptSearchProvider((mediaId) => projects.getTranscriptSearchSegments(mediaId));
       store.notices.push(...projects.getNotices());
       const templates = new TemplateStore(app.getPath("userData"));
       store.notices.push(...templates.getNotices());

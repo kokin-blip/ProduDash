@@ -191,6 +191,7 @@ class MediaLibrary {
     this.notices = loaded.notices;
     this.mutationQueue = Promise.resolve();
     this.searchIndexGeneration = 0;
+    this.transcriptSearchProvider = null;
   }
 
   getNotices() {
@@ -209,6 +210,23 @@ class MediaLibrary {
     }
     this.index.updatedAt = new Date().toISOString();
     writeJsonAtomic(this.filePath, this.index);
+  }
+
+  setTranscriptSearchProvider(provider) {
+    if (provider !== null && typeof provider !== "function") {
+      throw new AppError("INVALID_SEARCH_PROVIDER", "The local transcript search provider is invalid.");
+    }
+    this.transcriptSearchProvider = provider;
+  }
+
+  searchDocumentFor(clip) {
+    if (!this.transcriptSearchProvider) return clip.searchDocument;
+    try {
+      const transcriptSegments = this.transcriptSearchProvider(clip.id);
+      return buildSearchDocument(clip, { transcriptSegments });
+    } catch {
+      return clip.searchDocument;
+    }
   }
 
   async saveBookmark(recordId, bookmark) {
@@ -503,7 +521,14 @@ class MediaLibrary {
     const offset = Math.max(0, Number.parseInt(options.offset, 10) || 0);
     const limit = Math.max(1, Math.min(MAX_QUERY_LIMIT, Number.parseInt(options.limit, 10) || 40));
     let clips = this.index.clips
-      .map((clip) => ({ clip, search: query ? scoreSearchDocument(clip.searchDocument, query) : { score: 0, matchedTerms: [] } }))
+      .map((clip) => {
+        const searchDocument = this.searchDocumentFor(clip);
+        return {
+          clip,
+          searchDocument,
+          search: query ? scoreSearchDocument(searchDocument, query) : { score: 0, matchedTerms: [], timestampMatches: [] }
+        };
+      })
       .filter(({ clip, search }) => {
         if (query && search.score <= 0) return false;
         if (folderId && !clip.locations?.some((location) => location.folderId === folderId)) return false;
@@ -529,7 +554,7 @@ class MediaLibrary {
         error: folder.error,
         clipCount: this.index.clips.filter((clip) => clip.locations?.some((location) => location.folderId === folder.id)).length
       })),
-      clips: clips.slice(offset, offset + limit).map(({ clip, search }) => ({
+      clips: clips.slice(offset, offset + limit).map(({ clip, search, searchDocument }) => ({
         id: clip.id,
         name: clip.name,
         extension: clip.extension,
@@ -551,8 +576,9 @@ class MediaLibrary {
           ? {
               score: search.score,
               matchedTerms: search.matchedTerms,
-              modelId: clip.searchDocument.modelId,
-              provenance: clip.searchDocument.provenance.source
+              timestampMatches: search.timestampMatches,
+              modelId: searchDocument.modelId,
+              provenance: searchDocument.provenance.source
             }
           : null
       })),
@@ -567,11 +593,14 @@ class MediaLibrary {
     const generation = ++this.searchIndexGeneration;
     return this.enqueue(async () => {
       let indexed = 0;
+      let transcriptIndexed = 0;
       for (const clip of this.index.clips) {
         if (generation !== this.searchIndexGeneration) {
           throw new AppError("SEARCH_INDEX_CANCELED", "The previous local search-index rebuild was canceled.");
         }
-        clip.searchDocument = buildSearchDocument(clip, { modelId });
+        const transcriptSegments = this.transcriptSearchProvider ? this.transcriptSearchProvider(clip.id) : [];
+        clip.searchDocument = buildSearchDocument(clip, { modelId, transcriptSegments });
+        if (clip.searchDocument.segments.length) transcriptIndexed += 1;
         indexed += 1;
         if (indexed % 100 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
       }
@@ -579,7 +608,12 @@ class MediaLibrary {
         throw new AppError("SEARCH_INDEX_CANCELED", "The previous local search-index rebuild was canceled.");
       }
       this.persist();
-      return { modelId, indexed, source: "local_metadata" };
+      return {
+        modelId,
+        indexed,
+        transcriptIndexed,
+        source: transcriptIndexed ? "local_metadata_transcript" : "local_metadata"
+      };
     });
   }
 

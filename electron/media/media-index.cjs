@@ -3,7 +3,7 @@ const { AppError } = require("../errors.cjs");
 const { preserveFile, readJson, writeJsonAtomic } = require("../atomic-json.cjs");
 const { buildSearchDocument, validateSearchDocument } = require("./semantic-search.cjs");
 
-const MEDIA_INDEX_VERSION = 2;
+const MEDIA_INDEX_VERSION = 3;
 
 function createEmptyMediaIndex() {
   return {
@@ -39,10 +39,14 @@ function validateMediaIndex(value) {
 function migrateMediaIndex(value) {
   const migrated = structuredClone(value);
   if (migrated?.schemaVersion === 1) {
+    migrated.clips = Array.isArray(migrated.clips) ? migrated.clips : [];
+    migrated.schemaVersion = 2;
+  }
+  if (migrated?.schemaVersion === 2) {
     migrated.clips = Array.isArray(migrated.clips)
       ? migrated.clips.map((clip) => ({ ...clip, searchDocument: buildSearchDocument(clip) }))
       : [];
-    migrated.schemaVersion = 2;
+    migrated.schemaVersion = 3;
   }
   return migrated;
 }
@@ -72,7 +76,7 @@ function loadMediaIndex(filePath) {
     preserveFile(filePath, "recovery");
     if (fs.existsSync(backupPath)) {
       try {
-        const index = validateMediaIndex(readJson(backupPath));
+        const index = validateMediaIndex(migrateMediaIndex(readJson(backupPath)));
         writeJsonAtomic(filePath, index, { backup: false });
         notices.push({
           code: "MEDIA_INDEX_RECOVERED",

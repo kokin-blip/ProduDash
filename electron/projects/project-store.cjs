@@ -216,6 +216,19 @@ class ProjectStore {
     return clone(this.notices);
   }
 
+  getTranscriptSearchSegments(mediaId) {
+    requireId(mediaId, "Clip");
+    const project = this.data.projects
+      .filter((item) => item.status === "active" && item.source.mediaId === mediaId && item.draft.transcript.length)
+      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0];
+    if (!project) return [];
+    return project.draft.transcript.map((segment) => ({
+      start: segment.start,
+      end: segment.end,
+      text: segment.text
+    }));
+  }
+
   sourceStatus(project) {
     try {
       const clip = this.mediaLibrary.getClipSummary(project.source.mediaId);

@@ -526,7 +526,22 @@ test("Content Studio keeps seven-row navigation and renders a safe read-only Cli
         tags: ["launch"],
         previewUrl: null,
         thumbnailUrl: null,
-        error: "File unavailable"
+        error: "File unavailable",
+        search: {
+          score: 0.875,
+          matchedTerms: ["launch"],
+          modelId: "local-keywords-v2",
+          provenance: "local_metadata_transcript",
+          timestampMatches: [
+            {
+              start: 12.5,
+              end: 15,
+              excerpt: `<img src=x onerror="window.transcriptPwned=true"> customer launch`,
+              score: 0.875,
+              matchedTerms: ["launch"]
+            }
+          ]
+        }
       }
     ],
     total: 1,
@@ -544,6 +559,9 @@ test("Content Studio keeps seven-row navigation and renders a safe read-only Cli
   assert.match(document.querySelector(".clip-row").textContent, /<img src=x/);
   assert.equal(document.querySelector(".clip-row img"), null);
   assert.equal(window.libraryPwned, undefined);
+  assert.match(document.querySelector(".clip-search-match").textContent, /0:13/);
+  assert.match(document.querySelector(".clip-search-match").textContent, /<img src=x/);
+  assert.equal(window.transcriptPwned, undefined);
   assert.match(document.querySelector(".clip-detail").textContent, /File unavailable/);
   assert.match(document.querySelector(".library-folders").textContent, /External drive is offline/);
   assert.equal(document.querySelector("[data-remove-clip]").textContent.trim(), "Remove from library");
