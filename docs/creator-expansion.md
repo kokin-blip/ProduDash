@@ -219,7 +219,7 @@ Nothing below is currently exposed as a placeholder control.
   transcript consent; a human must review and select a variant before render.
   A reviewed local HD-frame resize is also available and is labeled as pixel
   resizing rather than recovered detail. Projects support bounded OpenAI
-  built-in or authorized custom-voice WAV previews only after exact provider, model, text, voice and
+  built-in, configured local Piper, or authorized custom-voice WAV previews only after exact provider, model, text, voice and
   AI-generated-audio disclosure consent. Opaque local previews retain safe
   provenance, support playback and permanent deletion, and become draft again
   when dependent transcript text changes. Only human-reviewed previews enter an
@@ -234,8 +234,13 @@ Nothing below is currently exposed as a placeholder control.
   private on-demand compatibility scan for Piper, Kokoro, Chatterbox, XTTS,
   RVC, and Tortoise TTS. RVC is labeled as voice conversion rather than
   text-to-speech. The scan distinguishes hardware compatibility from actual
-  installed readiness and never downloads runtimes or model weights. Loopback
-  OpenAI-compatible endpoints may explicitly declare `speech_generation`.
+  installed readiness and never downloads runtimes or model weights. Piper now
+  has a direct user-configured adapter with encrypted executable/model paths,
+  a real WAV connection test, fixed shell-free arguments, bounded output, and
+  no bundled runtime or model. The other scanned engines remain
+  compatibility-only pending their distinct runtime and likeness contracts.
+  Loopback OpenAI-compatible endpoints may explicitly declare
+  `speech_generation`.
   Custom likenesses now have a separately confirmed removal lifecycle:
   ElevenLabs deletion uses its official provider API before local authorization
   is removed, while providers without an exposed voice-delete operation remove

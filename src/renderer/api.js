@@ -52,7 +52,7 @@ export const api = {
   setAiWorkload: (workloadId, selection) => unwrap(client().setAiWorkload(workloadId, selection)),
   createCustomVoice: (payload) => unwrap(client().createCustomVoice(payload)),
   removeCustomVoice: (payload) => unwrap(client().removeCustomVoice(payload)),
-  chooseLocalWhisperFile: (kind) => unwrap(client().chooseLocalWhisperFile(kind)),
+  chooseLocalProviderFile: (profileId, fieldKey) => unwrap(client().chooseLocalProviderFile(profileId, fieldKey)),
   getClipLibrary: (options = {}) => unwrap(client().getClipLibrary(options)),
   rebuildClipSearchIndex: () => unwrap(client().rebuildClipSearchIndex()),
   cancelClipSearchIndex: () => unwrap(client().cancelClipSearchIndex()),

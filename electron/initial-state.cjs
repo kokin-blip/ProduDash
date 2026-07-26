@@ -324,6 +324,23 @@ function createInitialState() {
         ],
         lastValidatedAt: null,
         error: null
+      },
+      {
+        id: "piper-local",
+        providerType: "piper-local",
+        name: "Local Piper",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: "piper-local-model",
+        models: [
+          {
+            id: "piper-local-model",
+            name: "Configured Piper voice model",
+            capabilities: ["speech_generation"]
+          }
+        ],
+        lastValidatedAt: null,
+        error: null
       }
     ],
     aiWorkloads: {

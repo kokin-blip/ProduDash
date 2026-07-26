@@ -287,6 +287,62 @@ test("speech voices are scoped to their connected provider profile", async (t) =
   assert.equal(generatedVoice, "voice_eleven_authorized");
 });
 
+test("local Piper speech is provider-scoped and keeps paths out of returned metadata", async (t) => {
+  const harness = await createHarness();
+  t.after(harness.cleanup);
+  let speechRequest;
+  const adapter = {
+    id: "piper-local",
+    name: "Local Piper",
+    credentialFields: [
+      { key: "executablePath", label: "Piper executable", sensitive: true, required: true },
+      { key: "modelPath", label: "Piper model", sensitive: true, required: true }
+    ],
+    listModels: () => [
+      {
+        id: "piper-local-model",
+        name: "Configured Piper voice model",
+        capabilities: [AI_CAPABILITIES.SPEECH_GENERATION]
+      }
+    ],
+    validate: async () => true,
+    generateSpeech: async (request) => {
+      speechRequest = request;
+      return Buffer.alloc(64, 1);
+    }
+  };
+  const providers = new ProviderService({ store: harness.store, registry: new ProviderRegistry([adapter]) });
+  await providers.initialize();
+  await harness.store.saveAiProviderCredentials(
+    "piper-local",
+    { executablePath: "/private/piper", modelPath: "/private/voice.onnx" },
+    adapter.credentialFields
+  );
+  await providers.testConnection("piper-local");
+  const input = {
+    providerProfileId: "piper-local",
+    modelId: "piper-local-model",
+    input: "This text stays local.",
+    voice: "configured-model",
+    consent: {
+      approved: true,
+      providerProfileId: "piper-local",
+      modelId: "piper-local-model",
+      voice: "configured-model",
+      dataCategories: ["voiceover_text"],
+      aiGeneratedDisclosureAccepted: true
+    }
+  };
+  const result = await providers.generateSpeechPreview(input);
+  assert.equal(speechRequest.voice, "configured-model");
+  assert.equal(speechRequest.voiceType, "built_in");
+  assert.match(result.metadata.disclosure, /AI-generated voice/);
+  assert.doesNotMatch(JSON.stringify(result.metadata), /private|executable|onnx/i);
+  await assert.rejects(() => providers.generateSpeechPreview({ ...input, voice: "alloy" }), {
+    code: "CUSTOM_VOICE_UNAVAILABLE"
+  });
+});
+
 test("custom voice creation requires first-use acceptance and authorizes only the created voice", async (t) => {
   const harness = await createHarness();
   t.after(harness.cleanup);

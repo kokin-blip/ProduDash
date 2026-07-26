@@ -237,7 +237,7 @@ function renderCredentialField(field, configuredFields = [], publicValues = {}, 
     return `
       <div class="credential-field native-file-field">
         <span>${escapeHtml(field.label)}</span>
-        <button class="ghost-button small" type="button" data-local-whisper-file="${escapeHtml(field.key)}" data-profile-id="${escapeHtml(
+        <button class="ghost-button small" type="button" data-local-provider-file="${escapeHtml(field.key)}" data-profile-id="${escapeHtml(
           profileId
         )}" data-pending-label="Choosing…">${configured ? "Replace file" : "Choose file"}</button>
         <small>${configured ? "Stored as an encrypted local path" : "Not configured · ProduDash never downloads models"}</small>

@@ -1012,10 +1012,13 @@ async function handleClick(event) {
     return;
   }
 
-  const localWhisperButton = event.target.closest("[data-local-whisper-file]");
-  if (localWhisperButton) {
-    const kind = localWhisperButton.dataset.localWhisperFile;
-    await runAction(`local-whisper-${kind}`, localWhisperButton, () => api.chooseLocalWhisperFile(kind));
+  const localProviderFileButton = event.target.closest("[data-local-provider-file]");
+  if (localProviderFileButton) {
+    const fieldKey = localProviderFileButton.dataset.localProviderFile;
+    const profileId = localProviderFileButton.dataset.profileId;
+    await runAction(`local-provider-file-${profileId}-${fieldKey}`, localProviderFileButton, () =>
+      api.chooseLocalProviderFile(profileId, fieldKey)
+    );
     return;
   }
 

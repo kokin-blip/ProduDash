@@ -13,6 +13,7 @@ const { AnthropicProviderAdapter } = require("./ai/adapters/anthropic.cjs");
 const { OpenAICompatibleProviderAdapter } = require("./ai/adapters/openai-compatible.cjs");
 const { ElevenLabsProviderAdapter } = require("./ai/adapters/elevenlabs.cjs");
 const { WhisperCppProviderAdapter } = require("./ai/adapters/whisper-cpp.cjs");
+const { PiperLocalProviderAdapter } = require("./ai/adapters/piper-local.cjs");
 const { ProviderRegistry } = require("./ai/provider-registry.cjs");
 const { ProviderService } = require("./ai/provider-service.cjs");
 const { MediaLibrary } = require("./media/media-library.cjs");
@@ -102,6 +103,9 @@ if (hasSingleInstanceLock) {
         new ElevenLabsProviderAdapter(),
         new OpenAICompatibleProviderAdapter(),
         new WhisperCppProviderAdapter({
+          startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
+        }),
+        new PiperLocalProviderAdapter({
           startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
         })
       ]);

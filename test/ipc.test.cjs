@@ -26,6 +26,7 @@ function fixtures(isTrustedSender) {
   };
   const providers = {
     getCatalog: () => [],
+    getNativeCredentialField: () => ({ key: "modelPath", label: "Local model", type: "native-file" }),
     removeCustomVoice: async () => state,
     translateTranscript: async () => ({
       sourceLanguage: "en",
@@ -82,6 +83,7 @@ function fixtures(isTrustedSender) {
     isTrustedSender,
     chooseMediaOutputFolder: async () => ({ id: "output-1", name: "Clips" }),
     chooseMediaJobThumbnail: async () => state,
+    chooseLocalProviderFile: async () => state,
     exportPostPackage: async () => state,
     exportAnalyticsReport: async () => ({ exported: true }),
     openMediaJobOutput: async () => ({ jobId: "mediajob-1" })
@@ -108,6 +110,7 @@ test("IPC returns normalized success envelopes", async () => {
     (await handlers["produdash:removeCustomVoice"]({}, { providerProfileId: "elevenlabs", voiceId: "voice-authorized" })).ok,
     true
   );
+  assert.equal((await handlers["produdash:chooseLocalProviderFile"]({}, { profileId: "piper-local", fieldKey: "modelPath" })).ok, true);
 });
 
 test("dashboard reset and delete-all clear only ProduDash library metadata", async () => {

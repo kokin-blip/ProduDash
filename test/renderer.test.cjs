@@ -1051,7 +1051,7 @@ test("Studio exposes only connected capability-compatible cloud modes with per-j
   assert.match(document.querySelector(".cloud-consent-check").textContent, /Consent for this job only/);
 });
 
-test("local whisper configuration uses native file selectors and never renders protected paths", async () => {
+test("local provider configuration uses native file selectors and never renders protected paths", async () => {
   const renderer = await setupRenderer();
   renderer.ui.providerCatalog.push({
     id: "whisper-cpp",
@@ -1075,7 +1075,7 @@ test("local whisper configuration uses native file selectors and never renders p
   renderer.ui.activeSection = "integrations";
   renderer.renderApp();
   const form = document.querySelector('[data-ai-provider-form="whisper-cpp"]');
-  assert.equal(form.querySelectorAll("[data-local-whisper-file]").length, 2);
+  assert.equal(form.querySelectorAll("[data-local-provider-file]").length, 2);
   assert.equal(form.querySelector('input[name="executablePath"]'), null);
   assert.doesNotMatch(form.textContent, /Users\/owner/);
   assert.match(form.textContent, /never downloads models/i);

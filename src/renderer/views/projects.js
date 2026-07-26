@@ -636,6 +636,14 @@ function renderLocalization(project) {
         label: `${profile.publicValues.voiceId} — configured runtime voice`
       });
     }
+    if (profile.providerType === "piper-local") {
+      options.push({
+        profile,
+        model,
+        voice: "configured-model",
+        label: "configured local model"
+      });
+    }
     options.push(
       ...customVoices
         .filter((voice) => voice.providerProfileId === profile.id)
@@ -862,7 +870,7 @@ function renderLocalization(project) {
                   <label><span>Voice direction</span><input name="instructions" maxlength="500" placeholder="Speak clearly and naturally." /></label>
                   <label class="checkbox-label localization-consent">
                     <input name="consent" type="checkbox" required />
-                    <span>Send this cue’s text for this preview and acknowledge the result is an AI-generated voice, not a human recording.</span>
+                    <span>Provide this cue to the selected local or cloud speech provider for this preview and acknowledge the result is AI-generated, not a human recording.</span>
                   </label>
                   <button class="ghost-button small" type="submit" data-pending-label="Generating…" ${
                     voiceOptions.length ? "" : "disabled"
@@ -897,7 +905,7 @@ function renderLocalization(project) {
                   <label><span>Voice direction</span><input name="instructions" maxlength="500" placeholder="Keep this speaker consistent." /></label>
                   <label class="checkbox-label localization-consent">
                     <input name="consent" type="checkbox" required />
-                    <span>Send up to 12 unvoiced cues from this speaker to this provider and model. Every result remains a draft requiring individual review.</span>
+                    <span>Provide up to 12 unvoiced cues from this speaker to the selected local or cloud provider. Every result remains a draft requiring individual review.</span>
                   </label>
                   <button class="ghost-button small" type="submit" data-pending-label="Generating speaker drafts…" ${
                     voiceOptions.length ? "" : "disabled"

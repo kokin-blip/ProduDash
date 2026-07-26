@@ -32,7 +32,7 @@ function createHandlers({
   chooseClipFiles,
   chooseMediaOutputFolder,
   chooseMediaJobThumbnail,
-  chooseLocalWhisperFile,
+  chooseLocalProviderFile,
   relocateClipFolder,
   openClipInFolder,
   openMediaJobOutput,
@@ -152,7 +152,7 @@ function createHandlers({
     "produdash:setAiWorkload": async (_event, payload) => providers.setWorkload(payload?.workloadId, payload?.selection),
     "produdash:createCustomVoice": async (event, payload) => providers.createCustomVoice(payload, await chooseCustomVoiceRecordings(event)),
     "produdash:removeCustomVoice": async (_event, payload) => providers.removeCustomVoice(payload),
-    "produdash:chooseLocalWhisperFile": async (event, payload) => chooseLocalWhisperFile(event, payload?.kind),
+    "produdash:chooseLocalProviderFile": async (event, payload) => chooseLocalProviderFile(event, payload?.profileId, payload?.fieldKey),
     "produdash:getClipLibrary": async (_event, payload) => mediaLibrary.query(payload),
     "produdash:rebuildClipSearchIndex": async (_event, payload) => mediaLibrary.rebuildSearchIndex(payload),
     "produdash:cancelClipSearchIndex": async () => mediaLibrary.cancelSearchIndexRebuild(),
@@ -416,20 +416,18 @@ function registerIpc({ store, connections, providers, mediaLibrary, projects, te
       bookmark: result.bookmarks?.[0] || null
     });
   };
-  const chooseLocalWhisperFile = async (event, kind) => {
-    if (!["executablePath", "modelPath"].includes(kind)) {
-      throw new AppError("INVALID_INPUT", "The local Whisper file type is invalid.");
-    }
+  const chooseLocalProviderFile = async (event, profileId, fieldKey) => {
+    const field = providers.getNativeCredentialField(profileId, fieldKey);
     const window = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(window, {
-      title: kind === "executablePath" ? "Choose whisper.cpp executable" : "Choose local Whisper model",
+      title: `Choose ${field.label}`,
       properties: ["openFile"],
       securityScopedBookmarks: true
     });
     if (result.canceled) return store.getAppState();
-    return providers.saveCredentialDraft("whisper-cpp", {
-      [kind]: result.filePaths[0],
-      ...(result.bookmarks?.[0] ? { [`${kind}Bookmark`]: result.bookmarks[0] } : {})
+    return providers.saveCredentialDraft(profileId, {
+      [fieldKey]: result.filePaths[0],
+      ...(result.bookmarks?.[0] ? { [`${fieldKey}Bookmark`]: result.bookmarks[0] } : {})
     });
   };
   const chooseMediaJobThumbnail = async (event, jobId, groupId) => {
@@ -696,7 +694,7 @@ function registerIpc({ store, connections, providers, mediaLibrary, projects, te
     chooseClipFiles,
     chooseMediaOutputFolder,
     chooseMediaJobThumbnail,
-    chooseLocalWhisperFile,
+    chooseLocalProviderFile,
     relocateClipFolder,
     openClipInFolder,
     openMediaJobOutput,

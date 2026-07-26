@@ -38,6 +38,14 @@ class ProviderService {
     return this.registry.listProviderTypes();
   }
 
+  getNativeCredentialField(profileId, fieldKey) {
+    const profile = this.store.getAiProvider(profileId);
+    const adapter = this.registry.get(profile.providerType);
+    const field = adapter.credentialFields.find((item) => item.key === fieldKey && item.type === "native-file");
+    if (!field) throw new AppError("INVALID_INPUT", "The selected local provider file type is invalid.");
+    return structuredClone(field);
+  }
+
   async saveCredentials(profileId, values) {
     const profile = this.store.getAiProvider(profileId);
     const adapter = this.registry.get(profile.providerType);
@@ -192,9 +200,11 @@ class ProviderService {
     const allowedBuiltInVoices =
       provider.profile.providerType === "openai"
         ? BUILT_IN_VOICES
-        : provider.profile.providerType === "openai-compatible" && provider.profile.publicValues?.voiceId
-          ? [provider.profile.publicValues.voiceId]
-          : [];
+        : provider.profile.providerType === "piper-local"
+          ? ["configured-model"]
+          : provider.profile.providerType === "openai-compatible" && provider.profile.publicValues?.voiceId
+            ? [provider.profile.publicValues.voiceId]
+            : [];
     const request = normalizeSpeechRequest(input, { allowedCustomVoices, allowedBuiltInVoices });
     validateSpeechConsent(input?.consent, {
       profileId: provider.profile.id,

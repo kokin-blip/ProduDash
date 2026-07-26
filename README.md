@@ -12,7 +12,7 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - Up to 100 recent products and 100 recent orders per refresh, with cursor pagination and safe partial-sync reporting.
 - Locally derived revenue, order, fulfillment, and zero-inventory signals based only on imported Shopify data.
 - Capability-based AI provider profiles, model metadata, and independent Advisor, Inbox Drafting, Clip Analysis, and Transcription workload assignments.
-- Gemini, OpenAI, Anthropic Claude, custom OpenAI-compatible, and local whisper.cpp provider adapters with injected test clients and capability-gated workloads.
+- Gemini, OpenAI, Anthropic Claude, custom OpenAI-compatible, local whisper.cpp, and user-configured local Piper provider adapters with injected test clients and capability-gated workloads.
 - OpenAI timestamped cloud transcription and optional user-supplied whisper.cpp executable/model paths; ProduDash never downloads local models.
 - Explicit local, transcript-only, transcript-plus-frames, and Gemini native-video analysis modes with exact per-job provider/model/data-category consent and no silent provider or mode fallback.
 - Schema-validated AI candidates with bounded timestamps, overlap/duplicate rejection, limited boundary snapping, eleven stored component scores, and concise rationale.
@@ -76,7 +76,7 @@ Public distribution must replace manual custom-app tokens with a hosted OAuth fl
 
 ## Configure AI providers
 
-1. Choose Gemini, OpenAI, Anthropic Claude, a custom OpenAI-compatible endpoint, or local whisper.cpp.
+1. Choose Gemini, OpenAI, Anthropic Claude, a custom OpenAI-compatible endpoint, local whisper.cpp, or local Piper.
 2. Open **Integrations** in ProduDash.
 3. Under **AI providers**, enter the key and choose **Save and validate**.
 4. Review the model’s verified capabilities and choose compatible assignments under **Workload assignments**.
@@ -84,6 +84,15 @@ Public distribution must replace manual custom-app tokens with a hosted OAuth fl
 ProduDash makes a small validation request before marking a cloud profile connected. Stored credentials are not treated as a successful connection. OpenAI-compatible remote endpoints require HTTPS; HTTP is accepted only for explicit loopback addresses. URLs with credentials, query strings, fragments, invalid ports, cross-origin requests, and redirects are rejected.
 
 For local transcription, choose an existing whisper.cpp executable and model through the native file pickers. Protected paths stay in the encrypted vault and are never returned to the renderer. ProduDash does not download, update, or execute an installer for whisper.cpp or its models. After validation, assign a transcription-capable model under **Workload assignments**. “Same as advisor” resolves only when the Advisor model has the capabilities required by the inheriting workload.
+
+For local speech, choose a user-installed Piper executable and an ONNX voice
+model whose matching `.onnx.json` file is beside it. ProduDash runs a real local
+WAV validation before reporting the profile connected, passes text through
+standard input, uses fixed argument arrays with no shell, and returns only
+bounded audio. Executable/model paths and macOS bookmarks remain encrypted and
+never enter renderer state. ProduDash does not bundle, download, update, or
+license Piper or its voice models; review the selected runtime/model licenses
+before distribution.
 
 Inbox draft requests include only the selected business, a bounded operator instruction, and the latest bounded messages from one conversation. Output is schema-validated before storage. It can contain a draft, intent, summary, possible order details, a recommended action, and risk flags. It cannot send a message or perform an external side effect, and ProduDash never silently switches providers.
 
@@ -108,9 +117,11 @@ Open **Content Studio → Library** to add folders or loose video files. ProduDa
 
 The library never copies, uploads, modifies, or deletes source media. Removing a video or folder removes only its ProduDash index record and cached thumbnail.
 
-Library search uses a bounded local metadata index with recorded provenance. It
-can match filename/tag concepts without uploading media and can be rebuilt or
-canceled safely. It does not claim to understand video content.
+Library search uses a bounded local index with recorded provenance. It can
+match filename/tag concepts and current local project-transcript text, returning
+bounded timestamped why-match excerpts without uploading media. The index can
+be rebuilt or canceled safely. It is deterministic keyword/synonym search and
+does not claim model-generated embeddings or visual understanding.
 
 The bundled binaries are included for development, CI, local inspection, and thumbnail generation. External distribution remains blocked until the owner completes legal review of the applicable FFmpeg/ffprobe GPL obligations or supplies approved replacement builds.
 
@@ -160,7 +171,7 @@ provider-generated caption drafts only after an exact provider/model/transcript
 disclosure is confirmed; every result remains inactive until human review.
 Projects can also apply a reviewed local HD-frame resize. The UI and manifest
 state truthfully that resizing pixels does not recover missing source detail.
-Projects can generate bounded OpenAI built-in or authorized custom-voice previews for individual
+Projects can generate bounded OpenAI built-in, configured local Piper, or authorized custom-voice previews for individual
 transcript cues after exact provider/model/text consent and the required
 AI-generated-voice disclosure. Preview audio is stored behind an opaque local
 URL, contains safe provenance, can be played and permanently deleted, and is
@@ -173,8 +184,9 @@ either selected source recording and labels resulting audio as synthetic.
 Provider account eligibility and supplemental terms still apply.
 Voice choices are scoped to the selected provider: OpenAI exposes its supported
 built-in voices, ElevenLabs exposes only ProduDash-authorized custom voices, and
-an OpenAI-compatible loopback runtime may expose one explicitly configured
-voice ID. Projects with speaker-labeled transcript cues can generate up to 12
+Piper exposes only its configured local model. An OpenAI-compatible loopback
+runtime may expose one explicitly configured voice ID. Projects with
+speaker-labeled transcript cues can generate up to 12
 unvoiced drafts for one speaker in a single confirmed operation. Every segment
 remains independently playable, removable, and excluded from rendering until
 human review.
@@ -198,8 +210,12 @@ memory, accelerator, and matching-command availability without reading
 personal files or uploading device inventory. “Compatible” means only that the
 hardware meets the documented baseline; “installed” requires a matching local
 command. ProduDash never downloads local executables or model weights
-automatically. An explicitly configured loopback OpenAI-compatible endpoint may
-declare `speech_generation` for local TTS after its connection test succeeds.
+automatically. Piper is the first direct local speech adapter: it becomes
+available only after its selected executable and model create a valid WAV in a
+local connection test. An explicitly configured loopback OpenAI-compatible
+endpoint may also declare `speech_generation` after its connection test
+succeeds. Kokoro, Chatterbox, XTTS, RVC, and Tortoise remain compatibility-only
+until their distinct runtime and consent adapters are completed.
 
 ## Projects and local editor
 

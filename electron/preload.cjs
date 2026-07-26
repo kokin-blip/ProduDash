@@ -106,7 +106,7 @@ contextBridge.exposeInMainWorld("produdash", {
   setAiWorkload: (workloadId, selection) => invoke("produdash:setAiWorkload", { workloadId, selection }),
   createCustomVoice: (payload) => invoke("produdash:createCustomVoice", payload),
   removeCustomVoice: (payload) => invoke("produdash:removeCustomVoice", payload),
-  chooseLocalWhisperFile: (kind) => invoke("produdash:chooseLocalWhisperFile", { kind }),
+  chooseLocalProviderFile: (profileId, fieldKey) => invoke("produdash:chooseLocalProviderFile", { profileId, fieldKey }),
   getClipLibrary: (options) => invoke("produdash:getClipLibrary", options),
   rebuildClipSearchIndex: () => invoke("produdash:rebuildClipSearchIndex", {}),
   cancelClipSearchIndex: () => invoke("produdash:cancelClipSearchIndex", {}),
