@@ -556,6 +556,18 @@ async function handleClick(event) {
     return;
   }
 
+  const localLikenessOpen = event.target.closest("[data-local-likeness-open]");
+  if (localLikenessOpen) {
+    document.querySelector("[data-local-likeness-dialog]")?.showModal();
+    return;
+  }
+
+  const localLikenessClose = event.target.closest("[data-local-likeness-close]");
+  if (localLikenessClose) {
+    localLikenessClose.closest("dialog")?.close();
+    return;
+  }
+
   const customVoiceRemove = event.target.closest("[data-custom-voice-remove]");
   if (customVoiceRemove) {
     const providerType = customVoiceRemove.dataset.providerType;
@@ -1755,6 +1767,42 @@ async function handleSubmit(event) {
       }
     );
     await refreshBrandTemplates();
+    renderApp();
+    return;
+  }
+
+  if (form.matches("[data-local-likeness-form]")) {
+    event.preventDefault();
+    const accepted = ui.appState.voiceLikeness?.acceptance?.termsVersion === "2026-07-24";
+    const acceptance = accepted
+      ? null
+      : {
+          termsVersion: "2026-07-24",
+          legalName: form.elements.legalName.value,
+          relationship: form.elements.relationship.value,
+          adultConfirmed: form.elements.adultConfirmed.checked,
+          rightsConfirmed: form.elements.rightsConfirmed.checked,
+          consentConfirmed: form.elements.consentConfirmed.checked,
+          syntheticDisclosureConfirmed: form.elements.syntheticDisclosureConfirmed.checked,
+          misuseResponsibilityConfirmed: form.elements.misuseResponsibilityConfirmed.checked,
+          providerTermsConfirmed: form.elements.providerTermsConfirmed.checked
+        };
+    await runAction(
+      "local-likeness-authorize",
+      event.submitter,
+      () =>
+        api.authorizeConfiguredLocalVoice({
+          providerProfileId: form.elements.providerProfileId.value,
+          name: form.elements.name.value,
+          acceptance
+        }),
+      {
+        applyResult: (state) => {
+          setAppState(state);
+          form.closest("dialog")?.close();
+        }
+      }
+    );
     renderApp();
     return;
   }

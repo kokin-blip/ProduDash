@@ -41,7 +41,7 @@ class ProviderService {
   getNativeCredentialField(profileId, fieldKey) {
     const profile = this.store.getAiProvider(profileId);
     const adapter = this.registry.get(profile.providerType);
-    const field = adapter.credentialFields.find((item) => item.key === fieldKey && item.type === "native-file");
+    const field = adapter.credentialFields.find((item) => item.key === fieldKey && ["native-file", "native-folder"].includes(item.type));
     if (!field) throw new AppError("INVALID_INPUT", "The selected local provider file type is invalid.");
     return structuredClone(field);
   }
@@ -304,6 +304,40 @@ class ProviderService {
       consentId: created.consentId,
       consentEvidenceHash: created.consentEvidenceHash || null,
       language,
+      createdAt: new Date().toISOString(),
+      aiGenerated: true,
+      disclosure: "Synthetic voice likeness; not the original speaker recording."
+    });
+    return this.store.getAppState();
+  }
+
+  async authorizeConfiguredLocalVoice(input) {
+    const profile = this.store.getAiProvider(input?.providerProfileId);
+    if (profile.status !== "connected") {
+      throw new AppError("PROVIDER_NOT_READY", "Validate the selected local likeness provider before authorizing its voice.");
+    }
+    const adapter = this.registry.get(profile.providerType);
+    if (!adapter.configuredVoiceId) {
+      throw new AppError("CAPABILITY_UNSUPPORTED", "This provider does not expose a configured local voice likeness.");
+    }
+    if (!this.store.hasCurrentVoiceLikenessAcceptance(LIKENESS_TERMS_VERSION)) {
+      const acceptance = requireLikenessAcceptance(input?.acceptance);
+      await this.store.acceptVoiceLikenessTerms(acceptance);
+    }
+    const name = boundedString(input?.name, { label: "Local voice name", min: 1, max: 64 });
+    await this.store.addCustomVoice({
+      id: adapter.configuredVoiceId,
+      name,
+      providerProfileId: profile.id,
+      providerType: profile.providerType,
+      consentId: null,
+      consentEvidenceHash: null,
+      language: boundedString(profile.publicValues?.language, {
+        label: "Local voice language",
+        min: 2,
+        max: 16,
+        fallback: "und"
+      }),
       createdAt: new Date().toISOString(),
       aiGenerated: true,
       disclosure: "Synthetic voice likeness; not the original speaker recording."

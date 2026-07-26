@@ -376,6 +376,24 @@ function createInitialState() {
         ],
         lastValidatedAt: null,
         error: null
+      },
+      {
+        id: "xtts-local",
+        providerType: "xtts-local",
+        name: "Local XTTS",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: "xtts-local-model",
+        models: [
+          {
+            id: "xtts-local-model",
+            name: "Configured local XTTS model",
+            capabilities: ["speech_generation"]
+          }
+        ],
+        publicValues: { language: "en" },
+        lastValidatedAt: null,
+        error: null
       }
     ],
     aiWorkloads: {

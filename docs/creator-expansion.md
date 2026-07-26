@@ -243,7 +243,12 @@ Nothing below is currently exposed as a placeholder control.
   encrypted executable/model paths, a real local conversion probe, fixed
   shell-free arguments, and bounded WAV output. Conversions require first-use
   likeness terms plus exact per-operation source authorization; they create a
-  new unreviewed preview and never modify the source audio. The other scanned engines remain
+  new unreviewed preview and never modify the source audio. Local XTTS now uses
+  a bundled network-denying Python wrapper around a separately installed
+  environment and explicitly selected local model/config/reference files.
+  Model loading is validated without synthesizing a likeness; the configured
+  voice remains unavailable until the versioned likeness acceptance is recorded.
+  The other scanned engines remain
   compatibility-only pending their distinct runtime and likeness contracts.
   Loopback OpenAI-compatible endpoints may explicitly declare
   `speech_generation`.

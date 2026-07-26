@@ -751,6 +751,19 @@ test("Projects render escaped metadata, a semantic transcript editor, and bounde
               capabilities: ["voice_conversion"]
             }
           ]
+        },
+        {
+          id: "xtts-local",
+          providerType: "xtts-local",
+          name: "Local XTTS",
+          status: "connected",
+          models: [
+            {
+              id: "xtts-local-model",
+              name: "Configured local XTTS model",
+              capabilities: ["speech_generation"]
+            }
+          ]
         }
       ],
       voiceLikeness: {
@@ -959,6 +972,9 @@ test("Projects render escaped metadata, a semantic transcript editor, and bounde
   assert.match(document.querySelector("[data-rvc-voiceover-dialog]").textContent, /original preview remains unchanged/i);
   assert.match(document.querySelector("[data-rvc-voiceover-dialog]").textContent, /privacy, publicity, biometric/i);
   assert.match(document.querySelector("[data-rvc-voiceover-dialog]").textContent, /Local RVC/);
+  assert.equal(document.querySelector("[data-local-likeness-open]").disabled, false);
+  assert.match(document.querySelector("[data-local-likeness-dialog]").textContent, /retains its encrypted path, not a copy/i);
+  assert.match(document.querySelector("[data-local-likeness-dialog]").textContent, /Local XTTS/);
   assert.match(document.querySelector("[data-project-voiceover-create]").textContent, /GPT-4o mini TTS/);
   assert.equal(document.querySelector("[data-project-voiceover-create] [name='providerSelection']"), null);
   assert.match(document.querySelector("[data-project-voiceover-create] [name='voiceSelection']").textContent, /marin — built-in/);
@@ -1078,6 +1094,15 @@ test("local provider configuration uses native file selectors and never renders 
       { key: "modelPath", label: "Whisper model file", type: "native-file", sensitive: true }
     ]
   });
+  renderer.ui.providerCatalog.push({
+    id: "xtts-local",
+    name: "Local XTTS",
+    credentialFields: [
+      { key: "pythonPath", label: "XTTS Python executable", type: "native-file", sensitive: true },
+      { key: "modelPath", label: "Local XTTS model folder", type: "native-folder", sensitive: true },
+      { key: "language", label: "XTTS language code", type: "text", sensitive: false }
+    ]
+  });
   const state = baseState();
   state.aiProviders.push({
     id: "whisper-cpp",
@@ -1088,6 +1113,16 @@ test("local provider configuration uses native file selectors and never renders 
     selectedModelId: "local-whisper",
     models: [{ id: "local-whisper", name: "Local whisper.cpp", capabilities: ["audio_transcription"] }]
   });
+  state.aiProviders.push({
+    id: "xtts-local",
+    providerType: "xtts-local",
+    name: "Local XTTS",
+    status: "disconnected",
+    credentialStatus: "missing",
+    selectedModelId: "xtts-local-model",
+    publicValues: { language: "en" },
+    models: [{ id: "xtts-local-model", name: "Configured local XTTS model", capabilities: ["speech_generation"] }]
+  });
   renderer.setAppState(state);
   renderer.ui.activeSection = "integrations";
   renderer.renderApp();
@@ -1096,6 +1131,9 @@ test("local provider configuration uses native file selectors and never renders 
   assert.equal(form.querySelector('input[name="executablePath"]'), null);
   assert.doesNotMatch(form.textContent, /Users\/owner/);
   assert.match(form.textContent, /never downloads models/i);
+  const xttsForm = document.querySelector('[data-ai-provider-form="xtts-local"]');
+  assert.match(xttsForm.querySelector('[data-local-provider-file="modelPath"]').textContent, /Choose folder/);
+  assert.equal(xttsForm.querySelector('input[name="modelPath"]'), null);
 });
 
 test("Studio safely renders durable job progress, candidate approval, and partial artifacts", async () => {

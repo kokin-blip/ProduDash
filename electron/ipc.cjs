@@ -151,6 +151,7 @@ function createHandlers({
     "produdash:removeAiProviderCredentials": async (_event, payload) => providers.removeCredentials(payload?.profileId),
     "produdash:setAiWorkload": async (_event, payload) => providers.setWorkload(payload?.workloadId, payload?.selection),
     "produdash:createCustomVoice": async (event, payload) => providers.createCustomVoice(payload, await chooseCustomVoiceRecordings(event)),
+    "produdash:authorizeConfiguredLocalVoice": async (_event, payload) => providers.authorizeConfiguredLocalVoice(payload),
     "produdash:removeCustomVoice": async (_event, payload) => providers.removeCustomVoice(payload),
     "produdash:chooseLocalProviderFile": async (event, payload) => chooseLocalProviderFile(event, payload?.profileId, payload?.fieldKey),
     "produdash:getClipLibrary": async (_event, payload) => mediaLibrary.query(payload),
@@ -484,7 +485,7 @@ function registerIpc({ store, connections, providers, mediaLibrary, projects, te
     const window = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(window, {
       title: `Choose ${field.label}`,
-      properties: ["openFile"],
+      properties: [field.type === "native-folder" ? "openDirectory" : "openFile"],
       securityScopedBookmarks: true
     });
     if (result.canceled) return store.getAppState();

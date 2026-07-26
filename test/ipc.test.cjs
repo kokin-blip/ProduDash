@@ -30,6 +30,7 @@ function fixtures(isTrustedSender) {
   const providers = {
     getCatalog: () => [],
     getNativeCredentialField: () => ({ key: "modelPath", label: "Local model", type: "native-file" }),
+    authorizeConfiguredLocalVoice: async () => state,
     removeCustomVoice: async () => state,
     translateTranscript: async () => ({
       sourceLanguage: "en",
@@ -113,6 +114,7 @@ test("IPC returns normalized success envelopes", async () => {
     (await handlers["produdash:removeCustomVoice"]({}, { providerProfileId: "elevenlabs", voiceId: "voice-authorized" })).ok,
     true
   );
+  assert.equal((await handlers["produdash:authorizeConfiguredLocalVoice"]({}, { providerProfileId: "xtts-local" })).ok, true);
   assert.equal((await handlers["produdash:chooseLocalProviderFile"]({}, { profileId: "piper-local", fieldKey: "modelPath" })).ok, true);
 });
 

@@ -16,6 +16,7 @@ const { WhisperCppProviderAdapter } = require("./ai/adapters/whisper-cpp.cjs");
 const { PiperLocalProviderAdapter } = require("./ai/adapters/piper-local.cjs");
 const { KokoroLocalProviderAdapter } = require("./ai/adapters/kokoro-local.cjs");
 const { RvcLocalProviderAdapter } = require("./ai/adapters/rvc-local.cjs");
+const { XttsLocalProviderAdapter } = require("./ai/adapters/xtts-local.cjs");
 const { ProviderRegistry } = require("./ai/provider-registry.cjs");
 const { ProviderService } = require("./ai/provider-service.cjs");
 const { MediaLibrary } = require("./media/media-library.cjs");
@@ -114,6 +115,9 @@ if (hasSingleInstanceLock) {
           startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
         }),
         new RvcLocalProviderAdapter({
+          startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
+        }),
+        new XttsLocalProviderAdapter({
           startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
         })
       ]);

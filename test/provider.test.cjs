@@ -423,6 +423,84 @@ test("local RVC conversion requires first-use likeness acceptance and exact per-
   );
 });
 
+test("configured local likenesses remain unavailable until explicit first-use authorization", async (t) => {
+  const harness = await createHarness();
+  t.after(harness.cleanup);
+  let generatedVoice;
+  const adapter = {
+    id: "xtts-local",
+    name: "Local XTTS",
+    configuredVoiceId: "xtts-configured-likeness",
+    credentialFields: [
+      { key: "pythonPath", label: "Python", sensitive: true, required: true },
+      { key: "modelPath", label: "Model", sensitive: true, required: true },
+      { key: "referencePath", label: "Reference", sensitive: true, required: true },
+      { key: "language", label: "Language", sensitive: false, required: true }
+    ],
+    listModels: () => [
+      {
+        id: "xtts-local-model",
+        name: "Configured local XTTS model",
+        capabilities: [AI_CAPABILITIES.SPEECH_GENERATION]
+      }
+    ],
+    validate: async () => true,
+    generateSpeech: async ({ voice }) => {
+      generatedVoice = voice;
+      return Buffer.alloc(64, 1);
+    }
+  };
+  const providers = new ProviderService({ store: harness.store, registry: new ProviderRegistry([adapter]) });
+  await providers.initialize();
+  await harness.store.saveAiProviderCredentials(
+    "xtts-local",
+    {
+      pythonPath: "/private/python",
+      modelPath: "/private/xtts",
+      referencePath: "/private/voice.wav",
+      language: "en"
+    },
+    adapter.credentialFields
+  );
+  await providers.testConnection("xtts-local");
+  const speechInput = {
+    providerProfileId: "xtts-local",
+    modelId: "xtts-local-model",
+    input: "Local likeness preview.",
+    voice: "xtts-configured-likeness",
+    consent: {
+      approved: true,
+      providerProfileId: "xtts-local",
+      modelId: "xtts-local-model",
+      voice: "xtts-configured-likeness",
+      dataCategories: ["voiceover_text"],
+      aiGeneratedDisclosureAccepted: true
+    }
+  };
+  await assert.rejects(() => providers.generateSpeechPreview(speechInput), { code: "CUSTOM_VOICE_UNAVAILABLE" });
+  const acceptance = {
+    termsVersion: "2026-07-24",
+    legalName: "Authorized Adult",
+    relationship: "self",
+    adultConfirmed: true,
+    rightsConfirmed: true,
+    consentConfirmed: true,
+    syntheticDisclosureConfirmed: true,
+    misuseResponsibilityConfirmed: true,
+    providerTermsConfirmed: true
+  };
+  const state = await providers.authorizeConfiguredLocalVoice({
+    providerProfileId: "xtts-local",
+    name: "Authorized XTTS voice",
+    acceptance
+  });
+  assert.equal(state.voiceLikeness.voices[0].id, "xtts-configured-likeness");
+  assert.equal(JSON.stringify(state).includes("/private/"), false);
+  const result = await providers.generateSpeechPreview(speechInput);
+  assert.equal(generatedVoice, "xtts-configured-likeness");
+  assert.equal(result.metadata.voiceType, "custom");
+});
+
 test("custom voice creation requires first-use acceptance and authorizes only the created voice", async (t) => {
   const harness = await createHarness();
   t.after(harness.cleanup);

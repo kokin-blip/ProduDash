@@ -673,6 +673,11 @@ function renderLocalization(project) {
         .map(({ profile }) => [profile.id, profile])
     ).values()
   ];
+  const localLikenessProfiles = [
+    ...new Map(
+      speechProviders.filter(({ profile }) => ["xtts-local"].includes(profile.providerType)).map(({ profile }) => [profile.id, profile])
+    ).values()
+  ];
   const likenessAccepted = ui.appState.voiceLikeness?.acceptance?.termsVersion === "2026-07-24";
   return `
     <details class="disclosure project-localization">
@@ -782,6 +787,9 @@ function renderLocalization(project) {
             <button class="ghost-button small" type="button" data-custom-voice-open ${
               customVoiceProfiles.length ? "" : "disabled"
             }>Create custom voice likeness</button>
+            <button class="ghost-button small" type="button" data-local-likeness-open ${
+              localLikenessProfiles.length ? "" : "disabled"
+            }>Authorize configured local likeness</button>
             <small>${
               customVoiceProfiles.length
                 ? `${customVoices.length} authorized custom voice${customVoices.length === 1 ? "" : "s"} in ProduDash`
@@ -848,6 +856,47 @@ function renderLocalization(project) {
               <div class="button-row">
                 <button class="primary-button small" type="submit" data-pending-label="Creating voice…">Accept and choose recordings</button>
                 <button class="ghost-button small" type="button" data-custom-voice-close>Cancel</button>
+              </div>
+            </form>
+          </dialog>
+          <dialog class="voice-likeness-dialog" data-local-likeness-dialog>
+            <form method="dialog" data-local-likeness-form>
+              <div class="panel-heading">
+                <div>
+                  <h2>Authorize a configured local voice likeness</h2>
+                  <p>The selected reference WAV stays on this computer. ProduDash retains its encrypted path, not a copy of the recording.</p>
+                </div>
+                <button class="icon-button" type="button" aria-label="Close" data-local-likeness-close>×</button>
+              </div>
+              ${
+                likenessAccepted
+                  ? `<div class="inline-message"><strong>First-use terms accepted</strong><span>Authorization remains limited to the configured local reference and your intended lawful use.</span></div>`
+                  : `<div class="voice-likeness-terms">
+                      <p><strong>Read every term before continuing.</strong> Local voice cloning can produce speech that listeners may mistake for a real recording. Only configure and use a reference voice that belongs to you or an adult who has expressly authorized this synthetic use.</p>
+                      <p>Do not use this feature to impersonate, deceive, defraud, harass, evade verification, fabricate consent, create false endorsements, or misrepresent who said something. Local execution and model safeguards do not replace your responsibility.</p>
+                      <p>Voice data may be protected by privacy, publicity, biometric, employment, consumer-protection, election, or criminal laws. Keep written authorization, honor withdrawal requests, review every runtime/model license, and disclose synthetic audio whenever context or law requires it.</p>
+                      <label><span>Consenting adult’s full legal name</span><input name="legalName" maxlength="120" required /></label>
+                      <label><span>Your relationship to the voice</span><select name="relationship">
+                        <option value="self">I am the voice owner</option>
+                        <option value="authorized_representative">I am the authorized representative</option>
+                      </select></label>
+                      <label class="checkbox-label"><input name="adultConfirmed" type="checkbox" required /><span>The voice owner is an adult with capacity to consent.</span></label>
+                      <label class="checkbox-label"><input name="rightsConfirmed" type="checkbox" required /><span>I own or have documented authority to use the configured reference and likeness.</span></label>
+                      <label class="checkbox-label"><input name="consentConfirmed" type="checkbox" required /><span>The voice owner knowingly authorizes local synthetic voice generation and its intended use.</span></label>
+                      <label class="checkbox-label"><input name="syntheticDisclosureConfirmed" type="checkbox" required /><span>I will clearly disclose synthetic audio wherever context or law requires it.</span></label>
+                      <label class="checkbox-label"><input name="misuseResponsibilityConfirmed" type="checkbox" required /><span>I will not use this feature for impersonation, fraud, deception, harassment, false endorsement, or verification bypass.</span></label>
+                      <label class="checkbox-label"><input name="providerTermsConfirmed" type="checkbox" required /><span>I have reviewed and agree to the selected runtime, model, and applicable third-party terms and licenses.</span></label>
+                    </div>`
+              }
+              <label><span>Configured local provider</span><select name="providerProfileId" required>
+                ${localLikenessProfiles
+                  .map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`)
+                  .join("")}
+              </select></label>
+              <label><span>Authorized voice name</span><input name="name" maxlength="64" required placeholder="My authorized local voice" /></label>
+              <div class="button-row">
+                <button class="primary-button small" type="submit" data-pending-label="Authorizing…">Accept and authorize locally</button>
+                <button class="ghost-button small" type="button" data-local-likeness-close>Cancel</button>
               </div>
             </form>
           </dialog>

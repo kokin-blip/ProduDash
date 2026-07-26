@@ -12,7 +12,7 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - Up to 100 recent products and 100 recent orders per refresh, with cursor pagination and safe partial-sync reporting.
 - Locally derived revenue, order, fulfillment, and zero-inventory signals based only on imported Shopify data.
 - Capability-based AI provider profiles, model metadata, and independent Advisor, Inbox Drafting, Clip Analysis, and Transcription workload assignments.
-- Gemini, OpenAI, Anthropic Claude, custom OpenAI-compatible, local whisper.cpp, and user-configured local Piper/Kokoro provider adapters with injected test clients and capability-gated workloads.
+- Gemini, OpenAI, Anthropic Claude, custom OpenAI-compatible, local whisper.cpp, and user-configured local Piper/Kokoro/XTTS provider adapters with injected test clients and capability-gated workloads.
 - OpenAI timestamped cloud transcription and optional user-supplied whisper.cpp executable/model paths; ProduDash never downloads local models.
 - Explicit local, transcript-only, transcript-plus-frames, and Gemini native-video analysis modes with exact per-job provider/model/data-category consent and no silent provider or mode fallback.
 - Schema-validated AI candidates with bounded timestamps, overlap/duplicate rejection, limited boundary snapping, eleven stored component scores, and concise rationale.
@@ -76,7 +76,7 @@ Public distribution must replace manual custom-app tokens with a hosted OAuth fl
 
 ## Configure AI providers
 
-1. Choose Gemini, OpenAI, Anthropic Claude, a custom OpenAI-compatible endpoint, local whisper.cpp, local Piper, or local Kokoro CLI.
+1. Choose Gemini, OpenAI, Anthropic Claude, a custom OpenAI-compatible endpoint, local whisper.cpp, local Piper, local Kokoro CLI, or local XTTS.
 2. Open **Integrations** in ProduDash.
 3. Under **AI providers**, enter the key and choose **Save and validate**.
 4. Review the model’s verified capabilities and choose compatible assignments under **Workload assignments**.
@@ -100,6 +100,19 @@ a bounded WAV with `--no-play --batch --save`, and later previews use that same
 fixed local contract. ProduDash does not install Kokoro, `espeak-ng`, Python
 packages, or model weights, and it does not support arbitrary CLI arguments or
 voice mixing in this adapter.
+
+For XTTS likeness speech, choose a Python executable from a separately managed
+environment, a complete local XTTS model folder, its `config.json`, one
+authorized WAV reference, and a supported language code. ProduDash’s bundled
+wrapper uses the official local Python API, reads project text from standard
+input, blocks network connections, and forces Hugging Face/Transformers offline
+mode; it never downloads a model or Python package. Connection validation loads
+the selected local model without generating a likeness. The configured voice
+does not appear in Projects until the user separately accepts the first-use
+likeness terms and authorizes it. Runtime/model/reference paths and macOS
+bookmarks remain encrypted. Review the
+[Coqui XTTS documentation](https://coqui-tts.readthedocs.io/en/latest/inference.html)
+and the selected model license before use or distribution.
 
 Inbox draft requests include only the selected business, a bounded operator instruction, and the latest bounded messages from one conversation. Output is schema-validated before storage. It can contain a draft, intent, summary, possible order details, a recommended action, and risk flags. It cannot send a message or perform an external side effect, and ProduDash never silently switches providers.
 
@@ -178,7 +191,7 @@ provider-generated caption drafts only after an exact provider/model/transcript
 disclosure is confirmed; every result remains inactive until human review.
 Projects can also apply a reviewed local HD-frame resize. The UI and manifest
 state truthfully that resizing pixels does not recover missing source detail.
-Projects can generate bounded OpenAI built-in, configured local Piper/Kokoro, or authorized custom-voice previews for individual
+Projects can generate bounded OpenAI built-in, configured local Piper/Kokoro, or authorized local/cloud custom-voice previews for individual
 transcript cues after exact provider/model/text consent and the required
 AI-generated-voice disclosure. Preview audio is stored behind an opaque local
 URL, contains safe provenance, can be played and permanently deleted, and is
@@ -227,12 +240,13 @@ memory, accelerator, and matching-command availability without reading
 personal files or uploading device inventory. “Compatible” means only that the
 hardware meets the documented baseline; “installed” requires a matching local
 command. ProduDash never downloads local executables or model weights
-automatically. Piper and the separately installed `kokoro-tts` CLI are direct
-local speech adapters, while RVC is a direct local voice-conversion adapter.
+automatically. Piper, the separately installed `kokoro-tts` CLI, and the
+offline user-configured XTTS runtime are direct local speech adapters, while
+RVC is a direct local voice-conversion adapter.
 Each becomes available only after its selected runtime creates a valid WAV in
 a local connection test. An explicitly configured
 loopback OpenAI-compatible endpoint may also declare `speech_generation` after
-its connection test succeeds. Chatterbox, XTTS, and Tortoise remain
+its connection test succeeds. Chatterbox and Tortoise remain
 compatibility-only until their distinct runtime and consent adapters are
 completed.
 

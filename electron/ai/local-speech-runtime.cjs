@@ -14,14 +14,14 @@ function isWav(buffer) {
   );
 }
 
-function runLocalSpeechCommand({ command, args, input, timeoutMs = 120_000, runtimeName }, spawnProcess = spawn) {
+function runLocalSpeechCommand({ command, args, input, timeoutMs = 120_000, runtimeName, extraEnvironment = {} }, spawnProcess = spawn) {
   return new Promise((resolve, reject) => {
     const name = String(runtimeName || "The local speech runtime").slice(0, 80);
     const child = spawnProcess(command, args, {
       shell: false,
       windowsHide: true,
       stdio: ["pipe", "ignore", "pipe"],
-      env: workerEnvironment()
+      env: { ...workerEnvironment(), ...extraEnvironment }
     });
     let settled = false;
     let stderrBytes = 0;

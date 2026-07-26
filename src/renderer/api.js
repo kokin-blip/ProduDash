@@ -51,6 +51,7 @@ export const api = {
   removeAiProviderCredentials: (profileId) => unwrap(client().removeAiProviderCredentials(profileId)),
   setAiWorkload: (workloadId, selection) => unwrap(client().setAiWorkload(workloadId, selection)),
   createCustomVoice: (payload) => unwrap(client().createCustomVoice(payload)),
+  authorizeConfiguredLocalVoice: (payload) => unwrap(client().authorizeConfiguredLocalVoice(payload)),
   removeCustomVoice: (payload) => unwrap(client().removeCustomVoice(payload)),
   chooseLocalProviderFile: (profileId, fieldKey) => unwrap(client().chooseLocalProviderFile(profileId, fieldKey)),
   getClipLibrary: (options = {}) => unwrap(client().getClipLibrary(options)),

@@ -233,13 +233,14 @@ function renderAiProvider(profile) {
 
 function renderCredentialField(field, configuredFields = [], publicValues = {}, profileId = "") {
   const configured = configuredFields.includes(field.key);
-  if (field.type === "native-file") {
+  if (["native-file", "native-folder"].includes(field.type)) {
+    const noun = field.type === "native-folder" ? "folder" : "file";
     return `
       <div class="credential-field native-file-field">
         <span>${escapeHtml(field.label)}</span>
         <button class="ghost-button small" type="button" data-local-provider-file="${escapeHtml(field.key)}" data-profile-id="${escapeHtml(
           profileId
-        )}" data-pending-label="Choosing…">${configured ? "Replace file" : "Choose file"}</button>
+        )}" data-pending-label="Choosing…">${configured ? `Replace ${noun}` : `Choose ${noun}`}</button>
         <small>${configured ? "Stored as an encrypted local path" : "Not configured · ProduDash never downloads models"}</small>
       </div>
     `;
