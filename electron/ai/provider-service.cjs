@@ -149,10 +149,10 @@ class ProviderService {
     const selectedModelId = boundedString(modelId, { label: "AI model", min: 1, max: 200 });
     const model = profile.models.find((item) => item.id === selectedModelId);
     if (!model || !hasCapabilities(model, requiredCapabilities)) {
-      throw new AppError("CAPABILITY_UNSUPPORTED", "The selected model does not support structured transcript translation.");
+      throw new AppError("CAPABILITY_UNSUPPORTED", "The selected model does not support this operation.");
     }
     if (profile.status !== "connected") {
-      throw new AppError("PROVIDER_NOT_READY", "Validate the selected AI provider before translating a transcript.");
+      throw new AppError("PROVIDER_NOT_READY", "Validate the selected AI provider before using it.");
     }
     return {
       adapter: this.registry.get(profile.providerType),
@@ -230,6 +230,47 @@ class ProviderService {
           request.voiceType === "custom"
             ? "Synthetic voice likeness; not the original speaker recording."
             : "AI-generated voice; not a human recording."
+      }
+    };
+  }
+
+  async convertVoicePreview(input, inputAudio) {
+    const provider = this.resolveExplicitProvider(input?.providerProfileId, input?.modelId, [AI_CAPABILITIES.VOICE_CONVERSION]);
+    if (!this.store.hasCurrentVoiceLikenessAcceptance(LIKENESS_TERMS_VERSION)) {
+      const acceptance = requireLikenessAcceptance(input?.acceptance);
+      await this.store.acceptVoiceLikenessTerms(acceptance);
+    }
+    const consent = input?.consent;
+    if (
+      consent?.approved !== true ||
+      consent?.providerProfileId !== provider.profile.id ||
+      consent?.modelId !== provider.model.id ||
+      consent?.sourceVoiceAuthorized !== true ||
+      consent?.syntheticDisclosureAccepted !== true ||
+      !Array.isArray(consent?.dataCategories) ||
+      consent.dataCategories.length !== 1 ||
+      consent.dataCategories[0] !== "voice_audio"
+    ) {
+      throw new AppError(
+        "VOICE_CONVERSION_CONSENT_REQUIRED",
+        "Confirm the authorized source audio, configured RVC model, and synthetic-audio disclosure for this conversion."
+      );
+    }
+    const voiceName = boundedString(input?.voiceName, { label: "Converted voice name", min: 1, max: 64 });
+    const audio = await invokeCapability(provider.adapter, provider.model, AI_CAPABILITIES.VOICE_CONVERSION, {
+      credentials: provider.credentials,
+      inputAudio
+    });
+    return {
+      audio,
+      metadata: {
+        providerProfileId: provider.profile.id,
+        modelId: provider.model.id,
+        voice: voiceName,
+        voiceType: "custom",
+        format: "wav",
+        aiGenerated: true,
+        disclosure: "Synthetic voice likeness; not the original speaker recording."
       }
     };
   }

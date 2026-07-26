@@ -343,6 +343,86 @@ test("local Piper speech is provider-scoped and keeps paths out of returned meta
   });
 });
 
+test("local RVC conversion requires first-use likeness acceptance and exact per-use consent", async (t) => {
+  const harness = await createHarness();
+  t.after(harness.cleanup);
+  let conversionRequest;
+  const adapter = {
+    id: "rvc-local",
+    name: "Local RVC",
+    credentialFields: [
+      { key: "executablePath", label: "RVC executable", sensitive: true, required: true },
+      { key: "modelPath", label: "RVC model", sensitive: true, required: true }
+    ],
+    listModels: () => [
+      {
+        id: "rvc-local-model",
+        name: "Configured RVC voice model",
+        capabilities: [AI_CAPABILITIES.VOICE_CONVERSION]
+      }
+    ],
+    validate: async () => true,
+    convertVoice: async (request) => {
+      conversionRequest = request;
+      return Buffer.alloc(64, 1);
+    }
+  };
+  const providers = new ProviderService({ store: harness.store, registry: new ProviderRegistry([adapter]) });
+  await providers.initialize();
+  await harness.store.saveAiProviderCredentials(
+    "rvc-local",
+    { executablePath: "/private/rvc", modelPath: "/private/voice.pth" },
+    adapter.credentialFields
+  );
+  await providers.testConnection("rvc-local");
+  const acceptance = {
+    termsVersion: "2026-07-24",
+    legalName: "Authorized Adult",
+    relationship: "self",
+    adultConfirmed: true,
+    rightsConfirmed: true,
+    consentConfirmed: true,
+    syntheticDisclosureConfirmed: true,
+    misuseResponsibilityConfirmed: true,
+    providerTermsConfirmed: true
+  };
+  const input = {
+    providerProfileId: "rvc-local",
+    modelId: "rvc-local-model",
+    voiceName: "Authorized converted voice",
+    acceptance,
+    consent: {
+      approved: true,
+      providerProfileId: "rvc-local",
+      modelId: "rvc-local-model",
+      sourceVoiceAuthorized: true,
+      syntheticDisclosureAccepted: true,
+      dataCategories: ["voice_audio"]
+    }
+  };
+  await assert.rejects(
+    () => providers.convertVoicePreview({ ...input, acceptance: { ...acceptance, consentConfirmed: false } }, Buffer.alloc(64, 2)),
+    { code: "VOICE_LIKENESS_ACCEPTANCE_REQUIRED" }
+  );
+  const result = await providers.convertVoicePreview(input, Buffer.alloc(64, 2));
+  assert.equal(conversionRequest.inputAudio.length, 64);
+  assert.equal(result.metadata.voiceType, "custom");
+  assert.match(result.metadata.disclosure, /Synthetic voice likeness/);
+  assert.doesNotMatch(JSON.stringify(result.metadata), /private|\\.pth/i);
+  await assert.rejects(
+    () =>
+      providers.convertVoicePreview(
+        {
+          ...input,
+          acceptance: null,
+          consent: { ...input.consent, sourceVoiceAuthorized: false }
+        },
+        Buffer.alloc(64, 2)
+      ),
+    { code: "VOICE_CONVERSION_CONSENT_REQUIRED" }
+  );
+});
+
 test("custom voice creation requires first-use acceptance and authorizes only the created voice", async (t) => {
   const harness = await createHarness();
   t.after(harness.cleanup);

@@ -295,6 +295,69 @@ function createHandlers({
         throw error;
       }
     },
+    "produdash:convertProjectVoiceover": async (_event, payload) => {
+      const project = projects.get(payload?.projectId);
+      const sourceVoiceover = project.draft.localization?.voiceovers?.find((item) => item.id === payload?.voiceoverId);
+      if (!sourceVoiceover) throw new AppError("VOICEOVER_NOT_FOUND", "Voiceover preview not found.");
+      const resolved = brandAssets.resolve(sourceVoiceover.assetId, "voiceover");
+      const sourceAudio = await fs.promises.readFile(resolved.filePath);
+      let asset;
+      try {
+        const generated = await providers.convertVoicePreview(payload, sourceAudio);
+        asset = await brandAssets.importGeneratedVoiceover(generated.audio, {
+          name: `${project.title} — converted voice preview`,
+          projectId: project.id,
+          sourceId: sourceVoiceover.sourceId,
+          textHash: sourceVoiceover.provenance.textHash,
+          ...generated.metadata
+        });
+        const end = Number((sourceVoiceover.start + Number(asset.duration || 0)).toFixed(3));
+        if (!asset.duration || end > project.draft.totalDuration) {
+          throw new AppError("VOICEOVER_TIMING_INVALID", "The converted preview does not fit inside the edited timeline.");
+        }
+        const localization = project.draft.localization || {
+          sourceLanguage: "und",
+          activeVariantId: null,
+          variants: [],
+          voiceovers: []
+        };
+        return await projects.saveDraft(
+          project.id,
+          {
+            ...project.draft,
+            localization: {
+              ...localization,
+              voiceovers: [
+                ...(localization.voiceovers || []),
+                {
+                  id: `voiceover-${crypto.randomUUID()}`,
+                  sourceId: sourceVoiceover.sourceId,
+                  assetId: asset.id,
+                  start: sourceVoiceover.start,
+                  end,
+                  status: "draft",
+                  originalAudio: sourceVoiceover.originalAudio,
+                  volume: sourceVoiceover.volume,
+                  provenance: {
+                    source: "provider",
+                    providerProfileId: generated.metadata.providerProfileId,
+                    modelId: generated.metadata.modelId,
+                    voice: generated.metadata.voice,
+                    voiceType: "custom",
+                    textHash: sourceVoiceover.provenance.textHash,
+                    aiGenerated: true
+                  }
+                }
+              ]
+            }
+          },
+          payload?.expectedRevision
+        );
+      } catch (error) {
+        if (asset) await brandAssets.remove(asset.id).catch(() => {});
+        throw error;
+      }
+    },
     "produdash:deleteProjectVoiceover": async (_event, payload) => {
       const project = projects.get(payload?.projectId);
       const voiceover = project.draft.localization?.voiceovers?.find((item) => item.id === payload?.voiceoverId);

@@ -738,6 +738,19 @@ test("Projects render escaped metadata, a semantic transcript editor, and bounde
               capabilities: ["speech_generation"]
             }
           ]
+        },
+        {
+          id: "rvc-local",
+          providerType: "rvc-local",
+          name: "Local RVC",
+          status: "connected",
+          models: [
+            {
+              id: "rvc-local-model",
+              name: "Configured RVC voice model",
+              capabilities: ["voice_conversion"]
+            }
+          ]
         }
       ],
       voiceLikeness: {
@@ -942,6 +955,10 @@ test("Projects render escaped metadata, a semantic transcript editor, and bounde
   assert.ok(document.querySelector("[data-custom-voice-dialog]"));
   assert.match(document.querySelector("[data-custom-voice-dialog]").textContent, /I am the owner of this voice/);
   assert.match(document.querySelector("[data-custom-voice-dialog]").textContent, /impersonation, fraud, deception/);
+  assert.equal(document.querySelector("[data-rvc-voiceover-open]").disabled, false);
+  assert.match(document.querySelector("[data-rvc-voiceover-dialog]").textContent, /original preview remains unchanged/i);
+  assert.match(document.querySelector("[data-rvc-voiceover-dialog]").textContent, /privacy, publicity, biometric/i);
+  assert.match(document.querySelector("[data-rvc-voiceover-dialog]").textContent, /Local RVC/);
   assert.match(document.querySelector("[data-project-voiceover-create]").textContent, /GPT-4o mini TTS/);
   assert.equal(document.querySelector("[data-project-voiceover-create] [name='providerSelection']"), null);
   assert.match(document.querySelector("[data-project-voiceover-create] [name='voiceSelection']").textContent, /marin — built-in/);

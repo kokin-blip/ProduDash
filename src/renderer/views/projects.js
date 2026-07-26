@@ -619,6 +619,13 @@ function renderLocalization(project) {
           .map((model) => ({ profile, model }))
       : []
   );
+  const conversionProviders = asArray(ui.appState.aiProviders).flatMap((profile) =>
+    profile.status === "connected"
+      ? asArray(profile.models)
+          .filter((model) => asArray(model.capabilities).includes("voice_conversion"))
+          .map((model) => ({ profile, model }))
+      : []
+  );
   const voiceovers = asArray(localization.voiceovers);
   const builtInVoices = ["marin", "cedar", "coral", "alloy", "ash", "ballad", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"];
   const customVoices = asArray(ui.appState.voiceLikeness?.voices);
@@ -950,6 +957,9 @@ function renderLocalization(project) {
                       <label><span>Volume</span><input name="volume" type="number" min="0" max="1" step="0.05"
                         value="${escapeHtml(voiceover.volume)}" /></label>
                       <button class="ghost-button small" type="submit">Save voice preview</button>
+                      <button class="ghost-button small" type="button" data-rvc-voiceover-open="${escapeHtml(voiceover.id)}" ${
+                        conversionProviders.length ? "" : "disabled"
+                      }>Convert with RVC</button>
                       <button class="text-button danger-text" type="button" data-project-voiceover-delete="${escapeHtml(
                         voiceover.id
                       )}">Delete audio</button>
@@ -960,6 +970,57 @@ function renderLocalization(project) {
               `<div class="empty-row"><strong>No voice previews</strong><span>Generate a disclosed built-in voice draft for one transcript cue.</span></div>`
             }
           </div>
+          <dialog class="voice-likeness-dialog" data-rvc-voiceover-dialog>
+            <form method="dialog" data-rvc-voiceover-form>
+              <input name="voiceoverId" type="hidden" />
+              <div class="panel-heading">
+                <div>
+                  <h2>Convert a voice preview with RVC</h2>
+                  <p>RVC transforms the selected local WAV preview through your configured local model. The original preview remains unchanged.</p>
+                </div>
+                <button class="icon-button" type="button" aria-label="Close" data-rvc-voiceover-close>×</button>
+              </div>
+              ${
+                likenessAccepted
+                  ? `<div class="inline-message"><strong>First-use terms accepted</strong><span>You must still confirm authorization and disclosure for this conversion.</span></div>`
+                  : `<div class="voice-likeness-terms">
+                      <p><strong>Read every term before continuing.</strong> RVC can make speech sound like another person and the result may be mistaken for a real recording. Only use a model and source audio that belong to you or that an adult has expressly authorized you to use.</p>
+                      <p>Do not use voice conversion to impersonate, deceive, defraud, harass, evade identity or security checks, fabricate consent, create false endorsements, or misrepresent who said something. Provider or model safeguards do not replace your legal and ethical responsibility.</p>
+                      <p>Depending on where you and the voice owner live, voice data may be protected by privacy, publicity, biometric, employment, consumer-protection, election, or criminal laws. Keep written authorization, honor withdrawal requests, follow the RVC model/runtime licenses, and clearly disclose synthetic or converted audio whenever context requires it.</p>
+                      <label><span>Consenting adult’s full legal name</span><input name="legalName" maxlength="120" required /></label>
+                      <label><span>Your relationship to the voice</span><select name="relationship">
+                        <option value="self">I am the voice owner</option>
+                        <option value="authorized_representative">I am the authorized representative</option>
+                      </select></label>
+                      <label class="checkbox-label"><input name="adultConfirmed" type="checkbox" required /><span>The voice owner is an adult with capacity to consent.</span></label>
+                      <label class="checkbox-label"><input name="rightsConfirmed" type="checkbox" required /><span>I own or have documented authority to use the source audio, voice likeness, and configured model.</span></label>
+                      <label class="checkbox-label"><input name="consentConfirmed" type="checkbox" required /><span>The voice owner knowingly authorizes synthetic voice conversion and its intended use.</span></label>
+                      <label class="checkbox-label"><input name="syntheticDisclosureConfirmed" type="checkbox" required /><span>I will clearly disclose converted or synthetic audio wherever context or law requires it.</span></label>
+                      <label class="checkbox-label"><input name="misuseResponsibilityConfirmed" type="checkbox" required /><span>I will not use this feature for impersonation, fraud, deception, harassment, false endorsement, or verification bypass.</span></label>
+                      <label class="checkbox-label"><input name="providerTermsConfirmed" type="checkbox" required /><span>I have reviewed and agree to the runtime, model, and applicable third-party terms and licenses.</span></label>
+                    </div>`
+              }
+              <label><span>Local RVC provider</span><select name="providerSelection" required>
+                ${conversionProviders
+                  .map(
+                    ({ profile, model }) =>
+                      `<option value="${escapeHtml(`${profile.id}::${model.id}`)}">${escapeHtml(profile.name)} · ${escapeHtml(
+                        model.name || model.id
+                      )}</option>`
+                  )
+                  .join("")}
+              </select></label>
+              <label><span>Authorized converted voice name</span><input name="voiceName" maxlength="64" required placeholder="My authorized RVC voice" /></label>
+              <label class="checkbox-label">
+                <input name="conversionConsent" type="checkbox" required />
+                <span>I confirm this source audio and model are authorized, and I will review and disclose the synthetic result before use.</span>
+              </label>
+              <div class="button-row">
+                <button class="primary-button small" type="submit" data-pending-label="Converting…">Accept and convert locally</button>
+                <button class="ghost-button small" type="button" data-rvc-voiceover-close>Cancel</button>
+              </div>
+            </form>
+          </dialog>
         </div>
       </div>
     </details>

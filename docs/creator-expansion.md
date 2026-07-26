@@ -239,7 +239,11 @@ Nothing below is currently exposed as a placeholder control.
   The separately installed `kokoro-tts` CLI also has a direct adapter with one
   bounded configured voice ID. Both use a real WAV connection test, fixed
   shell-free arguments, bounded output, and no bundled runtime or model. The
-  other scanned engines remain
+  user-configured RVC adapter adds a distinct `voice_conversion` capability,
+  encrypted executable/model paths, a real local conversion probe, fixed
+  shell-free arguments, and bounded WAV output. Conversions require first-use
+  likeness terms plus exact per-operation source authorization; they create a
+  new unreviewed preview and never modify the source audio. The other scanned engines remain
   compatibility-only pending their distinct runtime and likeness contracts.
   Loopback OpenAI-compatible endpoints may explicitly declare
   `speech_generation`.

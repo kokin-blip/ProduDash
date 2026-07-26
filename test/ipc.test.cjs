@@ -1,4 +1,7 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const test = require("node:test");
 const { createHandlers } = require("../electron/ipc.cjs");
 
@@ -370,6 +373,99 @@ test("speaker dubbing generates only unvoiced in-timeline drafts and saves once"
   assert.equal(savedPlan.localization.voiceovers[1].sourceId, "cue-host-two");
   assert.equal(savedPlan.localization.voiceovers[1].status, "draft");
   assert.deepEqual(removedAssets, []);
+});
+
+test("RVC conversion appends an unreviewed preview without modifying the source asset", async (t) => {
+  const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "produdash-ipc-rvc-"));
+  t.after(() => fs.promises.rm(directory, { recursive: true, force: true }));
+  const sourcePath = path.join(directory, "source.wav");
+  const sourceBytes = Buffer.alloc(64, 7);
+  await fs.promises.writeFile(sourcePath, sourceBytes);
+  let savedPlan;
+  const project = {
+    id: "project-rvc",
+    title: "RVC project",
+    revision: 2,
+    draft: {
+      totalDuration: 10,
+      localization: {
+        sourceLanguage: "en",
+        activeVariantId: null,
+        variants: [],
+        voiceovers: [
+          {
+            id: "voiceover-source",
+            sourceId: "cue-one",
+            assetId: "asset-source",
+            start: 1,
+            end: 2,
+            status: "reviewed",
+            originalAudio: "replace",
+            volume: 0.8,
+            provenance: {
+              providerProfileId: "openai",
+              modelId: "gpt-4o-mini-tts",
+              voice: "marin",
+              voiceType: "built_in",
+              textHash: "a".repeat(64)
+            }
+          }
+        ]
+      }
+    }
+  };
+  const handlers = createHandlers({
+    store: {},
+    connections: {},
+    providers: {
+      convertVoicePreview: async (_payload, audio) => {
+        assert.deepEqual(audio, sourceBytes);
+        return {
+          audio: Buffer.alloc(64, 9),
+          metadata: {
+            providerProfileId: "rvc-local",
+            modelId: "rvc-local-model",
+            voice: "Authorized RVC voice",
+            voiceType: "custom"
+          }
+        };
+      }
+    },
+    mediaLibrary: {},
+    projects: {
+      get: () => project,
+      saveDraft: async (_projectId, plan) => {
+        savedPlan = plan;
+        return { ...project, revision: 3, draft: plan };
+      }
+    },
+    brandAssets: {
+      resolve: () => ({ filePath: sourcePath }),
+      importGeneratedVoiceover: async () => ({ id: "asset-converted", duration: 1.25 }),
+      remove: async () => {}
+    },
+    mediaJobs: {},
+    advisor: {},
+    isTrustedSender: () => true
+  });
+  const response = await handlers["produdash:convertProjectVoiceover"](
+    {},
+    {
+      projectId: project.id,
+      voiceoverId: "voiceover-source",
+      expectedRevision: 2,
+      providerProfileId: "rvc-local",
+      modelId: "rvc-local-model",
+      voiceName: "Authorized RVC voice"
+    }
+  );
+  assert.equal(response.ok, true);
+  assert.equal(savedPlan.localization.voiceovers.length, 2);
+  assert.equal(savedPlan.localization.voiceovers[0].assetId, "asset-source");
+  assert.equal(savedPlan.localization.voiceovers[1].assetId, "asset-converted");
+  assert.equal(savedPlan.localization.voiceovers[1].status, "draft");
+  assert.equal(savedPlan.localization.voiceovers[1].provenance.voiceType, "custom");
+  assert.deepEqual(await fs.promises.readFile(sourcePath), sourceBytes);
 });
 
 test("IPC returns controlled errors without stacks or secrets", async () => {

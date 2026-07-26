@@ -138,6 +138,7 @@ contextBridge.exposeInMainWorld("produdash", {
   translateProjectTranscript: (payload) => invoke("produdash:translateProjectTranscript", payload),
   generateProjectVoiceover: (payload) => invoke("produdash:generateProjectVoiceover", payload),
   generateProjectSpeakerVoiceovers: (payload) => invoke("produdash:generateProjectSpeakerVoiceovers", payload),
+  convertProjectVoiceover: (payload) => invoke("produdash:convertProjectVoiceover", payload),
   deleteProjectVoiceover: (payload) => invoke("produdash:deleteProjectVoiceover", payload),
   saveProjectVersion: (projectId, label) => invoke("produdash:saveProjectVersion", { projectId, label }),
   restoreProjectVersion: (projectId, versionId) => invoke("produdash:restoreProjectVersion", { projectId, versionId }),

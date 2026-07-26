@@ -359,6 +359,23 @@ function createInitialState() {
         publicValues: { voiceId: "af_heart" },
         lastValidatedAt: null,
         error: null
+      },
+      {
+        id: "rvc-local",
+        providerType: "rvc-local",
+        name: "Local RVC",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: "rvc-local-model",
+        models: [
+          {
+            id: "rvc-local-model",
+            name: "Configured RVC voice model",
+            capabilities: ["voice_conversion"]
+          }
+        ],
+        lastValidatedAt: null,
+        error: null
       }
     ],
     aiWorkloads: {

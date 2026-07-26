@@ -83,6 +83,7 @@ export const api = {
   translateProjectTranscript: (payload) => unwrap(client().translateProjectTranscript(payload)),
   generateProjectVoiceover: (payload) => unwrap(client().generateProjectVoiceover(payload)),
   generateProjectSpeakerVoiceovers: (payload) => unwrap(client().generateProjectSpeakerVoiceovers(payload)),
+  convertProjectVoiceover: (payload) => unwrap(client().convertProjectVoiceover(payload)),
   deleteProjectVoiceover: (payload) => unwrap(client().deleteProjectVoiceover(payload)),
   saveProjectVersion: (projectId, label) => unwrap(client().saveProjectVersion(projectId, label)),
   restoreProjectVersion: (projectId, versionId) => unwrap(client().restoreProjectVersion(projectId, versionId)),

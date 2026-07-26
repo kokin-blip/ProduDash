@@ -198,6 +198,15 @@ speaker-labeled transcript cues can generate up to 12
 unvoiced drafts for one speaker in a single confirmed operation. Every segment
 remains independently playable, removable, and excluded from rendering until
 human review.
+An existing local WAV preview can also be converted with a user-configured RVC
+runtime and `.pth` model. RVC is a separate voice-conversion capability, never
+presented as text-to-speech. Before the first conversion, ProduDash requires the
+full adult rights, consent, disclosure, misuse, and runtime/model-terms
+acceptance; every conversion also requires an exact source-audio authorization.
+The selected executable/model paths remain encrypted, commands use a fixed
+shell-free argument list, validation performs a real bounded local conversion,
+and the result is imported as a new unreviewed synthetic-likeness preview. The
+original preview is never modified or removed.
 Authorized custom voices can be removed from ProduDash with a separate
 confirmation. ElevenLabs voices are deleted through its official API before
 local authorization is removed. For providers without an exposed voice-delete
@@ -219,10 +228,11 @@ personal files or uploading device inventory. “Compatible” means only that t
 hardware meets the documented baseline; “installed” requires a matching local
 command. ProduDash never downloads local executables or model weights
 automatically. Piper and the separately installed `kokoro-tts` CLI are direct
-local speech adapters: each becomes available only after its selected runtime
-creates a valid WAV in a local connection test. An explicitly configured
+local speech adapters, while RVC is a direct local voice-conversion adapter.
+Each becomes available only after its selected runtime creates a valid WAV in
+a local connection test. An explicitly configured
 loopback OpenAI-compatible endpoint may also declare `speech_generation` after
-its connection test succeeds. Chatterbox, XTTS, RVC, and Tortoise remain
+its connection test succeeds. Chatterbox, XTTS, and Tortoise remain
 compatibility-only until their distinct runtime and consent adapters are
 completed.
 

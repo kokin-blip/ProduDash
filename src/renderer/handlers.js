@@ -534,6 +534,22 @@ async function handleClick(event) {
     return;
   }
 
+  const rvcVoiceoverOpen = event.target.closest("[data-rvc-voiceover-open]");
+  if (rvcVoiceoverOpen) {
+    const dialog = document.querySelector("[data-rvc-voiceover-dialog]");
+    if (dialog) {
+      dialog.querySelector("[name='voiceoverId']").value = rvcVoiceoverOpen.dataset.rvcVoiceoverOpen;
+      dialog.showModal();
+    }
+    return;
+  }
+
+  const rvcVoiceoverClose = event.target.closest("[data-rvc-voiceover-close]");
+  if (rvcVoiceoverClose) {
+    rvcVoiceoverClose.closest("dialog")?.close();
+    return;
+  }
+
   const customVoiceClose = event.target.closest("[data-custom-voice-close]");
   if (customVoiceClose) {
     customVoiceClose.closest("dialog")?.close();
@@ -1688,6 +1704,57 @@ async function handleSubmit(event) {
         }
       }
     );
+    renderApp();
+    return;
+  }
+
+  if (form.matches("[data-rvc-voiceover-form]") && ui.activeProject) {
+    event.preventDefault();
+    const accepted = ui.appState.voiceLikeness?.acceptance?.termsVersion === "2026-07-24";
+    const acceptance = accepted
+      ? null
+      : {
+          termsVersion: "2026-07-24",
+          legalName: form.elements.legalName.value,
+          relationship: form.elements.relationship.value,
+          adultConfirmed: form.elements.adultConfirmed.checked,
+          rightsConfirmed: form.elements.rightsConfirmed.checked,
+          consentConfirmed: form.elements.consentConfirmed.checked,
+          syntheticDisclosureConfirmed: form.elements.syntheticDisclosureConfirmed.checked,
+          misuseResponsibilityConfirmed: form.elements.misuseResponsibilityConfirmed.checked,
+          providerTermsConfirmed: form.elements.providerTermsConfirmed.checked
+        };
+    const [providerProfileId, modelId] = form.elements.providerSelection.value.split("::");
+    const approved = form.elements.conversionConsent.checked;
+    await runAction(
+      `project-rvc-convert-${form.elements.voiceoverId.value}`,
+      event.submitter,
+      () =>
+        api.convertProjectVoiceover({
+          projectId: ui.activeProject.id,
+          expectedRevision: ui.activeProject.revision,
+          voiceoverId: form.elements.voiceoverId.value,
+          providerProfileId,
+          modelId,
+          voiceName: form.elements.voiceName.value,
+          acceptance,
+          consent: {
+            approved,
+            providerProfileId,
+            modelId,
+            sourceVoiceAuthorized: approved,
+            syntheticDisclosureAccepted: approved,
+            dataCategories: ["voice_audio"]
+          }
+        }),
+      {
+        applyResult: (project) => {
+          setActiveProject(project, { resetHistory: false });
+          form.closest("dialog")?.close();
+        }
+      }
+    );
+    await refreshBrandTemplates();
     renderApp();
     return;
   }
