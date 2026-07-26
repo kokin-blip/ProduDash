@@ -14,6 +14,7 @@ const { OpenAICompatibleProviderAdapter } = require("./ai/adapters/openai-compat
 const { ElevenLabsProviderAdapter } = require("./ai/adapters/elevenlabs.cjs");
 const { WhisperCppProviderAdapter } = require("./ai/adapters/whisper-cpp.cjs");
 const { PiperLocalProviderAdapter } = require("./ai/adapters/piper-local.cjs");
+const { KokoroLocalProviderAdapter } = require("./ai/adapters/kokoro-local.cjs");
 const { ProviderRegistry } = require("./ai/provider-registry.cjs");
 const { ProviderService } = require("./ai/provider-service.cjs");
 const { MediaLibrary } = require("./media/media-library.cjs");
@@ -106,6 +107,9 @@ if (hasSingleInstanceLock) {
           startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
         }),
         new PiperLocalProviderAdapter({
+          startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
+        }),
+        new KokoroLocalProviderAdapter({
           startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
         })
       ]);

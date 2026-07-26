@@ -202,9 +202,11 @@ class ProviderService {
         ? BUILT_IN_VOICES
         : provider.profile.providerType === "piper-local"
           ? ["configured-model"]
-          : provider.profile.providerType === "openai-compatible" && provider.profile.publicValues?.voiceId
+          : provider.profile.providerType === "kokoro-local" && provider.profile.publicValues?.voiceId
             ? [provider.profile.publicValues.voiceId]
-            : [];
+            : provider.profile.providerType === "openai-compatible" && provider.profile.publicValues?.voiceId
+              ? [provider.profile.publicValues.voiceId]
+              : [];
     const request = normalizeSpeechRequest(input, { allowedCustomVoices, allowedBuiltInVoices });
     validateSpeechConsent(input?.consent, {
       profileId: provider.profile.id,

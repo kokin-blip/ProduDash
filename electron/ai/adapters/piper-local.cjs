@@ -1,10 +1,9 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
 const { AppError } = require("../../errors.cjs");
-const { workerEnvironment } = require("../../media/utility-runner.cjs");
 const { AI_CAPABILITIES } = require("../capabilities.cjs");
+const { MAX_LOCAL_AUDIO_BYTES, isWav, readBoundedWav, runLocalSpeechCommand } = require("../local-speech-runtime.cjs");
 
 const PIPER_LOCAL_MODEL = Object.freeze({
   id: "piper-local-model",
@@ -12,63 +11,11 @@ const PIPER_LOCAL_MODEL = Object.freeze({
   capabilities: [AI_CAPABILITIES.SPEECH_GENERATION]
 });
 const PIPER_VOICE_ID = "configured-model";
-const MAX_AUDIO_BYTES = 32 * 1024 * 1024;
-
-function isWav(buffer) {
-  return (
-    Buffer.isBuffer(buffer) &&
-    buffer.length >= 44 &&
-    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
-    buffer.subarray(8, 12).toString("ascii") === "WAVE"
-  );
-}
-
-function runPiperCommand({ command, args, input, timeoutMs = 120_000 }, spawnProcess = spawn) {
-  return new Promise((resolve, reject) => {
-    const child = spawnProcess(command, args, {
-      shell: false,
-      windowsHide: true,
-      stdio: ["pipe", "ignore", "pipe"],
-      env: workerEnvironment()
-    });
-    let settled = false;
-    let stderrBytes = 0;
-    const finish = (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (error) reject(error);
-      else resolve();
-    };
-    const timeout = setTimeout(() => {
-      child.kill();
-      finish(new AppError("LOCAL_SPEECH_TIMEOUT", "Piper did not finish the local speech request in time."));
-    }, timeoutMs);
-    child.stderr?.on("data", (chunk) => {
-      stderrBytes += chunk.length;
-      if (stderrBytes > 128_000) {
-        child.kill();
-        finish(new AppError("LOCAL_SPEECH_FAILED", "Piper returned too much diagnostic output."));
-      }
-    });
-    child.on("error", () => finish(new AppError("LOCAL_SPEECH_UNAVAILABLE", "The configured Piper executable could not be started.")));
-    child.on("close", (code) => {
-      if (code !== 0) {
-        finish(new AppError("LOCAL_SPEECH_FAILED", "Piper could not generate speech with the configured model."));
-        return;
-      }
-      finish();
-    });
-    child.stdin.on("error", () => {});
-    child.stdin.end(input);
-  });
-}
-
 class PiperLocalProviderAdapter {
   constructor(options = {}) {
     this.id = "piper-local";
     this.name = "Local Piper";
-    this.runCommand = options.runCommand || runPiperCommand;
+    this.runCommand = options.runCommand || runLocalSpeechCommand;
     this.startAccessingBookmark = options.startAccessingBookmark;
     this.platform = options.platform || process.platform;
     this.credentialFields = [
@@ -161,15 +108,10 @@ class PiperLocalProviderAdapter {
         args,
         input,
         outputPath,
-        timeoutMs: 120_000
+        timeoutMs: 120_000,
+        runtimeName: "Piper"
       });
-      const stat = await fs.promises.stat(outputPath).catch(() => null);
-      if (!stat?.isFile() || stat.size < 44 || stat.size > MAX_AUDIO_BYTES) {
-        throw new AppError("LOCAL_SPEECH_INVALID", "Piper did not create a bounded WAV audio file.");
-      }
-      const audio = await fs.promises.readFile(outputPath);
-      if (!isWav(audio)) throw new AppError("LOCAL_SPEECH_INVALID", "Piper returned an invalid WAV audio file.");
-      return audio;
+      return await readBoundedWav(outputPath, "Piper");
     } finally {
       stopAccess();
       if (tempPath) await fs.promises.rm(tempPath, { recursive: true, force: true }).catch(() => {});
@@ -193,10 +135,10 @@ class PiperLocalProviderAdapter {
 }
 
 module.exports = {
-  MAX_AUDIO_BYTES,
+  MAX_AUDIO_BYTES: MAX_LOCAL_AUDIO_BYTES,
   PIPER_LOCAL_MODEL,
   PIPER_VOICE_ID,
   PiperLocalProviderAdapter,
   isWav,
-  runPiperCommand
+  runPiperCommand: runLocalSpeechCommand
 };

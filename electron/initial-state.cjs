@@ -341,6 +341,24 @@ function createInitialState() {
         ],
         lastValidatedAt: null,
         error: null
+      },
+      {
+        id: "kokoro-local",
+        providerType: "kokoro-local",
+        name: "Local Kokoro CLI",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: "kokoro-local-model",
+        models: [
+          {
+            id: "kokoro-local-model",
+            name: "Configured Kokoro voice",
+            capabilities: ["speech_generation"]
+          }
+        ],
+        publicValues: { voiceId: "af_heart" },
+        lastValidatedAt: null,
+        error: null
       }
     ],
     aiWorkloads: {

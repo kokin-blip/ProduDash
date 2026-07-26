@@ -644,6 +644,14 @@ function renderLocalization(project) {
         label: "configured local model"
       });
     }
+    if (profile.providerType === "kokoro-local" && profile.publicValues?.voiceId) {
+      options.push({
+        profile,
+        model,
+        voice: profile.publicValues.voiceId,
+        label: `${profile.publicValues.voiceId} — configured local voice`
+      });
+    }
     options.push(
       ...customVoices
         .filter((voice) => voice.providerProfileId === profile.id)
