@@ -314,6 +314,7 @@ Validation commands:
 
 ```bash
 npm run check:syntax
+npm run check:media
 npm run lint
 npm run format:check
 npm test
@@ -322,7 +323,14 @@ npm run validate
 npm audit --omit=dev
 ```
 
-`npm run validate` runs syntax, lint, formatting, unit/integration/renderer tests, real tiny bundled-binary analysis/render tests, and the Electron smoke test. Provider tests use injected clients and encryption fakes; they never require or contact live Shopify, Gemini, OpenAI, Anthropic, or custom endpoints. Live-provider acceptance therefore requires owner-supplied credentials and an explicit media-consent test outside automation.
+`npm run validate` runs syntax, executable media-tool checks, lint, formatting, unit/integration/renderer tests, real tiny bundled-binary analysis/render tests, and the Electron smoke test. Provider tests use injected clients and encryption fakes; they never require or contact live Shopify, Gemini, OpenAI, Anthropic, or custom endpoints. Live-provider acceptance therefore requires owner-supplied credentials and an explicit media-consent test outside automation.
+
+CI repeats media and Electron validation across Ubuntu, macOS, and Windows. See
+[the release-readiness gate](docs/release-readiness.md) for the exact
+owner-controlled licensing, signing, hosted-service, and live-connector work
+that remains intentionally blocked. `npm run check:distribution` is a separate
+release gate and is expected to fail while the development-only media binaries
+remain selected.
 
 The browser-only `npm run web` command can display static assets but cannot use local persistence or credentials because the secure preload bridge is available only in Electron.
 

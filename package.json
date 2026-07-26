@@ -10,12 +10,14 @@
     "app": "electron .",
     "web": "python3 -m http.server 5188",
     "check:syntax": "node scripts/check-syntax.cjs",
+    "check:media": "node scripts/check-media-binaries.cjs",
+    "check:distribution": "node scripts/check-media-binaries.cjs --distribution",
     "lint": "eslint electron src test smoke scripts",
     "format": "prettier --write electron src test smoke scripts .github package.json README.md index.html eslint.config.mjs .prettierrc.json",
     "format:check": "prettier --check electron src test smoke scripts .github package.json README.md index.html eslint.config.mjs .prettierrc.json",
     "test": "node --test test/*.test.cjs",
     "test:smoke": "node --test smoke/*.test.cjs",
-    "validate": "npm run check:syntax && npm run lint && npm run format:check && npm test && npm run test:smoke"
+    "validate": "npm run check:syntax && npm run check:media && npm run lint && npm run format:check && npm test && npm run test:smoke"
   },
   "keywords": [
     "dashboard",
