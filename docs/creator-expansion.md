@@ -248,6 +248,9 @@ Nothing below is currently exposed as a placeholder control.
   environment and explicitly selected local model/config/reference files.
   Model loading is validated without synthesizing a likeness; the configured
   voice remains unavailable until the versioned likeness acceptance is recorded.
+  Chatterbox uses the same authorization gate with its distinct official
+  English, multilingual-v3, nano, and turbo Python APIs, an explicitly selected
+  local cache, forced Hugging Face offline mode, and a network-denying wrapper.
   The other scanned engines remain
   compatibility-only pending their distinct runtime and likeness contracts.
   Loopback OpenAI-compatible endpoints may explicitly declare

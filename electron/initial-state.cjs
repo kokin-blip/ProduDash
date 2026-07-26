@@ -394,6 +394,24 @@ function createInitialState() {
         publicValues: { language: "en" },
         lastValidatedAt: null,
         error: null
+      },
+      {
+        id: "chatterbox-local",
+        providerType: "chatterbox-local",
+        name: "Local Chatterbox",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: "chatterbox-local-model",
+        models: [
+          {
+            id: "chatterbox-local-model",
+            name: "Configured local Chatterbox model",
+            capabilities: ["speech_generation"]
+          }
+        ],
+        publicValues: { variant: "nano", language: "en", device: "cpu" },
+        lastValidatedAt: null,
+        error: null
       }
     ],
     aiWorkloads: {

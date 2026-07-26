@@ -675,7 +675,9 @@ function renderLocalization(project) {
   ];
   const localLikenessProfiles = [
     ...new Map(
-      speechProviders.filter(({ profile }) => ["xtts-local"].includes(profile.providerType)).map(({ profile }) => [profile.id, profile])
+      speechProviders
+        .filter(({ profile }) => ["chatterbox-local", "xtts-local"].includes(profile.providerType))
+        .map(({ profile }) => [profile.id, profile])
     ).values()
   ];
   const likenessAccepted = ui.appState.voiceLikeness?.acceptance?.termsVersion === "2026-07-24";

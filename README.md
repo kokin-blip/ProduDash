@@ -114,6 +114,18 @@ bookmarks remain encrypted. Review the
 [Coqui XTTS documentation](https://coqui-tts.readthedocs.io/en/latest/inference.html)
 and the selected model license before use or distribution.
 
+Chatterbox likeness speech follows the same authorization boundary with its
+own official API contract. Choose a separately installed Chatterbox Python
+environment, a populated local Hugging Face cache, an authorized WAV reference,
+the installed `english`, `multilingual-v3`, `nano`, or `turbo` variant, a
+language, and `cpu`, `cuda`, or `mps`. ProduDash forces offline mode, points
+`HF_HOME` at the selected cache, denies socket connections inside its bundled
+wrapper, and never installs or downloads packages or model weights. Validation
+loads only the selected cached model; generation remains unavailable until the
+configured likeness is separately authorized. Review the
+[official Chatterbox repository](https://github.com/resemble-ai/chatterbox)
+and the specific model license before use.
+
 Inbox draft requests include only the selected business, a bounded operator instruction, and the latest bounded messages from one conversation. Output is schema-validated before storage. It can contain a draft, intent, summary, possible order details, a recommended action, and risk flags. It cannot send a message or perform an external side effect, and ProduDash never silently switches providers.
 
 ## Juanito advisor
@@ -241,14 +253,13 @@ personal files or uploading device inventory. “Compatible” means only that t
 hardware meets the documented baseline; “installed” requires a matching local
 command. ProduDash never downloads local executables or model weights
 automatically. Piper, the separately installed `kokoro-tts` CLI, and the
-offline user-configured XTTS runtime are direct local speech adapters, while
-RVC is a direct local voice-conversion adapter.
+offline user-configured XTTS and Chatterbox runtimes are direct local speech
+adapters, while RVC is a direct local voice-conversion adapter.
 Each becomes available only after its selected runtime creates a valid WAV in
 a local connection test. An explicitly configured
 loopback OpenAI-compatible endpoint may also declare `speech_generation` after
-its connection test succeeds. Chatterbox and Tortoise remain
-compatibility-only until their distinct runtime and consent adapters are
-completed.
+its connection test succeeds. Tortoise remains compatibility-only until its
+distinct runtime and consent adapter is completed.
 
 ## Projects and local editor
 
