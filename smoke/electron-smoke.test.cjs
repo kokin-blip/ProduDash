@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -7,13 +8,16 @@ const test = require("node:test");
 const { _electron: electron } = require("playwright");
 const { getMediaBinaries } = require("../electron/media/binaries.cjs");
 
-test("Electron starts securely and shows the connection-first workflow", { timeout: 60_000 }, async (t) => {
+test("Electron starts securely and shows the connection-first workflow", { timeout: 90_000 }, async (t) => {
   const projectRoot = path.join(__dirname, "..");
   const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), "produdash-smoke-"));
   const fixturePath = path.join(userDataPath, "smoke-source.mp4");
+  const logoPath = path.join(userDataPath, "smoke-logo.png");
   const mediaOutputPath = path.join(userDataPath, "generated");
   fs.mkdirSync(mediaOutputPath);
   createMediaFixture(fixturePath);
+  createLogoFixture(logoPath);
+  const sourceChecksum = crypto.createHash("sha256").update(fs.readFileSync(fixturePath)).digest("hex");
   const artifactPath = path.join(projectRoot, "test-results", "smoke");
   fs.mkdirSync(artifactPath, { recursive: true });
   let application;
@@ -91,7 +95,7 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
 
   await page.click('[data-section="studio"]');
   await page.waitForTimeout(250);
-  assert.equal(await page.locator('[role="tab"]').count(), 3);
+  assert.equal(await page.locator('[role="tab"]').count(), 5);
   assert.equal(await page.locator('[role="tab"][aria-selected="true"]').textContent(), "Library");
   assert.match(await page.locator(".studio-tab-panel").textContent(), /No matching videos/);
   assert.equal(await hasHorizontalOverflow(page), false);
@@ -104,11 +108,13 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
     ({ dialog }, selections) => {
       const queue = [
         { canceled: false, filePaths: [selections.fixturePath], bookmarks: [] },
+        { canceled: false, filePaths: [selections.mediaOutputPath], bookmarks: [] },
+        { canceled: false, filePaths: [selections.logoPath], bookmarks: [] },
         { canceled: false, filePaths: [selections.mediaOutputPath], bookmarks: [] }
       ];
       dialog.showOpenDialog = async () => queue.shift() || { canceled: true, filePaths: [], bookmarks: [] };
     },
-    { fixturePath, mediaOutputPath }
+    { fixturePath, logoPath, mediaOutputPath }
   );
   await page.click("[data-add-clip-files]");
   await page.waitForSelector(".clip-row");
@@ -123,6 +129,8 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
     await page.locator('[data-media-job-form] select[name="sourceMediaId"]').selectOption({ index: 1 });
     await page.locator('[data-media-job-form] input[name="title"]').fill("Smoke clip");
     await page.locator('[data-media-job-form] input[name="targetDuration"]').fill("5");
+    await page.locator('[data-media-job-form] select[name="captionMode"]').selectOption("srt_burned");
+    await page.locator('[data-media-job-form] textarea[name="captionText"]').fill("Human-approved local caption");
     await page.locator("[data-media-job-form]").evaluate((form) => form.requestSubmit());
     await page.waitForFunction(
       () => {
@@ -133,13 +141,107 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
       { timeout: 30_000 }
     );
     assert.match(await page.locator(".media-job").textContent(), /awaiting review/);
-    await page.screenshot({ path: path.join(artifactPath, "media-review-1440x960.png"), fullPage: true });
-    await page.locator('[data-media-candidates-form] button[type="submit"]').click();
-    await page.waitForFunction(() => document.querySelector(".media-job .status-badge")?.textContent.includes("completed"), null, {
-      timeout: 30_000
+    const smokeJobId = await page.locator("[data-candidate-review]").getAttribute("data-candidate-review");
+    assert.equal(await page.locator('[data-media-candidates-form] input[name="candidateIds"]').isChecked(), false);
+    assert.ok(await page.locator("[data-candidate-video]").getAttribute("src"));
+    assert.match(await page.locator(".candidate-caption-preview").textContent(), /Human-approved local caption/);
+    await page.locator("[data-candidate-edit-form] input[name='title']").fill("Smoke approved clip");
+    await page.locator("[data-candidate-edit-form] input[name='start']").fill("0.25");
+    await page.locator("[data-candidate-edit-form] input[name='end']").fill("5.75");
+    await page.screenshot({ path: path.join(artifactPath, "candidate-editing-1440x960.png"), fullPage: true });
+    await page.screenshot({ path: path.join(artifactPath, "caption-preview-1440x960.png"), fullPage: true });
+    await resizeWindow(application, 1120, 760);
+    assert.equal(await hasHorizontalOverflow(page), false);
+    await page.screenshot({ path: path.join(artifactPath, "candidate-editing-1120x760.png"), fullPage: true });
+    await resizeWindow(application, 1440, 960);
+    await page.locator("[data-candidate-edit-form] button[type='submit']").click();
+    await page.waitForFunction(() => !document.querySelector("[data-candidate-edit-form] .is-pending"));
+    const candidateSaveError = await page.locator('[role="alert"]').allTextContents();
+    assert.deepEqual(candidateSaveError, []);
+    assert.equal(await page.locator("[data-candidate-edit-form] input[name='title']").inputValue(), "Smoke approved clip");
+    await page.locator("[data-project-from-candidate]").click();
+    await page.waitForSelector("[data-project-editor]");
+    assert.equal(await page.locator('[data-studio-tab="projects"]').getAttribute("aria-selected"), "true");
+    assert.match(await page.locator("[data-project-editor]").textContent(), /Smoke approved clip/);
+    assert.match(await page.locator("[data-project-editor]").textContent(), /Recoverable draft/);
+    await page.locator("[data-transcript-id]").fill("Transcript correction flushed before version save");
+    await page.locator("[data-project-playhead]").fill("2");
+    await page.locator("[data-project-split]").click();
+    await page.waitForFunction(() => document.querySelectorAll(".timeline-segment").length === 2);
+    await page.locator("[data-project-save-version]").click();
+    await page.waitForFunction(() => document.querySelector("[data-project-editor]")?.textContent.includes("Saved version"));
+    assert.equal(await page.locator("[data-transcript-id]").inputValue(), "Transcript correction flushed before version save");
+    await page.click('[data-studio-tab="templates"]');
+    await page.waitForSelector("[data-template-create-form]");
+    await page.locator(".template-asset-workspace").locator("..").locator("summary").click();
+    await page.click('[data-brand-asset-import="logo"]');
+    await page.waitForSelector("[data-brand-asset-delete]", { state: "attached" });
+    await page.locator(".template-asset-workspace").locator("..").locator("summary").click();
+    await page.locator('[data-template-create-form] select[name="logoAssetId"]').selectOption({ index: 1 });
+    await page.locator('[data-template-create-form] input[name="name"]').fill("Smoke brand");
+    await page.locator('[data-template-create-form] input[name="description"]').fill("Local Phase 2 composition");
+    await page.locator('[data-template-create-form] input[name="overlayText"]').fill("Shop the smoke launch");
+    await page.locator('[data-template-create-form] select[name="transition"]').selectOption("fade");
+    await page.locator("[data-template-create-form]").evaluate((form) => form.requestSubmit());
+    await page.waitForSelector(".template-card");
+    assert.match(await page.locator(".template-card").textContent(), /Smoke brand/);
+    await page.screenshot({ path: path.join(artifactPath, "brand-templates-1440x960.png"), fullPage: true });
+    await page.locator("[data-template-apply]").click();
+    await page.click('[data-studio-tab="projects"]');
+    await page.waitForSelector("[data-project-editor]");
+    assert.match(await page.locator("[data-project-editor]").textContent(), /Shop the smoke launch/);
+    assert.match(await page.locator("[data-project-editor]").textContent(), /template v1/);
+    assert.equal(await page.locator(".project-preview-logo").count(), 1);
+    await page.screenshot({ path: path.join(artifactPath, "project-editor-1440x960.png"), fullPage: true });
+    await resizeWindow(application, 1120, 760);
+    assert.equal(await hasHorizontalOverflow(page), false);
+    await page.screenshot({ path: path.join(artifactPath, "project-editor-1120x760.png"), fullPage: true });
+    await resizeWindow(application, 1440, 960);
+    await page.locator("[data-project-prepare]").click();
+    await page.waitForFunction(
+      () => document.querySelector("[data-project-prepare]")?.textContent.includes("Rebuild local signals"),
+      null,
+      { timeout: 30_000 }
+    );
+    await page.locator("[data-project-choose-output]").click();
+    await page.locator("[data-project-render]").click();
+    await page.waitForFunction(
+      async () => {
+        const response = await window.produdash.getAppState();
+        return response.data.mediaJobs.some((job) => job.jobType === "project_render");
+      },
+      null,
+      { timeout: 30_000 }
+    );
+    const projectRenderIds = await page.evaluate(async () => {
+      const response = await window.produdash.getAppState();
+      return response.data.mediaJobs.filter((job) => job.jobType === "project_render").map((job) => job.id);
     });
-    assert.equal(await page.locator(".artifact-list").count(), 1);
+    assert.equal(projectRenderIds.length, 1);
+    const [projectRenderId] = projectRenderIds;
+    const projectRenderStatus = await waitForMediaJobTerminal(page, projectRenderId);
+    assert.equal(projectRenderStatus, "completed");
+    await page.screenshot({ path: path.join(artifactPath, "project-complete-1440x960.png"), fullPage: true });
+    await page.click('[data-studio-tab="create"]');
+    await page.waitForSelector("[data-candidate-select]");
+    await page.locator("[data-candidate-select]").click();
+    assert.equal(await page.locator('[data-media-candidates-form] input[name="candidateIds"]').isChecked(), true);
+    await page.waitForTimeout(1850);
+    await page.locator('[data-media-candidates-form] button[type="submit"]').click();
+    await page.waitForTimeout(250);
+    const approvalError = await page.locator('[role="alert"]').allTextContents();
+    assert.deepEqual(approvalError, []);
+    await waitForMediaJobTerminal(page, smokeJobId);
+    assert.match(await page.locator(`[data-media-job="${smokeJobId}"]`).textContent(), /completed/);
+    assert.equal(await page.locator(`[data-media-job="${smokeJobId}"] .artifact-list`).count(), 1);
+    assert.ok(await page.locator("[data-advisor-celebration]").count());
     await page.screenshot({ path: path.join(artifactPath, "media-complete-1440x960.png"), fullPage: true });
+    await page.evaluate(async () => {
+      const reactions = await import("./src/renderer/advisor-reactions.js");
+      reactions.reactToMediaJobUpdates([{ id: "smoke-warning", status: "processing" }], [{ id: "smoke-warning", status: "failed" }]);
+    });
+    assert.equal(await page.locator('[data-advisor-job-reaction="warning"]').count(), 1);
+    await page.screenshot({ path: path.join(artifactPath, "media-warning-1440x960.png"), fullPage: true });
     const generatedJobPath = path.join(mediaOutputPath, fs.readdirSync(mediaOutputPath)[0]);
     assert.equal(fs.existsSync(path.join(generatedJobPath, "produdash-manifest.json")), true);
     assert.equal(fs.existsSync(path.join(generatedJobPath, ".produdash-job")), false);
@@ -264,7 +366,7 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
         ready: true,
         providerId: "gemini",
         modelId: "gemini-3.6-flash",
-        consentedCategories: ["dashboard_summary", "commerce_aggregates", "integration_health", "media_summaries"]
+        consentedCategories: ["dashboard_summary", "commerce_aggregates", "integration_health", "media_summaries", "application_context"]
       }
     });
     state.ui.advisorOpen = true;
@@ -300,7 +402,7 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
   );
   assert.match(await page.locator(".advisor-art-stack").getAttribute("class"), /journal-cadence-(?:calm|patient|reflective)/);
   await page.evaluate(() => {
-    for (const selector of [".advisor-idle-base", ".advisor-journal-sequence", ".advisor-journal-b"]) {
+    for (const selector of [".advisor-idle-base", ".advisor-journal-sequence", ".advisor-journal-sprite"]) {
       const animation = document.querySelector(selector)?.getAnimations()[0];
       const duration = Number(animation?.effect.getTiming().duration);
       if (!animation || !Number.isFinite(duration)) continue;
@@ -310,7 +412,38 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
   });
   assert.equal(await page.locator(".advisor-idle-base").evaluate((element) => window.getComputedStyle(element).opacity), "0");
   assert.equal(await page.locator(".advisor-journal-sequence").evaluate((element) => window.getComputedStyle(element).opacity), "1");
+  assert.match(
+    await page.locator(".advisor-journal-sprite").evaluate((element) => window.getComputedStyle(element).backgroundPosition),
+    /42\.8571%/
+  );
   await page.screenshot({ path: path.join(artifactPath, "advisor-journal-1440x960.png"), fullPage: true });
+  await page.waitForTimeout(1850);
+  assert.equal(
+    await page.evaluate(async () => {
+      const advisor = await import("./src/renderer/advisor.js");
+      return advisor.celebrateAdvisor();
+    }),
+    true
+  );
+  assert.match(await page.locator("[data-advisor-celebration]").getAttribute("data-advisor-celebration"), /^(?:hop|notebook)$/);
+  assert.equal(
+    await page.locator(".advisor-celebration-popover").evaluate((element) => window.getComputedStyle(element).animationName),
+    "advisor-celebration-pop"
+  );
+  assert.equal(
+    await page.locator(".advisor-celebration-sprite").evaluate((element) => window.getComputedStyle(element).animationName),
+    "advisor-celebration-frames"
+  );
+  await page.evaluate(() => {
+    for (const selector of [".advisor-celebration-popover", ".advisor-celebration-sprite"]) {
+      const animation = document.querySelector(selector)?.getAnimations()[0];
+      const duration = Number(animation?.effect.getTiming().duration);
+      if (!animation || !Number.isFinite(duration)) continue;
+      animation.currentTime = duration * 0.55;
+      animation.pause();
+    }
+  });
+  await page.screenshot({ path: path.join(artifactPath, "advisor-celebration-1440x960.png"), fullPage: true });
   await page.click("[data-advisor-close]");
 
   await resizeWindow(application, 1120, 760);
@@ -330,6 +463,15 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
     await page.locator(".advisor-journal-sequence").evaluate((element) => window.getComputedStyle(element).animationName),
     "none"
   );
+  assert.equal(
+    await page.evaluate(async () => {
+      const advisor = await import("./src/renderer/advisor.js");
+      return advisor.celebrateAdvisor();
+    }),
+    false
+  );
+  assert.equal(await page.locator("[data-advisor-celebration]").count(), 0);
+  await page.screenshot({ path: path.join(artifactPath, "reduced-motion-1120x760.png"), fullPage: true });
   await page.click("[data-advisor-close]");
   const reducedMotionTransitionCount = await page.evaluate(() => window.__viewTransitionStarts);
   await page.click('[data-section="studio"]');
@@ -355,6 +497,7 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
   );
   assert.equal(secretFieldHasValue, false);
   assert.equal(JSON.stringify(stateResponse).includes("ciphertext"), false);
+  assert.equal(crypto.createHash("sha256").update(fs.readFileSync(fixturePath)).digest("hex"), sourceChecksum);
   assert.equal(
     consoleProblems.some((message) => /Content Security Policy|Electron Security Warning|Uncaught/i.test(message)),
     false,
@@ -379,6 +522,21 @@ async function setZoomFactor(application, factor) {
 
 async function hasHorizontalOverflow(page) {
   return page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+}
+
+async function waitForMediaJobTerminal(page, jobId, timeout = 45_000) {
+  const startedAt = Date.now();
+  let lastStatus = "missing";
+  while (Date.now() - startedAt < timeout) {
+    const status = await page.evaluate(async (id) => {
+      const response = await window.produdash.getAppState();
+      return response.data.mediaJobs.find((job) => job.id === id)?.status || "missing";
+    }, jobId);
+    lastStatus = status;
+    if (["completed", "failed"].includes(status)) return status;
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`Timed out waiting for media job ${jobId}; last status was ${lastStatus}.`);
 }
 
 function createMediaFixture(filePath) {
@@ -411,12 +569,22 @@ function createMediaFixture(filePath) {
   assert.equal(result.status, 0, result.stderr);
 }
 
+function createLogoFixture(filePath) {
+  const { ffmpegPath } = getMediaBinaries();
+  const result = spawnSync(
+    ffmpegPath,
+    ["-nostdin", "-y", "-f", "lavfi", "-i", "color=c=0x7aa2f7:s=128x64", "-frames:v", "1", "-update", "1", filePath],
+    { encoding: "utf8" }
+  );
+  assert.equal(result.status, 0, result.stderr);
+}
+
 async function renderConnectedFixture(page) {
   await page.evaluate(async () => {
     const state = await import("./src/renderer/state.js");
     const render = await import("./src/renderer/render.js");
     const fixture = {
-      schemaVersion: 4,
+      schemaVersion: 6,
       selectedBusinessId: "business-1",
       businesses: [
         {
@@ -511,7 +679,7 @@ async function renderConnectedFixture(page) {
         clipAnalysis: { mode: "same_as_advisor" },
         transcription: { mode: "unassigned" }
       },
-      advisorSettings: { displayName: "Advisor" },
+      advisorSettings: { displayName: "Juanito" },
       creatorPlatforms: [],
       analyticsSources: [],
       clipperJobs: [],

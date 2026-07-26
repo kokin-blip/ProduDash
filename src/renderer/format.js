@@ -28,7 +28,9 @@ export function formatDate(value) {
 }
 
 export function statusLabel(value) {
-  return String(value || "unknown").replaceAll("_", " ");
+  return String(value || "unknown")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ");
 }
 
 export function heightClass(value, maximum) {
@@ -46,7 +48,8 @@ export function levelClass(value) {
 
 export function statusTone(value) {
   const normalized = String(value || "").toLowerCase();
-  if (["connected", "complete", "completed", "enabled", "export_ready", "approved", "available"].includes(normalized)) return "success";
+  if (["connected", "complete", "completed", "enabled", "export_ready", "approved", "available", "current"].includes(normalized))
+    return "success";
   if (
     [
       "degraded",
@@ -60,7 +63,9 @@ export function statusTone(value) {
       "render_queued",
       "processing",
       "awaiting_review",
-      "canceling"
+      "canceling",
+      "aging",
+      "stale"
     ].includes(normalized)
   )
     return "warning";

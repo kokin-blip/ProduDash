@@ -7,11 +7,28 @@ export const ui = {
   selectedMode: "today",
   activeSection: "overview",
   studioTab: "library",
+  projects: { projects: [], collections: [], total: 0, notices: [] },
+  brandTemplates: [],
+  brandAssets: [],
+  projectFilters: { query: "", status: "active", sort: "updated_desc", collectionId: "" },
+  selectedProjectId: null,
+  activeProject: null,
+  selectedProjectSegmentId: null,
+  projectUndo: [],
+  projectRedo: [],
+  projectTimelineZoom: 1,
+  projectPlayhead: 0,
+  projectTranscriptQuery: "",
+  projectPreviewMode: "edit",
   providerCatalog: [],
+  localVoiceReport: null,
+  analyticsReport: null,
+  analyticsRangeDays: 30,
   clipLibrary: emptyClipLibrary(),
   libraryFilters: { query: "", folderId: "", status: "", sort: "modified_desc", offset: 0, limit: 40 },
   selectedClipId: null,
   mediaOutputSelection: null,
+  candidateDrafts: new Map(),
   advisorOpen: false,
   advisorHistory: { turns: [], status: { ready: false, providerId: null, modelId: null, consentedCategories: [] } },
   advisorRequest: null,
@@ -31,7 +48,8 @@ function emptyAppState() {
     credentialSettings: [],
     aiProviders: [],
     aiWorkloads: {},
-    advisorSettings: { displayName: "Advisor" },
+    advisorSettings: { displayName: "Juanito" },
+    voiceLikeness: { acceptance: null, voices: [] },
     creatorPlatforms: [],
     analyticsSources: [],
     mediaJobs: [],
@@ -65,7 +83,14 @@ export function normalizeAppState(value) {
     advisorSettings:
       state.advisorSettings && typeof state.advisorSettings === "object" && !Array.isArray(state.advisorSettings)
         ? state.advisorSettings
-        : { displayName: "Advisor" },
+        : { displayName: "Juanito" },
+    voiceLikeness:
+      state.voiceLikeness && typeof state.voiceLikeness === "object" && !Array.isArray(state.voiceLikeness)
+        ? {
+            acceptance: state.voiceLikeness.acceptance || null,
+            voices: asArray(state.voiceLikeness.voices)
+          }
+        : { acceptance: null, voices: [] },
     creatorPlatforms: asArray(state.creatorPlatforms),
     analyticsSources: asArray(state.analyticsSources),
     mediaJobs: asArray(state.mediaJobs),
@@ -77,15 +102,17 @@ export function normalizeAppState(value) {
 }
 
 export async function loadInitialState() {
-  const [appState, providerCatalog, clipLibrary, advisorHistory] = await Promise.all([
+  const [appState, providerCatalog, clipLibrary, projects, advisorHistory] = await Promise.all([
     api.getAppState(),
     api.getAiProviderCatalog(),
     api.getClipLibrary({ limit: ui.libraryFilters.limit }),
+    api.getProjects(ui.projectFilters),
     api.getAdvisorHistory()
   ]);
   setAppState(appState);
   ui.providerCatalog = asArray(providerCatalog);
   setClipLibrary(clipLibrary);
+  setProjects(projects);
   setAdvisorHistory(advisorHistory);
 }
 
@@ -93,6 +120,10 @@ export function setAppState(nextState) {
   ui.appState = normalizeAppState(nextState);
   if (!getBusiness(ui.selectedBusinessId)) ui.selectedBusinessId = ui.appState.selectedBusinessId || ui.appState.businesses[0]?.id || null;
   if (!getSelectedConversation()) ui.selectedConversationId = getConversations()[0]?.id || null;
+}
+
+export function setAnalyticsReport(report) {
+  ui.analyticsReport = report && typeof report === "object" && !Array.isArray(report) ? report : null;
 }
 
 export function getBusiness(businessId = ui.selectedBusinessId) {
@@ -146,6 +177,32 @@ export function setClipLibrary(value) {
   };
   if (!ui.clipLibrary.clips.some((clip) => clip.id === ui.selectedClipId)) {
     ui.selectedClipId = ui.clipLibrary.clips[0]?.id || null;
+  }
+}
+
+export function setProjects(value) {
+  const projects = value && typeof value === "object" ? value : {};
+  ui.projects = {
+    projects: asArray(projects.projects),
+    collections: asArray(projects.collections),
+    total: Number(projects.total) || 0,
+    notices: asArray(projects.notices)
+  };
+  if (!ui.projects.projects.some((project) => project.id === ui.selectedProjectId)) {
+    ui.selectedProjectId = ui.projects.projects[0]?.id || null;
+    if (ui.activeProject?.id !== ui.selectedProjectId) ui.activeProject = null;
+  }
+}
+
+export function setActiveProject(value, { resetHistory = true } = {}) {
+  ui.activeProject = value && typeof value === "object" ? value : null;
+  ui.selectedProjectId = ui.activeProject?.id || ui.selectedProjectId;
+  if (!ui.activeProject?.draft?.segments?.some((segment) => segment.id === ui.selectedProjectSegmentId)) {
+    ui.selectedProjectSegmentId = ui.activeProject?.draft?.segments?.[0]?.id || null;
+  }
+  if (resetHistory) {
+    ui.projectUndo = [];
+    ui.projectRedo = [];
   }
 }
 

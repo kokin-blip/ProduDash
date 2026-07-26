@@ -5,6 +5,8 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 ## What works
 
 - Recoverable schema-versioned local state with atomic writes, last-known-good backups, bounded recovery snapshots, and a 500-entry audit log.
+- A one-time schema v5 migration that changes the legacy default Advisor name to Juanito without preventing a user from later choosing “Advisor” or any other valid 1–40 character name.
+- An idempotent schema v5→v6 migration that preserves existing media jobs as compatible `clip_generation` jobs and adds nullable project/render-plan metadata.
 - OS-protected credential encryption through Electron `safeStorage`; decrypted values remain in the main process.
 - Shopify GraphQL Admin API connection and refresh using API version `2026-07`.
 - Up to 100 recent products and 100 recent orders per refresh, with cursor pagination and safe partial-sync reporting.
@@ -15,12 +17,18 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - Explicit local, transcript-only, transcript-plus-frames, and Gemini native-video analysis modes with exact per-job provider/model/data-category consent and no silent provider or mode fallback.
 - Schema-validated AI candidates with bounded timestamps, overlap/duplicate rejection, limited boundary snapping, eleven stored component scores, and concise rationale.
 - Human approval gates for AI drafts and local post-export plans.
-- A provider-neutral Advisor with session-only cloud consent, request cancellation, a five-round local tool limit, bounded business-scoped summaries, and a separate recoverable 50-turn visible history.
-- An original transparent frog field-scout character with idle blinking, breathing, and periodic journal-writing, plus thinking, success, warning, and compact avatar artwork; reduced-motion mode keeps the character fully static.
+- A provider-neutral Advisor with session-only cloud consent, request cancellation, a five-round local tool limit, bounded business-scoped summaries, safe media/detail/help/setup tools, and a separate recoverable 50-turn visible history.
+- Juanito, an original transparent frog field-scout character with idle blinking, breathing, an eight-frame periodic journal-writing sequence, thinking, success, warning, and compact avatar artwork; reduced-motion mode keeps him fully static.
+- Event-driven Juanito media reactions: queue and candidate approval are only acknowledged, processing shows a working state, failed/interrupted work warns, and a full alternating celebration occurs only after a real completed transition.
 - Hardened Electron renderer isolation, restrictive CSP, trusted IPC senders, blocked navigation/windows, and normalized errors.
 - A separate atomic and recoverable Clip Library index with folder/loose-file imports, recursive scans, search, filters, tags, cached thumbnails, opaque previews, and visible missing/offline/corrupt/unsupported states.
-- A durable one-at-a-time local media queue with deterministic silence/scene inspection, candidate review, cancel/retry behavior, H.264/AAC rendering, optional SRT/burned captions, thumbnails, safe manifests, and automatic Clip Library import.
-- Local post planning queues that state clearly that no external publishing occurs.
+- A durable one-at-a-time local media queue with deterministic audio-activity, silence, scene, and black/frozen-footage inspection; non-destructive candidate editing; transcript-derived timed captions; cancel/retry behavior; H.264/AAC rendering; thumbnails; safe manifests; and automatic Clip Library import.
+- A separate atomic Projects store with lifecycle metadata, collections, tags, favorites, exact-fingerprint relinking, recoverable drafts, and up to 50 immutable saved versions.
+- A local single-source editor with source/edited preview, SRT/VTT import and transcript corrections, waveform and scene overlays, ordered video/transcript/marker tracks, trim/extend/split/ripple/duplicate/reorder operations, snapping, frame stepping, comments, 100-step undo/redo, and approved multi-segment rendering.
+- Recoverable local brand templates with immutable version snapshots, portable asset packages, project export/import, render-plan v2, branded caption colors/scaling, aspect/layout presets, per-cut fades, timed text/CTA overlays, and validated local logo, music, intro, and outro tracks rendered through FFmpeg.
+- A separate atomic brand-asset library copies supported files into ProduDash-managed storage, serves opaque previews, validates media with FFprobe, and snapshots exact assets into every human-approved render job.
+- A local publishing outbox that attaches completed renders, supports destination-specific copy and time-zone-aware planning changes before approval, summarizes upcoming and past local targets, freezes hash-verified human approval snapshots, exports path-free JSON handoffs, and states clearly that no external publishing occurs.
+- A derived Shopify analytics report with explicit metric definitions, source freshness, snapshot limitations, 7/30/60-day bounded comparisons, non-causal observations, unavailable profit/conversion/social states, and a PII-free local CSV export.
 
 ## What is not implemented
 
@@ -28,9 +36,10 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - Automatic order creation, payments, refunds, discounts, or fulfillment.
 - TikTok, Instagram, Facebook, YouTube, or Stripe API connectors.
 - External publishing or any unapproved media upload.
-- Social analytics or Shopify profit/conversion figures without real cost and traffic inputs.
+- Social analytics or Shopify profit/conversion figures without official reporting, cost, and traffic inputs.
 - Hosted accounts, cross-device synchronization, OAuth callbacks, webhooks, or token refresh.
 - Signed installers, notarization, automatic updates, or production release packaging.
+- General multi-source editing, speed/freeze effects, advanced audio mixing, animated overlays, model-generated embeddings, and hosted collaboration.
 
 ProduDash never substitutes scraped data, browser automation, emulators, password-based automation, fabricated analytics, or silent mock results for these missing capabilities.
 
@@ -78,11 +87,11 @@ For local transcription, choose an existing whisper.cpp executable and model thr
 
 Inbox draft requests include only the selected business, a bounded operator instruction, and the latest bounded messages from one conversation. Output is schema-validated before storage. It can contain a draft, intent, summary, possible order details, a recommended action, and risk flags. It cannot send a message or perform an external side effect, and ProduDash never silently switches providers.
 
-## Advisor
+## Juanito advisor
 
-The lower-right Advisor panel uses the model assigned to the **Advisor** workload. The selected profile must be genuinely connected and expose text generation plus local tool calling. Before the first question in each app session, ProduDash names the selected provider/model and the bounded data categories that may be sent. Consent expires when ProduDash closes and must be confirmed again if the provider changes or a new category is requested.
+The lower-right Juanito panel uses the model assigned to the **Advisor** workload. The selected profile must be genuinely connected and expose text generation plus local tool calling. Before the first question in each app session, ProduDash names the selected provider/model and the bounded data categories that may be sent. Consent expires when ProduDash closes and must be confirmed again if the provider changes or a new category is requested.
 
-Advisor can read only ProduDash’s allowlisted local summaries: current view, supported business metrics, recent order statuses, attention counts, public integration health, media-job status, and Clip Library counts. It cannot mutate records or use provider-hosted web, code execution, MCP, or computer-use tools. Each turn stops after five local tool rounds.
+Juanito can read only ProduDash’s allowlisted local summaries: current view/selected safe record ID, supported business metrics, defined Shopify analytics with 7, 30, or 60-day equal-window comparisons, recent order statuses, attention counts, public integration health, media-job/candidate details, Clip Library counts/item metadata, normalized visible errors, public provider/workload setup, a small built-in help index, and the next verified setup step. Analytics tool results contain aggregates and limitations rather than customer records, and Juanito is instructed not to treat observations as causal findings or forecasts. He cannot mutate records or use provider-hosted web, code execution, MCP, or computer-use tools. Each turn stops after five local tool rounds.
 
 Default tool results exclude customer names, addresses, emails, authorization data, raw messages, credentials, and unrelated businesses. Imported fields are treated as untrusted quoted data rather than instructions. Up to 50 visible user/assistant turns are stored in a separate atomic, recoverable file; provider reasoning and credentials are never stored there. **Clear history** deletes the visible local conversation.
 
@@ -99,6 +108,10 @@ Open **Content Studio → Library** to add folders or loose video files. ProduDa
 
 The library never copies, uploads, modifies, or deletes source media. Removing a video or folder removes only its ProduDash index record and cached thumbnail.
 
+Library search uses a bounded local metadata index with recorded provenance. It
+can match filename/tag concepts without uploading media and can be rebuilt or
+canceled safely. It does not claim to understand video content.
+
 The bundled binaries are included for development, CI, local inspection, and thumbnail generation. External distribution remains blocked until the owner completes legal review of the applicable FFmpeg/ffprobe GPL obligations or supplies approved replacement builds.
 
 ## Create clips
@@ -106,34 +119,110 @@ The bundled binaries are included for development, CI, local inspection, and thu
 Open **Content Studio → Create clips**, select an available library video, and choose a destination folder. ProduDash creates a collision-free job directory and:
 
 1. Validates the source and available disk space.
-2. Extracts a local analysis track, detects sustained silence and scene boundaries, and samples review frames.
+2. Extracts a local analysis track, measures audio activity/sustained silence, detects scene boundaries and sustained black/frozen footage, and samples review frames.
 3. Uses the selected analysis mode:
-   - **Local heuristics** sends nothing to an AI provider.
+   - **Smart local cuts** builds and ranks a bounded deterministic candidate pool, diversifies selections across the source, truthfully leaves semantic goal relevance unscored, and sends nothing to an AI provider.
    - **Transcript only** sends cloud audio only when cloud transcription is selected, then sends the bounded timestamped transcript to the assigned analysis provider.
    - **Transcript + frames** additionally sends up to three sampled frames.
    - **Native video** sends the complete source video to the assigned compatible Gemini model.
 4. Validates candidate count, 5–180 second bounds, source bounds, confidence, near-duplicates, and overlap. Boundaries may snap by at most 1.5 seconds to a nearby scene or transcript boundary.
 5. Stores hook, complete-thought, audio-clarity, visual-continuity, goal-relevance, duration, platform-fit, novelty, duplication, silence, and unusable-frame scores plus concise rationale.
-6. Pauses for explicit human approval.
-7. Renders only approved candidates as H.264/AAC MP4 files.
-8. Optionally creates an SRT file or SRT plus burned-in captions.
+6. Pauses in a non-destructive review editor with safe range playback, exact in/out points, original-versus-edited values, score explanations, aspect/crop previews, caption timing/style controls, and explicit select/reject/reset/save actions. No candidate is selected automatically.
+7. Persists the immutable suggestion separately from the approved title, timing, captions, and presentation values, then renders only the explicitly approved edits as H.264/AAC MP4 files.
+8. Optionally rebases timestamped transcript segments into monotonic per-clip SRT cues. Without a transcript, the UI explains the limitation and accepts only an intentional single-cue manual fallback. Burned captions use an allowlisted style, position, and safe-area preset.
 9. Creates thumbnails and a safe manifest, then imports completed video artifacts into the Clip Library.
 
 Only one media job processes at a time. Additional jobs remain queued. Coarse stage progress is persisted without writing on every FFmpeg event. If ProduDash closes mid-job, the job is marked interrupted at the next launch and can retry from validated durable artifacts; it never claims to resume a terminated process.
 
 Temporary work lives in a hidden `.produdash-job` directory inside the selected job folder and is removed after complete success. Cancellation first requests graceful termination, then uses bounded force termination if needed. Partial generated artifacts remain user-owned, are reported without exposing absolute paths, and can be reused during an explicit retry. ProduDash never overwrites an unrecognized output file.
 
-Public app state contains only opaque media IDs, output folder names, stages, settings, warnings, and safe artifact filenames. Source/output paths and macOS security-scoped bookmarks are stored only in the encrypted credential vault. Manifests omit absolute paths, credentials, provider payloads, and hidden reasoning.
+Public app state contains only opaque media IDs/protocol preview URLs, output folder names, stages, settings, warnings, immutable candidate suggestions, explicit edits, and safe artifact filenames. Source/output paths and macOS security-scoped bookmarks are stored only in the encrypted credential vault. Manifests record safe original-versus-approved timing/presentation and caption cue counts while omitting absolute paths, credentials, provider payloads, and hidden reasoning.
 
 Aspect treatment can keep the original frame, fit/pad, or center crop; fit/pad is the safe default. Caption mode defaults to Off. Cloud choices appear only when the assigned models are connected and capability-compatible. Consent is specific to one queued job and names the analysis provider/model, transcription provider/model when applicable, and the exact categories sent. A provider failure makes that job fail safely and retryably; it never switches provider, analysis mode, or data mode.
 
+Project render-plan v3 also supports explicitly reviewed focus framing, local
+voice cleanup/enhancement, one user-owned Library B-roll track, and one managed
+local sound-effect track. B-roll is fingerprint-verified and copied into the
+immutable approved job snapshot; source paths remain private. These controls
+are off until reviewed. ProduDash does not yet claim automatic person tracking
+or offer stock/generative B-roll.
+
+Each completed clip also receives three local thumbnail choices sampled from
+early, middle, and late frames. The manifest records their local-render
+provenance and normalized positions. The completed-job review shows those frames
+through opaque local URLs and lets the user mark one preferred frame per rendered
+clip. Users can also add a signature-validated JPG, PNG, or WebP custom choice;
+ProduDash copies it into the completed output folder, keeps its original path
+private, and never alters the source image. The preferred result can be checked
+against approximate vertical platform safe areas that are explicitly not official
+publishing previews. These preferences do not upload or publish media. Project transcripts can be translated into
+provider-generated caption drafts only after an exact provider/model/transcript
+disclosure is confirmed; every result remains inactive until human review.
+Projects can also apply a reviewed local HD-frame resize. The UI and manifest
+state truthfully that resizing pixels does not recover missing source detail.
+Projects can generate bounded OpenAI built-in or authorized custom-voice previews for individual
+transcript cues after exact provider/model/text consent and the required
+AI-generated-voice disclosure. Preview audio is stored behind an opaque local
+URL, contains safe provenance, can be played and permanently deleted, and is
+invalidated by dependent transcript edits. Only explicitly reviewed previews
+enter immutable jobs, where users choose to mix them with or replace original
+audio for the reviewed interval. Creating a custom likeness requires a
+versioned first-use acceptance, an adult rights declaration, OpenAI’s exact
+consent recording, and a separate matching sample. ProduDash does not retain
+either selected source recording and labels resulting audio as synthetic.
+Provider account eligibility and supplemental terms still apply.
+Voice choices are scoped to the selected provider: OpenAI exposes its supported
+built-in voices, ElevenLabs exposes only ProduDash-authorized custom voices, and
+an OpenAI-compatible loopback runtime may expose one explicitly configured
+voice ID. Projects with speaker-labeled transcript cues can generate up to 12
+unvoiced drafts for one speaker in a single confirmed operation. Every segment
+remains independently playable, removable, and excluded from rendering until
+human review.
+Authorized custom voices can be removed from ProduDash with a separate
+confirmation. ElevenLabs voices are deleted through its official API before
+local authorization is removed. For providers without an exposed voice-delete
+operation, ProduDash removes its authorization and consent reference while
+clearly directing the owner to manage any remaining provider resource.
+
+ElevenLabs is also available as an independent encrypted provider profile for
+Instant Voice Cloning and multilingual speech. Its API key stays in Electron
+secure storage, and ProduDash retains only safe voice identifiers plus a hash
+of the separately recorded consent evidence. Cloud voice profiles are never
+used as silent fallbacks.
+
+Integrations includes an on-demand local compatibility scan for Piper, Kokoro,
+Chatterbox, XTTS, RVC, and Tortoise TTS. RVC is identified separately as voice
+conversion because it transforms an existing speech recording rather than
+generating speech from text. It reports coarse OS, architecture, core-count,
+memory, accelerator, and matching-command availability without reading
+personal files or uploading device inventory. “Compatible” means only that the
+hardware meets the documented baseline; “installed” requires a matching local
+command. ProduDash never downloads local executables or model weights
+automatically. An explicitly configured loopback OpenAI-compatible endpoint may
+declare `speech_generation` for local TTS after its connection test succeeds.
+
+## Projects and local editor
+
+Open **Content Studio → Projects** to create a project from an available Clip Library asset, or choose **Open as project** on an existing media-job candidate. Projects reference source media in place and never copy, modify, upload, or delete it.
+
+Project metadata supports title, description, optional business, favorites, tags, collections, target platforms, desired lengths, instructions, archive/restore, search/filter/sort, duplication, and metadata-only deletion. A duplicate receives a new identity and clean job history while retaining the current edit plan.
+
+The render-plan schema stores only opaque media IDs and bounded edit data. Every completed edit operation saves a recoverable draft; undo and redo keep up to 100 local operations. **Save version** creates an immutable entry, capped at 50. Restoring an older version creates a new current revision and leaves later history intact.
+
+Use **Prepare local signals** to generate waveform peaks and scene boundaries through the existing isolated utility process. **Approve plan and render** is the explicit human gate: the main process reloads and validates the selected revision, records its hash, and places an immutable snapshot in the one-at-a-time media queue. Later project edits never alter a queued render. Preview and final FFmpeg output use the same normalized segment order, and transcript cues are rebased across cuts.
+
+If a Library record disappears, the project retains a safe source fingerprint and name. Relinking accepts only an available Library asset with matching duration and fingerprint. Project documents, renderer state, manifests, and errors never include absolute paths, bookmarks, credentials, raw provider payloads, or hidden reasoning.
+
+The complete preservation inventory, Phase 1 risk map, official-documentation parity analysis, and planned Phase 2–8 roadmap are in [docs/creator-expansion.md](docs/creator-expansion.md).
+
 ## Reset and deletion
 
-- **Reset dashboard data** clears imported businesses, snapshots, local plans, media-job records and protected path references, approvals, audits, Advisor history, the Clip Library index, and cached thumbnails. AI profiles, workload assignments, and encrypted provider/integration credentials remain. Integrations return to a disconnected state until refreshed.
+- **Reset dashboard data** clears imported businesses, snapshots, local plans, media-job records and protected path references, approvals, audits, Advisor history, the Clip Library index, cached thumbnails, and project preparation caches. Project metadata, recoverable drafts, and saved versions remain, with affected sources marked for relinking. AI profiles, workload assignments, and encrypted provider/integration credentials remain. Integrations return to a disconnected state until refreshed.
 - **Remove** on an integration deletes that integration’s credentials and marks its snapshots disconnected; already imported Shopify snapshots remain for local reference.
-- **Delete all data and credentials** removes ProduDash state, provider metadata, indexes, cached thumbnails, stored bookmarks, backups, recovery snapshots, and the encrypted credential vault, then creates a clean local workspace.
+- **Delete all data and credentials** removes ProduDash state, project metadata and caches, provider metadata, indexes, cached thumbnails, stored bookmarks, backups, recovery snapshots, and the encrypted credential vault, then creates a clean local workspace.
 
 All destructive operations require explicit confirmation in the renderer. Reset, removal, and delete-all never delete user-owned source or generated media files.
+Reset retains a custom Juanito display name; delete-all intentionally returns the display name to the clean-install default, Juanito.
 
 ## Development
 

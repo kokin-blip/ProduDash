@@ -24,10 +24,11 @@ function boundedTranscriptContext(transcript) {
 }
 
 function buildAnalysisPrompt(job, transcript) {
+  const poolSize = Math.min(20, Math.max(6, Number(job.settings.maxClips || 3) * 3));
   return [
     "Select strong standalone clips from the supplied media context.",
     `Goal: ${job.goal || "Find complete, useful moments."}`,
-    `Target duration: ${job.settings.targetDuration} seconds. Maximum clips: ${job.settings.maxClips}.`,
+    `Target duration: ${job.settings.targetDuration} seconds. Draft up to ${poolSize} diverse candidates; the user may approve at most ${job.settings.maxClips}.`,
     `Platforms: ${(job.settings.platforms || []).join(", ") || "unspecified"}.`,
     "Return only the requested schema. Scores are 0–1. Keep rationale concise and never include hidden reasoning.",
     transcript ? `Timestamped transcript:\n${boundedTranscriptContext(transcript)}` : ""
@@ -113,7 +114,7 @@ class MediaAnalysisService {
       duration: localResult.metadata.duration,
       sceneBoundaries: analysis.scenes,
       transcriptBoundaries
-    }).slice(0, job.settings.maxClips);
+    }).slice(0, Math.min(20, Math.max(6, job.settings.maxClips * 3)));
     writeJsonAtomic(
       path.join(paths.tempPath, "analysis.json"),
       {

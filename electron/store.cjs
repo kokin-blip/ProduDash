@@ -1,9 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { createInitialState } = require("./initial-state.cjs");
 const { AppError } = require("./errors.cjs");
 const { clone, loadRecoverableState } = require("./state-schema.cjs");
 const { writeJsonAtomic } = require("./atomic-json.cjs");
+const { buildAnalyticsReport } = require("./analytics-report.cjs");
 const {
   boundedString,
   normalizeShopifyDomain,
@@ -11,6 +13,7 @@ const {
   requireKnownIntegration,
   validateClipPayload,
   validateMediaJobPayload,
+  validatePostPlanDraft,
   validatePostPayload
 } = require("./validation.cjs");
 
@@ -24,6 +27,74 @@ function integrationById(state, integrationId) {
   const integration = state.integrations.find((item) => item.id === integrationId);
   if (!integration) throw new AppError("INTEGRATION_NOT_FOUND", "Integration not found.");
   return integration;
+}
+
+function publishingMediaSnapshot(state, mediaJobId) {
+  if (!mediaJobId) return null;
+  const job = state.mediaJobs.find((item) => item.id === mediaJobId);
+  if (!job || job.status !== "completed") {
+    throw new AppError("MEDIA_JOB_NOT_READY", "The rendered media selected for this post plan is unavailable.");
+  }
+  const videos = job.artifacts
+    .filter((artifact) => artifact.kind === "video")
+    .map((artifact) => ({ name: path.basename(artifact.name) }))
+    .slice(0, 20);
+  if (!videos.length) throw new AppError("MEDIA_JOB_NOT_READY", "The selected media job has no completed video artifact.");
+  const thumbnails = (job.thumbnailSelections || [])
+    .map((selection) => job.artifacts.find((artifact) => artifact.kind === "thumbnail" && artifact.id === selection.artifactId))
+    .filter(Boolean)
+    .map((artifact) => ({ name: path.basename(artifact.name), source: artifact.source }))
+    .slice(0, 20);
+  return {
+    mediaJobId: job.id,
+    title: job.title,
+    outputFolderName: job.outputFolderName,
+    videos,
+    preferredThumbnails: thumbnails,
+    completedAt: job.completedAt || job.updatedAt
+  };
+}
+
+function publishingApprovalSnapshot(plan, mode, mediaSnapshot) {
+  const approvedAt = new Date().toISOString();
+  const payload = {
+    planId: plan.id,
+    title: plan.title,
+    caption: plan.caption,
+    platformPackages: plan.platformPackages,
+    schedule: plan.schedule,
+    media: mediaSnapshot
+  };
+  const hash = crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+  return {
+    version: 1,
+    hash,
+    mode,
+    approvedAt,
+    payload,
+    destinations: plan.platforms.map((platformId) => ({
+      platformId,
+      idempotencyKey: crypto.createHash("sha256").update(`${plan.id}:${platformId}:${hash}`).digest("hex")
+    }))
+  };
+}
+
+function publishingContentHash(plan) {
+  return crypto
+    .createHash("sha256")
+    .update(
+      JSON.stringify({
+        clipJobId: plan.clipJobId,
+        mediaJobId: plan.mediaJobId,
+        title: plan.title,
+        caption: plan.caption,
+        scheduledFor: plan.scheduledFor,
+        timeZone: plan.timeZone,
+        platforms: plan.platforms,
+        platformPackages: plan.platformPackages
+      })
+    )
+    .digest("hex");
 }
 
 class ProduDashStore {
@@ -52,6 +123,10 @@ class ProduDashStore {
     const business = this.state.businesses.find((item) => item.id === businessId);
     if (!business) throw new AppError("BUSINESS_NOT_FOUND", "Business not found.");
     return business;
+  }
+
+  getAnalyticsReport(businessId, rangeDays) {
+    return buildAnalyticsReport(this.state, businessId, { rangeDays });
   }
 
   getConversation(conversationId) {
@@ -309,11 +384,59 @@ class ProduDashStore {
       label: "Advisor display name",
       min: 1,
       max: 40,
-      fallback: "Advisor"
+      fallback: "Juanito"
     });
     return this.enqueueMutation(async () => {
       this.state.advisorSettings = { displayName };
       this.audit("advisor", "Updated the local Advisor display name.");
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  hasCurrentVoiceLikenessAcceptance(termsVersion) {
+    return this.state.voiceLikeness?.acceptance?.termsVersion === termsVersion;
+  }
+
+  async acceptVoiceLikenessTerms(acceptance) {
+    return this.enqueueMutation(async () => {
+      this.state.voiceLikeness = this.state.voiceLikeness || { acceptance: null, voices: [] };
+      this.state.voiceLikeness.acceptance = {
+        termsVersion: acceptance.termsVersion,
+        acceptedAt: new Date().toISOString(),
+        relationship: acceptance.relationship,
+        legalNameHash: crypto.createHash("sha256").update(acceptance.legalName).digest("hex")
+      };
+      this.audit("voice_likeness", "Accepted the custom voice and likeness terms.");
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async addCustomVoice(voice) {
+    return this.enqueueMutation(async () => {
+      this.state.voiceLikeness = this.state.voiceLikeness || { acceptance: null, voices: [] };
+      this.state.voiceLikeness.voices = this.state.voiceLikeness.voices.filter(
+        (item) => !(item.providerProfileId === voice.providerProfileId && item.id === voice.id)
+      );
+      this.state.voiceLikeness.voices.push(clone(voice));
+      this.audit("voice_likeness", `Added the custom voice “${voice.name}”.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async removeCustomVoice(providerProfileId, voiceId) {
+    const profileId = requireId(providerProfileId, "Voice provider");
+    const id = requireId(voiceId, "Custom voice");
+    return this.enqueueMutation(async () => {
+      this.state.voiceLikeness = this.state.voiceLikeness || { acceptance: null, voices: [] };
+      const voice = this.state.voiceLikeness.voices.find((item) => item.providerProfileId === profileId && item.id === id);
+      if (!voice) throw new AppError("CUSTOM_VOICE_NOT_FOUND", "The selected custom voice is unavailable.");
+      this.state.voiceLikeness.voices = this.state.voiceLikeness.voices.filter(
+        (item) => !(item.providerProfileId === profileId && item.id === id)
+      );
+      this.audit("voice_likeness", `Removed the custom voice “${voice.name}” from ProduDash.`);
       this.persist();
       return this.getAppState();
     });
@@ -355,11 +478,13 @@ class ProduDashStore {
       }));
       const aiWorkloads = clone(this.state.aiWorkloads);
       const advisorSettings = clone(this.state.advisorSettings);
+      const voiceLikeness = clone(this.state.voiceLikeness);
       this.state = createInitialState();
       this.state.credentialSettings = credentialSettings;
       this.state.aiProviders = aiProviders;
       this.state.aiWorkloads = aiWorkloads;
       this.state.advisorSettings = advisorSettings;
+      this.state.voiceLikeness = voiceLikeness;
       this.audit("system", "Dashboard data reset. Secure credentials were retained.");
       this.persist();
       return this.getAppState();
@@ -528,14 +653,16 @@ class ProduDashStore {
 
   async createMediaJobSummary(summary) {
     requireId(summary?.id, "Media job");
-    validateMediaJobPayload({
-      ...summary?.settings,
-      sourceMediaId: summary?.sourceMediaId,
-      outputSelectionId: "validated-selection",
-      title: summary?.title,
-      goal: summary?.goal,
-      platforms: summary?.settings?.platforms
-    });
+    if ((summary?.jobType || "clip_generation") === "clip_generation") {
+      validateMediaJobPayload({
+        ...summary?.settings,
+        sourceMediaId: summary?.sourceMediaId,
+        outputSelectionId: "validated-selection",
+        title: summary?.title,
+        goal: summary?.goal,
+        platforms: summary?.settings?.platforms
+      });
+    }
     return this.enqueueMutation(async () => {
       if (this.state.mediaJobs.some((job) => job.id === summary.id)) {
         throw new AppError("MEDIA_JOB_EXISTS", "A media job with this identifier already exists.");
@@ -543,6 +670,24 @@ class ProduDashStore {
       this.state.mediaJobs.unshift(clone(summary));
       this.audit("media_job", `Queued deterministic media job: ${summary.title}.`);
       this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async detachProjectMediaJobs(projectId) {
+    requireId(projectId, "Project");
+    return this.enqueueMutation(async () => {
+      let changed = false;
+      for (const job of this.state.mediaJobs) {
+        if (job.projectId !== projectId) continue;
+        job.projectId = null;
+        job.updatedAt = new Date().toISOString();
+        changed = true;
+      }
+      if (changed) {
+        this.audit("project", `Detached retained media jobs from deleted project ${projectId}.`);
+        this.persist();
+      }
       return this.getAppState();
     });
   }
@@ -557,11 +702,13 @@ class ProduDashStore {
       "selectedCandidateIds",
       "warnings",
       "artifacts",
+      "thumbnailSelections",
       "error",
       "retryable",
       "startedAt",
       "updatedAt",
-      "completedAt"
+      "completedAt",
+      "sourceDuration"
     ]);
     if (!patch || typeof patch !== "object" || Array.isArray(patch) || Object.keys(patch).some((key) => !allowed.has(key))) {
       throw new AppError("INVALID_INPUT", "Media job update is invalid.");
@@ -597,16 +744,62 @@ class ProduDashStore {
   }
 
   async createPostPlan(payload) {
-    const input = validatePostPayload(payload, this.state.clipperJobs);
+    const input = validatePostPayload(payload, this.state.clipperJobs, this.state.mediaJobs);
     return this.enqueueMutation(async () => {
+      const mediaSnapshot = publishingMediaSnapshot(this.state, input.mediaJobId);
+      const contentHash = publishingContentHash(input);
+      if (this.state.postQueue.some((plan) => plan.contentHash === contentHash && plan.status !== "canceled")) {
+        return this.getAppState();
+      }
       this.state.postQueue.unshift({
         id: createId("post"),
         ...input,
+        contentHash,
+        mediaSnapshot,
+        schedule: {
+          mode: input.scheduledFor ? "planned_local_only" : "unscheduled",
+          scheduledFor: input.scheduledFor || null,
+          timeZone: input.scheduledFor ? input.timeZone : null
+        },
+        approvalSnapshot: null,
+        exportReceipt: null,
+        canceledAt: null,
         status: "needs_approval",
         policyGate: "Human approval is required before manual export or any future official API publishing path.",
         createdAt: new Date().toISOString()
       });
       this.audit("publisher", `Created approval-gated post plan: ${input.title}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  async updatePostPlanDraft(planId, payload) {
+    requireId(planId, "Post plan");
+    return this.enqueueMutation(async () => {
+      const plan = this.state.postQueue.find((item) => item.id === planId);
+      if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
+      if (plan.status !== "needs_approval") {
+        throw new AppError("POST_PLAN_LOCKED", "Approved, exported, and canceled publishing plans cannot be edited.");
+      }
+      const input = validatePostPlanDraft(payload, plan.platforms);
+      if (
+        JSON.stringify(plan.platformPackages) === JSON.stringify(input.platformPackages) &&
+        JSON.stringify(plan.schedule) === JSON.stringify(input.schedule)
+      ) {
+        return this.getAppState();
+      }
+      const contentHash = publishingContentHash({ ...plan, ...input });
+      if (this.state.postQueue.some((item) => item.id !== plan.id && item.contentHash === contentHash && item.status !== "canceled")) {
+        throw new AppError("POST_PLAN_DUPLICATE", "An identical active publishing plan already exists.");
+      }
+      plan.platformPackages = input.platformPackages;
+      plan.scheduledFor = input.scheduledFor;
+      plan.timeZone = input.timeZone;
+      plan.schedule = input.schedule;
+      plan.contentHash = contentHash;
+      plan.updatedAt = new Date().toISOString();
+      this.audit("publisher", `Updated destination copy and local schedule for ${plan.title}.`);
       this.persist();
       return this.getAppState();
     });
@@ -628,8 +821,11 @@ class ProduDashStore {
         );
         if (!ready) throw new AppError("INTEGRATION_NOT_READY", "Every publishing destination must be genuinely connected.");
       }
+      const mediaSnapshot = publishingMediaSnapshot(this.state, plan.mediaJobId);
+      plan.mediaSnapshot = mediaSnapshot;
+      plan.approvalSnapshot = publishingApprovalSnapshot(plan, mode, mediaSnapshot);
       plan.status = targetStatus;
-      plan.approvedAt = new Date().toISOString();
+      plan.approvedAt = plan.approvalSnapshot.approvedAt;
       this.audit("publisher", `Approved ${plan.title} for ${mode === "manual_export" ? "manual export" : "official API publishing"}.`);
       this.persist();
       return this.getAppState();
@@ -647,7 +843,45 @@ class ProduDashStore {
       }
       plan.status = "export_ready";
       plan.exportedAt = new Date().toISOString();
+      plan.exportReceipt = {
+        exportedAt: plan.exportedAt,
+        snapshotHash: plan.approvalSnapshot?.hash || null
+      };
       this.audit("publisher", `Marked approved post plan export-ready: ${plan.title}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  getPostExportPackage(planId) {
+    requireId(planId, "Post plan");
+    const plan = this.state.postQueue.find((item) => item.id === planId);
+    if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
+    if (!["approved_for_manual_export", "export_ready"].includes(plan.status) || !plan.approvalSnapshot) {
+      throw new AppError("INVALID_TRANSITION", "Approve this plan for manual export before creating an export package.");
+    }
+    return {
+      format: "produdash-publishing-package",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      approval: clone(plan.approvalSnapshot),
+      instructions:
+        "This package contains approved copy and safe generated filenames only. It does not publish media or grant access to any account."
+    };
+  }
+
+  async cancelPostPlan(planId) {
+    requireId(planId, "Post plan");
+    return this.enqueueMutation(async () => {
+      const plan = this.state.postQueue.find((item) => item.id === planId);
+      if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
+      if (plan.status === "canceled") return this.getAppState();
+      if (!["needs_approval", "approved_for_manual_export", "approved_for_official_api"].includes(plan.status)) {
+        throw new AppError("INVALID_TRANSITION", "This post plan can no longer be canceled.");
+      }
+      plan.status = "canceled";
+      plan.canceledAt = new Date().toISOString();
+      this.audit("publisher", `Canceled local post plan: ${plan.title}.`);
       this.persist();
       return this.getAppState();
     });

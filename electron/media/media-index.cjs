@@ -1,8 +1,9 @@
 const fs = require("node:fs");
 const { AppError } = require("../errors.cjs");
 const { preserveFile, readJson, writeJsonAtomic } = require("../atomic-json.cjs");
+const { buildSearchDocument, validateSearchDocument } = require("./semantic-search.cjs");
 
-const MEDIA_INDEX_VERSION = 1;
+const MEDIA_INDEX_VERSION = 2;
 
 function createEmptyMediaIndex() {
   return {
@@ -29,7 +30,21 @@ function validateMediaIndex(value) {
       throw new AppError("INVALID_MEDIA_INDEX", "The saved Clip Library index contains invalid records.");
     }
   }
+  for (const clip of value.clips) {
+    clip.searchDocument = validateSearchDocument(clip.searchDocument);
+  }
   return value;
+}
+
+function migrateMediaIndex(value) {
+  const migrated = structuredClone(value);
+  if (migrated?.schemaVersion === 1) {
+    migrated.clips = Array.isArray(migrated.clips)
+      ? migrated.clips.map((clip) => ({ ...clip, searchDocument: buildSearchDocument(clip) }))
+      : [];
+    migrated.schemaVersion = 2;
+  }
+  return migrated;
 }
 
 function loadMediaIndex(filePath) {
@@ -45,7 +60,13 @@ function loadMediaIndex(filePath) {
     if (Number(raw?.schemaVersion) > MEDIA_INDEX_VERSION) {
       throw new AppError("FUTURE_MEDIA_INDEX", "This Clip Library was created by a newer ProduDash version.");
     }
-    return { index: validateMediaIndex(raw), notices };
+    const migrated = migrateMediaIndex(raw);
+    const index = validateMediaIndex(migrated);
+    if (raw.schemaVersion !== index.schemaVersion) {
+      writeJsonAtomic(filePath, index);
+      notices.push({ code: "MEDIA_INDEX_UPGRADED", message: "ProduDash upgraded the local Clip Library search index." });
+    }
+    return { index, notices };
   } catch (error) {
     if (error instanceof AppError && error.code === "FUTURE_MEDIA_INDEX") throw error;
     preserveFile(filePath, "recovery");
@@ -72,4 +93,4 @@ function loadMediaIndex(filePath) {
   }
 }
 
-module.exports = { MEDIA_INDEX_VERSION, createEmptyMediaIndex, loadMediaIndex, validateMediaIndex };
+module.exports = { MEDIA_INDEX_VERSION, createEmptyMediaIndex, loadMediaIndex, migrateMediaIndex, validateMediaIndex };

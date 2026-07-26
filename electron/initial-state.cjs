@@ -1,6 +1,6 @@
 function createInitialState() {
   return {
-    schemaVersion: 4,
+    schemaVersion: 7,
     selectedBusinessId: null,
     selectedConversationId: null,
     integrations: [
@@ -280,6 +280,23 @@ function createInitialState() {
         error: null
       },
       {
+        id: "elevenlabs",
+        providerType: "elevenlabs",
+        name: "ElevenLabs",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: "eleven_multilingual_v2",
+        models: [
+          {
+            id: "eleven_multilingual_v2",
+            name: "Eleven Multilingual v2",
+            capabilities: ["speech_generation"]
+          }
+        ],
+        lastValidatedAt: null,
+        error: null
+      },
+      {
         id: "openai-compatible",
         providerType: "openai-compatible",
         name: "OpenAI-compatible endpoint",
@@ -328,7 +345,11 @@ function createInitialState() {
       }
     },
     advisorSettings: {
-      displayName: "Advisor"
+      displayName: "Juanito"
+    },
+    voiceLikeness: {
+      acceptance: null,
+      voices: []
     },
     creatorPlatforms: [
       {

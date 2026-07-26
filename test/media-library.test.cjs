@@ -145,6 +145,22 @@ test("opaque media protocol enforces IDs and supports bounded byte ranges", asyn
   assert.equal(parseRange("bytes=99-100", 10), null);
   const rejected = await handler(new Request("produdash-media://clip/../../etc/passwd"));
   assert.equal(rejected.status, 404);
+  const jobThumbnailHandler = createMediaProtocolHandler(
+    {
+      resolveClipPath: () => filePath,
+      resolveThumbnailPath: () => filePath,
+      startClipAccess: () => null
+    },
+    null,
+    {
+      resolveThumbnailArtifact: (id) => {
+        assert.equal(id, "artifact-1234567890abcdef12345678");
+        return filePath;
+      }
+    }
+  );
+  assert.equal((await jobThumbnailHandler(new Request("produdash-media://job-thumbnail/artifact-1234567890abcdef12345678"))).status, 200);
+  assert.equal((await handler(new Request("produdash-media://job-thumbnail/artifact-1234567890abcdef12345678"))).status, 404);
 });
 
 test("indexed folder records cannot escape their allowlisted root", () => {

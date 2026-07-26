@@ -6,6 +6,7 @@ const AI_CAPABILITIES = Object.freeze({
   IMAGE_UNDERSTANDING: "image_understanding",
   NATIVE_VIDEO_UNDERSTANDING: "native_video_understanding",
   AUDIO_TRANSCRIPTION: "audio_transcription",
+  SPEECH_GENERATION: "speech_generation",
   EMBEDDINGS: "embeddings"
 });
 

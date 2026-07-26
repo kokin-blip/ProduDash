@@ -11,6 +11,7 @@ const CONFIGURABLE_CAPABILITIES = new Set([
   AI_CAPABILITIES.TOOL_CALLING,
   AI_CAPABILITIES.IMAGE_UNDERSTANDING,
   AI_CAPABILITIES.AUDIO_TRANSCRIPTION,
+  AI_CAPABILITIES.SPEECH_GENERATION,
   AI_CAPABILITIES.EMBEDDINGS
 ]);
 
@@ -56,6 +57,14 @@ class OpenAICompatibleProviderAdapter extends OpenAIProviderAdapter {
           placeholder: "text_generation,streaming",
           sensitive: false,
           required: true
+        },
+        {
+          key: "voiceId",
+          label: "Speech voice ID",
+          type: "text",
+          placeholder: "Optional local/runtime voice ID",
+          sensitive: false,
+          required: false
         },
         {
           key: "apiKey",

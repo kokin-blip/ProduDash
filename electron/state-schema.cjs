@@ -1,10 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { AppError } = require("./errors.cjs");
 const { createInitialState } = require("./initial-state.cjs");
 const { preserveFile, readJson, writeJsonAtomic } = require("./atomic-json.cjs");
 
-const CURRENT_SCHEMA_VERSION = 4;
+const CURRENT_SCHEMA_VERSION = 7;
 
 function clone(value) {
   return structuredClone(value);
@@ -29,6 +30,10 @@ function mergeExtensibleCatalog(initialItems, persistedItems) {
 
 function withDefaults(state) {
   const initial = createInitialState();
+  const advisorSettings =
+    state.advisorSettings && typeof state.advisorSettings === "object" && !Array.isArray(state.advisorSettings)
+      ? { ...initial.advisorSettings, ...state.advisorSettings }
+      : initial.advisorSettings;
   return {
     ...initial,
     ...state,
@@ -51,17 +56,64 @@ function withDefaults(state) {
       state.aiWorkloads && typeof state.aiWorkloads === "object" && !Array.isArray(state.aiWorkloads)
         ? { ...initial.aiWorkloads, ...state.aiWorkloads }
         : initial.aiWorkloads,
-    advisorSettings:
-      state.advisorSettings && typeof state.advisorSettings === "object" && !Array.isArray(state.advisorSettings)
-        ? { ...initial.advisorSettings, ...state.advisorSettings }
-        : initial.advisorSettings,
+    advisorSettings,
+    voiceLikeness:
+      state.voiceLikeness && typeof state.voiceLikeness === "object" && !Array.isArray(state.voiceLikeness)
+        ? {
+            acceptance:
+              state.voiceLikeness.acceptance &&
+              typeof state.voiceLikeness.acceptance === "object" &&
+              !Array.isArray(state.voiceLikeness.acceptance)
+                ? state.voiceLikeness.acceptance
+                : null,
+            voices: Array.isArray(state.voiceLikeness.voices) ? state.voiceLikeness.voices : []
+          }
+        : initial.voiceLikeness,
     businesses: Array.isArray(state.businesses) ? state.businesses : [],
     conversations: Array.isArray(state.conversations) ? state.conversations : [],
     approvals: Array.isArray(state.approvals) ? state.approvals : [],
     auditLog: Array.isArray(state.auditLog) ? state.auditLog.slice(0, 500) : [],
-    mediaJobs: Array.isArray(state.mediaJobs) ? state.mediaJobs : [],
+    mediaJobs: Array.isArray(state.mediaJobs)
+      ? state.mediaJobs.map((job) => ({
+          jobType: "clip_generation",
+          projectId: null,
+          renderPlanVersion: null,
+          renderPlanHash: null,
+          thumbnailSelections: [],
+          ...job
+        }))
+      : [],
     clipperJobs: Array.isArray(state.clipperJobs) ? state.clipperJobs : [],
-    postQueue: Array.isArray(state.postQueue) ? state.postQueue : []
+    postQueue: Array.isArray(state.postQueue)
+      ? state.postQueue.map((plan) => {
+          const platforms = Array.isArray(plan.platforms) ? plan.platforms : [];
+          const scheduledFor = typeof plan.scheduledFor === "string" && plan.scheduledFor ? plan.scheduledFor : null;
+          return {
+            ...plan,
+            mediaJobId: typeof plan.mediaJobId === "string" ? plan.mediaJobId : null,
+            contentHash: typeof plan.contentHash === "string" && /^[a-f0-9]{64}$/.test(plan.contentHash) ? plan.contentHash : null,
+            platformPackages: Array.isArray(plan.platformPackages)
+              ? plan.platformPackages
+              : platforms.map((platformId) => ({
+                  platformId,
+                  title: typeof plan.title === "string" ? plan.title : "",
+                  caption: typeof plan.caption === "string" ? plan.caption : ""
+                })),
+            schedule:
+              plan.schedule && typeof plan.schedule === "object" && !Array.isArray(plan.schedule)
+                ? plan.schedule
+                : {
+                    mode: scheduledFor ? "planned_local_only" : "unscheduled",
+                    scheduledFor,
+                    timeZone: scheduledFor ? "UTC" : null
+                  },
+            mediaSnapshot: plan.mediaSnapshot && typeof plan.mediaSnapshot === "object" ? plan.mediaSnapshot : null,
+            approvalSnapshot: plan.approvalSnapshot && typeof plan.approvalSnapshot === "object" ? plan.approvalSnapshot : null,
+            exportReceipt: plan.exportReceipt && typeof plan.exportReceipt === "object" ? plan.exportReceipt : null,
+            canceledAt: typeof plan.canceledAt === "string" ? plan.canceledAt : null
+          };
+        })
+      : []
   };
 }
 
@@ -106,7 +158,7 @@ function migrateState(input) {
         : [],
       aiProviders: [defaultProvider],
       aiWorkloads: clone(initial.aiWorkloads),
-      advisorSettings: clone(initial.advisorSettings),
+      advisorSettings: { displayName: "Advisor" },
       clipperJobs: Array.isArray(state.clipperJobs)
         ? state.clipperJobs.map((job) => ({
             ...job,
@@ -114,6 +166,40 @@ function migrateState(input) {
             legacy: true
           }))
         : []
+    };
+  }
+  if (state.schemaVersion === 4) {
+    const advisorSettings =
+      state.advisorSettings && typeof state.advisorSettings === "object" && !Array.isArray(state.advisorSettings)
+        ? clone(state.advisorSettings)
+        : { displayName: "Advisor" };
+    if (advisorSettings.displayName === "Advisor") advisorSettings.displayName = "Juanito";
+    state = {
+      ...state,
+      schemaVersion: 5,
+      advisorSettings
+    };
+  }
+  if (state.schemaVersion === 5) {
+    state = {
+      ...state,
+      schemaVersion: 6,
+      mediaJobs: Array.isArray(state.mediaJobs)
+        ? state.mediaJobs.map((job) => ({
+            ...job,
+            jobType: "clip_generation",
+            projectId: null,
+            renderPlanVersion: null,
+            renderPlanHash: null
+          }))
+        : []
+    };
+  }
+  if (state.schemaVersion === 6) {
+    state = {
+      ...state,
+      schemaVersion: 7,
+      voiceLikeness: { acceptance: null, voices: [] }
     };
   }
   return withDefaults(state);
@@ -147,6 +233,39 @@ function validateState(state) {
   }
   if (!state.advisorSettings || typeof state.advisorSettings !== "object" || Array.isArray(state.advisorSettings)) {
     throw new AppError("INVALID_STATE", "The saved advisor settings are invalid.");
+  }
+  if (
+    !state.voiceLikeness ||
+    typeof state.voiceLikeness !== "object" ||
+    Array.isArray(state.voiceLikeness) ||
+    !Array.isArray(state.voiceLikeness.voices)
+  ) {
+    throw new AppError("INVALID_STATE", "The saved custom voice metadata is invalid.");
+  }
+  if (
+    state.voiceLikeness.acceptance !== null &&
+    (typeof state.voiceLikeness.acceptance !== "object" ||
+      typeof state.voiceLikeness.acceptance.termsVersion !== "string" ||
+      typeof state.voiceLikeness.acceptance.acceptedAt !== "string" ||
+      typeof state.voiceLikeness.acceptance.legalNameHash !== "string")
+  ) {
+    throw new AppError("INVALID_STATE", "The saved voice-likeness acceptance is invalid.");
+  }
+  const customVoiceIds = new Set();
+  for (const voice of state.voiceLikeness.voices) {
+    if (
+      !voice ||
+      typeof voice !== "object" ||
+      typeof voice.id !== "string" ||
+      !voice.id ||
+      customVoiceIds.has(voice.id) ||
+      typeof voice.name !== "string" ||
+      typeof voice.providerProfileId !== "string" ||
+      typeof voice.createdAt !== "string"
+    ) {
+      throw new AppError("INVALID_STATE", "The saved custom voice metadata is invalid.");
+    }
+    customVoiceIds.add(voice.id);
   }
   const providerIds = new Set();
   for (const profile of state.aiProviders) {
@@ -225,7 +344,19 @@ function validateState(state) {
       mediaJobIds.has(job.id) ||
       typeof job.title !== "string" ||
       typeof job.sourceMediaId !== "string" ||
+      !["clip_generation", "project_prepare", "project_render"].includes(job.jobType) ||
+      (job.projectId !== null && (typeof job.projectId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(job.projectId))) ||
+      (job.renderPlanVersion !== null && ![1, 2].includes(job.renderPlanVersion)) ||
+      (job.renderPlanHash !== null && (typeof job.renderPlanHash !== "string" || !/^[a-f0-9]{64}$/.test(job.renderPlanHash))) ||
+      (job.sourcePreviewUrl !== null &&
+        job.sourcePreviewUrl !== undefined &&
+        (typeof job.sourcePreviewUrl !== "string" ||
+          !/^produdash-media:\/\/clip\/[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(job.sourcePreviewUrl))) ||
+      (job.sourceDuration !== null &&
+        job.sourceDuration !== undefined &&
+        (!Number.isFinite(job.sourceDuration) || job.sourceDuration < 0)) ||
       typeof job.outputFolderName !== "string" ||
+      job.outputFolderName !== path.basename(job.outputFolderName) ||
       !mediaJobStatuses.has(job.status) ||
       typeof job.stage !== "string" ||
       !Number.isFinite(job.progress) ||
@@ -246,7 +377,8 @@ function validateState(state) {
       !Array.isArray(job.candidates) ||
       !Array.isArray(job.selectedCandidateIds) ||
       !Array.isArray(job.warnings) ||
-      !Array.isArray(job.artifacts)
+      !Array.isArray(job.artifacts) ||
+      !Array.isArray(job.thumbnailSelections)
     ) {
       throw new AppError("INVALID_STATE", "The saved media job collections are invalid.");
     }
@@ -268,6 +400,66 @@ function validateState(state) {
         throw new AppError("INVALID_STATE", "The saved media job candidates are invalid.");
       }
       candidateIds.add(candidate.id);
+      if (candidate.original !== undefined) {
+        const original = candidate.original;
+        if (
+          !original ||
+          typeof original.title !== "string" ||
+          !Number.isFinite(original.start) ||
+          !Number.isFinite(original.end) ||
+          original.end <= original.start
+        ) {
+          throw new AppError("INVALID_STATE", "The saved original media candidate values are invalid.");
+        }
+      }
+      if (candidate.edit !== undefined) {
+        const edit = candidate.edit;
+        if (
+          !edit ||
+          typeof edit.title !== "string" ||
+          !Number.isFinite(edit.start) ||
+          !Number.isFinite(edit.end) ||
+          !Number.isFinite(edit.duration) ||
+          edit.end <= edit.start ||
+          edit.duration < 5 ||
+          edit.duration > (job.jobType === "project_render" ? 21_600 : 180) ||
+          (job.jobType === "project_render" &&
+            (!Array.isArray(edit.segments) ||
+              !edit.segments.length ||
+              edit.segments.length > 100 ||
+              edit.segments.some(
+                (segment) =>
+                  !segment ||
+                  typeof segment.id !== "string" ||
+                  !Number.isFinite(segment.sourceStart) ||
+                  !Number.isFinite(segment.sourceEnd) ||
+                  !Number.isFinite(segment.timelineStart) ||
+                  !Number.isFinite(segment.duration) ||
+                  segment.sourceStart < 0 ||
+                  segment.sourceEnd <= segment.sourceStart
+              ))) ||
+          !Array.isArray(edit.captionSegments) ||
+          edit.captionSegments.length > 100 ||
+          edit.captionSegments.some(
+            (segment) =>
+              !segment ||
+              typeof segment.id !== "string" ||
+              typeof segment.text !== "string" ||
+              !Number.isFinite(segment.start) ||
+              !Number.isFinite(segment.end) ||
+              segment.start < 0 ||
+              segment.end <= segment.start ||
+              segment.end > edit.duration
+          ) ||
+          !["clean", "contrast", "notebook"].includes(edit.captionStyle) ||
+          !["lower", "middle", "upper"].includes(edit.captionPosition) ||
+          !["standard", "social"].includes(edit.captionSafeArea) ||
+          !["original", "fit_pad", "center_crop"].includes(edit.aspectTreatment) ||
+          !["original", "vertical", "square", "landscape"].includes(edit.targetAspect)
+        ) {
+          throw new AppError("INVALID_STATE", "The saved media candidate edits are invalid.");
+        }
+      }
     }
     if (job.selectedCandidateIds.some((candidateId) => !candidateIds.has(candidateId))) {
       throw new AppError("INVALID_STATE", "A media job selection references an unavailable candidate.");
@@ -279,16 +471,167 @@ function validateState(state) {
           !["video", "caption", "thumbnail", "manifest"].includes(artifact.kind) ||
           typeof artifact.name !== "string" ||
           artifact.name !== path.basename(artifact.name) ||
+          (artifact.kind === "thumbnail" &&
+            artifact.id !== undefined &&
+            (typeof artifact.id !== "string" ||
+              !/^artifact-[a-f0-9]{24}$/.test(artifact.id) ||
+              typeof artifact.groupId !== "string" ||
+              !/^thumbgroup-[a-f0-9]{20}$/.test(artifact.groupId) ||
+              !["local_render", "user_import"].includes(artifact.source) ||
+              (artifact.positionRatio !== null &&
+                (!Number.isFinite(artifact.positionRatio) || artifact.positionRatio < 0 || artifact.positionRatio > 1)) ||
+              (artifact.source === "user_import" && artifact.positionRatio !== null) ||
+              artifact.previewUrl !== `produdash-media://job-thumbnail/${artifact.id}`)) ||
           Object.hasOwn(artifact, "path")
       )
     ) {
       throw new AppError("INVALID_STATE", "The saved media job artifacts are invalid.");
     }
+    const thumbnailArtifacts = new Map(
+      job.artifacts.filter((artifact) => artifact.kind === "thumbnail" && artifact.id).map((artifact) => [artifact.id, artifact])
+    );
+    const selectedGroups = new Set();
+    if (
+      job.thumbnailSelections.some((selection) => {
+        const artifact = thumbnailArtifacts.get(selection?.artifactId);
+        if (
+          !selection ||
+          typeof selection.groupId !== "string" ||
+          !/^thumbgroup-[a-f0-9]{20}$/.test(selection.groupId) ||
+          typeof selection.artifactId !== "string" ||
+          typeof selection.selectedAt !== "string" ||
+          !artifact ||
+          artifact.groupId !== selection.groupId ||
+          selectedGroups.has(selection.groupId)
+        ) {
+          return true;
+        }
+        selectedGroups.add(selection.groupId);
+        return false;
+      })
+    ) {
+      throw new AppError("INVALID_STATE", "The saved preferred thumbnail selections are invalid.");
+    }
+  }
+  const postPlanIds = new Set();
+  const postStatuses = new Set(["needs_approval", "approved_for_manual_export", "approved_for_official_api", "export_ready", "canceled"]);
+  for (const plan of state.postQueue) {
+    if (
+      typeof plan.id !== "string" ||
+      !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(plan.id) ||
+      postPlanIds.has(plan.id) ||
+      typeof plan.title !== "string" ||
+      plan.title.length < 1 ||
+      plan.title.length > 120 ||
+      typeof plan.caption !== "string" ||
+      plan.caption.length > 2200 ||
+      !Array.isArray(plan.platforms) ||
+      plan.platforms.some((platformId) => !["tiktok", "instagram", "youtube"].includes(platformId)) ||
+      !postStatuses.has(plan.status) ||
+      (plan.contentHash !== null && !/^[a-f0-9]{64}$/.test(plan.contentHash)) ||
+      (plan.mediaJobId !== null && (typeof plan.mediaJobId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(plan.mediaJobId))) ||
+      !Array.isArray(plan.platformPackages) ||
+      plan.platformPackages.length !== plan.platforms.length ||
+      !plan.schedule ||
+      typeof plan.schedule !== "object" ||
+      !["unscheduled", "planned_local_only"].includes(plan.schedule.mode) ||
+      (plan.schedule.mode === "unscheduled"
+        ? plan.schedule.scheduledFor !== null || plan.schedule.timeZone !== null
+        : typeof plan.schedule.scheduledFor !== "string" || typeof plan.schedule.timeZone !== "string")
+    ) {
+      throw new AppError("INVALID_STATE", "The saved publishing plans are invalid.");
+    }
+    postPlanIds.add(plan.id);
+    const packagePlatforms = new Set();
+    for (const item of plan.platformPackages) {
+      if (
+        !item ||
+        typeof item.platformId !== "string" ||
+        !plan.platforms.includes(item.platformId) ||
+        packagePlatforms.has(item.platformId) ||
+        typeof item.title !== "string" ||
+        item.title.length < 1 ||
+        item.title.length > 120 ||
+        typeof item.caption !== "string" ||
+        item.caption.length > 2200
+      ) {
+        throw new AppError("INVALID_STATE", "The saved platform publishing packages are invalid.");
+      }
+      packagePlatforms.add(item.platformId);
+    }
+    if (plan.schedule.mode === "planned_local_only") {
+      try {
+        if (!Number.isFinite(Date.parse(plan.schedule.scheduledFor))) throw new Error("Invalid schedule");
+        new Intl.DateTimeFormat("en-US", { timeZone: plan.schedule.timeZone }).format(new Date(0));
+      } catch {
+        throw new AppError("INVALID_STATE", "The saved publishing schedule is invalid.");
+      }
+    }
+    if (
+      plan.mediaSnapshot !== null &&
+      (!plan.mediaSnapshot ||
+        typeof plan.mediaSnapshot !== "object" ||
+        typeof plan.mediaSnapshot.mediaJobId !== "string" ||
+        typeof plan.mediaSnapshot.title !== "string" ||
+        typeof plan.mediaSnapshot.outputFolderName !== "string" ||
+        plan.mediaSnapshot.outputFolderName !== path.basename(plan.mediaSnapshot.outputFolderName) ||
+        !Array.isArray(plan.mediaSnapshot.videos) ||
+        plan.mediaSnapshot.videos.length > 20 ||
+        !Array.isArray(plan.mediaSnapshot.preferredThumbnails) ||
+        plan.mediaSnapshot.preferredThumbnails.length > 20 ||
+        plan.mediaSnapshot.videos.some(
+          (artifact) => !artifact || typeof artifact.name !== "string" || artifact.name !== path.basename(artifact.name)
+        ) ||
+        plan.mediaSnapshot.preferredThumbnails.some(
+          (artifact) =>
+            !artifact ||
+            typeof artifact.name !== "string" ||
+            artifact.name !== path.basename(artifact.name) ||
+            !["local_render", "user_import"].includes(artifact.source)
+        ))
+    ) {
+      throw new AppError("INVALID_STATE", "The saved publishing media snapshot is invalid.");
+    }
+    if (plan.approvalSnapshot !== null) {
+      const expectedPayload = {
+        planId: plan.id,
+        title: plan.title,
+        caption: plan.caption,
+        platformPackages: plan.platformPackages,
+        schedule: plan.schedule,
+        media: plan.mediaSnapshot
+      };
+      const expectedHash = crypto.createHash("sha256").update(JSON.stringify(expectedPayload)).digest("hex");
+      if (
+        !plan.approvalSnapshot ||
+        plan.approvalSnapshot.version !== 1 ||
+        plan.approvalSnapshot.hash !== expectedHash ||
+        !["manual_export", "official_api"].includes(plan.approvalSnapshot.mode) ||
+        typeof plan.approvalSnapshot.approvedAt !== "string" ||
+        JSON.stringify(plan.approvalSnapshot.payload) !== JSON.stringify(expectedPayload) ||
+        !Array.isArray(plan.approvalSnapshot.destinations) ||
+        plan.approvalSnapshot.destinations.length !== plan.platforms.length ||
+        plan.approvalSnapshot.destinations.some((destination) => {
+          const expectedKey = crypto.createHash("sha256").update(`${plan.id}:${destination?.platformId}:${expectedHash}`).digest("hex");
+          return !destination || !plan.platforms.includes(destination.platformId) || destination.idempotencyKey !== expectedKey;
+        })
+      ) {
+        throw new AppError("INVALID_STATE", "The saved publishing approval snapshot is invalid.");
+      }
+    }
+    if (
+      plan.exportReceipt !== null &&
+      (!plan.exportReceipt ||
+        typeof plan.exportReceipt.exportedAt !== "string" ||
+        (plan.exportReceipt.snapshotHash !== null && !/^[a-f0-9]{64}$/.test(plan.exportReceipt.snapshotHash)))
+    ) {
+      throw new AppError("INVALID_STATE", "The saved publishing export receipt is invalid.");
+    }
   }
   if (
     typeof state.advisorSettings.displayName !== "string" ||
     state.advisorSettings.displayName.length < 1 ||
-    state.advisorSettings.displayName.length > 80
+    state.advisorSettings.displayName.length > 40
   ) {
     throw new AppError("INVALID_STATE", "The saved advisor settings are invalid.");
   }

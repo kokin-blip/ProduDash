@@ -4,6 +4,9 @@ dist/
 coverage/
 playwright-report/
 test-results/
+assets/advisor/generated/
+assets/advisor/tmp/
+assets/advisor/**/.sprite-forge-cache/
 .env
 .env.*
 !.env.example

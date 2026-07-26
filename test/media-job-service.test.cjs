@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const { AppError } = require("../electron/errors.cjs");
 const { MediaJobService } = require("../electron/media/media-job-service.cjs");
+const { ProjectStore } = require("../electron/projects/project-store.cjs");
 const { validateState } = require("../electron/state-schema.cjs");
 const { createHarness } = require("./helpers.cjs");
 
@@ -100,6 +101,7 @@ test("media jobs keep paths encrypted, run one at a time, and require approval b
   runner.starts[0].onMessage({ type: "progress", stage: "metadata", progress: 10, detail: "Inspecting." });
   runner.starts[0].completion.resolve({
     type: "awaiting_review",
+    metadata: { duration: 30 },
     candidates: [
       {
         id: "candidate-1",
@@ -116,6 +118,29 @@ test("media jobs keep paths encrypted, run one at a time, and require approval b
   });
   await waitFor(() => runner.starts.length === 2);
   assert.equal(harness.store.getMediaJob(firstId).status, "awaiting_review");
+  await jobs.updateCandidate(firstId, "candidate-1", {
+    title: "Edited clip",
+    start: 1,
+    end: 9,
+    captionSegments: [],
+    manualCaptionText: "",
+    captionStyle: "clean",
+    captionPosition: "lower",
+    captionSafeArea: "standard",
+    aspectTreatment: "center_crop",
+    targetAspect: "vertical"
+  });
+  assert.equal(harness.store.getMediaJob(firstId).candidates[0].original.start, 0);
+  assert.equal(harness.store.getMediaJob(firstId).candidates[0].edit.start, 1);
+  await assert.rejects(
+    jobs.updateCandidate(firstId, "candidate-1", {
+      title: "Invalid",
+      start: 1,
+      end: 300,
+      captionSegments: []
+    }),
+    { code: "INVALID_CANDIDATE_EDIT" }
+  );
   await jobs.approveCandidates(firstId, ["candidate-1"]);
   assert.equal(harness.store.getMediaJob(firstId).status, "render_queued");
   await assert.rejects(jobs.approveCandidates(firstId, ["candidate-other"]), { code: "MEDIA_JOB_TRANSITION_INVALID" });
@@ -124,10 +149,20 @@ test("media jobs keep paths encrypted, run one at a time, and require approval b
   await waitFor(() => runner.starts.length === 3);
   assert.equal(runner.starts[2].job.id, firstId);
   assert.equal(runner.starts[2].job.mode, "render");
+  assert.equal(runner.starts[2].job.candidates[0].edit.title, "Edited clip");
+  const completedPaths = harness.vault.get(`media-job-${firstId}`);
+  const thumbnailPath = path.join(completedPaths.outputPath, "clip-01-edited-clip-thumb-middle.jpg");
+  fs.writeFileSync(thumbnailPath, "thumbnail");
   runner.starts[2].completion.resolve({
     type: "completed",
     artifacts: [
       { kind: "video", name: "clip.mp4", path: path.join(outputParent, "clip.mp4") },
+      {
+        kind: "thumbnail",
+        name: path.basename(thumbnailPath),
+        path: thumbnailPath,
+        variant: { source: "local_render", positionRatio: 0.5 }
+      },
       { kind: "manifest", name: "produdash-manifest.json", path: path.join(outputParent, "produdash-manifest.json") }
     ],
     warnings: []
@@ -136,8 +171,45 @@ test("media jobs keep paths encrypted, run one at a time, and require approval b
   const completed = harness.store.getMediaJob(firstId);
   assert.deepEqual(completed.artifacts, [
     { kind: "video", name: "clip.mp4" },
+    {
+      id: completed.artifacts[1].id,
+      kind: "thumbnail",
+      name: "clip-01-edited-clip-thumb-middle.jpg",
+      source: "local_render",
+      positionRatio: 0.5,
+      groupId: completed.artifacts[1].groupId,
+      previewUrl: `produdash-media://job-thumbnail/${completed.artifacts[1].id}`
+    },
     { kind: "manifest", name: "produdash-manifest.json" }
   ]);
+  assert.match(completed.artifacts[1].id, /^artifact-[a-f0-9]{24}$/);
+  assert.match(completed.artifacts[1].groupId, /^thumbgroup-[a-f0-9]{20}$/);
+  await jobs.selectThumbnail(firstId, completed.artifacts[1].id);
+  const selected = harness.store.getMediaJob(firstId);
+  assert.equal(selected.thumbnailSelections[0].artifactId, completed.artifacts[1].id);
+  assert.equal(jobs.resolveThumbnailArtifact(completed.artifacts[1].id), thumbnailPath);
+  await assert.rejects(jobs.selectThumbnail(firstId, "artifact-000000000000000000000000"), { code: "THUMBNAIL_NOT_FOUND" });
+  const importedSource = path.join(harness.directory, "custom-thumbnail.png");
+  const importedBytes = Buffer.alloc(600);
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(importedBytes);
+  fs.writeFileSync(importedSource, importedBytes);
+  await jobs.importThumbnail(firstId, completed.artifacts[1].groupId, { path: importedSource });
+  const importedJob = harness.store.getMediaJob(firstId);
+  const importedArtifact = importedJob.artifacts.find((artifact) => artifact.source === "user_import");
+  assert.ok(importedArtifact);
+  assert.equal(importedArtifact.positionRatio, null);
+  assert.equal(importedArtifact.groupId, completed.artifacts[1].groupId);
+  assert.equal(importedJob.thumbnailSelections[0].artifactId, importedArtifact.id);
+  assert.equal(path.dirname(jobs.resolveThumbnailArtifact(importedArtifact.id)), completedPaths.outputPath);
+  assert.equal(JSON.stringify(importedJob).includes(importedSource), false);
+  const invalidImage = path.join(harness.directory, "not-an-image.png");
+  fs.writeFileSync(invalidImage, Buffer.alloc(600));
+  await assert.rejects(jobs.importThumbnail(firstId, completed.artifacts[1].groupId, { path: invalidImage }), {
+    code: "INVALID_THUMBNAIL"
+  });
+  fs.unlinkSync(thumbnailPath);
+  fs.symlinkSync(sourcePath, thumbnailPath);
+  assert.throws(() => jobs.resolveThumbnailArtifact(completed.artifacts[1].id), { code: "THUMBNAIL_NOT_FOUND" });
   assert.doesNotThrow(() => validateState(harness.store.getAppState()));
   assert.equal(JSON.stringify(completed).includes(outputParent), false);
   assert.ok(events.some((event) => event.jobId === firstId && event.terminal));
@@ -251,4 +323,77 @@ test("cloud media jobs invoke only the selected analysis path and never fall bac
   assert.equal(failed.candidates.length, 0);
   assert.match(failed.error, /selected provider is temporarily rate limited/i);
   assert.equal(failed.retryable, true);
+});
+
+test("project preparation and approved rendering reuse the queue and keep an immutable plan snapshot", async (context) => {
+  const harness = await createHarness();
+  context.after(harness.cleanup);
+  const sourcePath = path.join(harness.directory, "project-source.mp4");
+  const outputParent = path.join(harness.directory, "project-outputs");
+  fs.writeFileSync(sourcePath, "fixture");
+  fs.mkdirSync(outputParent);
+  const runner = createFakeRunner();
+  const mediaLibrary = {
+    getClipSummary: (id) => ({
+      id,
+      name: "Project source.mp4",
+      status: "available",
+      duration: 30,
+      previewable: true,
+      fingerprint: "a".repeat(64)
+    }),
+    resolveClipPath: () => sourcePath,
+    startClipAccess: () => null,
+    addFiles: async () => ({})
+  };
+  const projects = new ProjectStore(harness.directory, {
+    mediaLibrary,
+    appStore: harness.store
+  });
+  const jobs = new MediaJobService({
+    store: harness.store,
+    mediaLibrary,
+    credentialVault: harness.vault,
+    runner,
+    projects
+  });
+  const created = await projects.create({ sourceMediaId: "media-source", title: "Queue parity" });
+  const edited = await projects.saveDraft(
+    created.id,
+    {
+      ...created.draft,
+      segments: [
+        { id: "segment-a", sourceStart: 1, sourceEnd: 7 },
+        { id: "segment-b", sourceStart: 14, sourceEnd: 21 }
+      ]
+    },
+    created.revision
+  );
+  await jobs.createProjectPreparation(edited.id);
+  await waitFor(() => runner.starts.length === 1);
+  assert.equal(runner.starts[0].job.mode, "analyze");
+  runner.starts[0].completion.resolve({
+    type: "awaiting_review",
+    metadata: { duration: 30 },
+    preparation: { scenes: [7, 14], waveform: [0.2, 0.8] },
+    warnings: []
+  });
+  await waitFor(() => projects.get(edited.id).prepared);
+  const cachePath = path.join(harness.directory, "project-cache", edited.id);
+  fs.writeFileSync(path.join(cachePath, "metadata.json"), JSON.stringify({ duration: 30, hasAudio: true }));
+  fs.writeFileSync(path.join(cachePath, "analysis.json"), JSON.stringify({ analysisMode: "local_heuristics" }));
+  const selection = jobs.rememberOutputSelection({ path: outputParent });
+  await jobs.createProjectRender(edited.id, selection.id);
+  await waitFor(() => runner.starts.length === 2);
+  const renderStart = runner.starts[1];
+  assert.equal(renderStart.job.mode, "render");
+  assert.equal(renderStart.job.candidates[0].edit.segments.length, 2);
+  const queuedHash = harness.store.getAppState().mediaJobs.find((job) => job.jobType === "project_render").renderPlanHash;
+  await projects.saveDraft(
+    edited.id,
+    { ...projects.get(edited.id).draft, segments: [{ id: "segment-new", sourceStart: 2, sourceEnd: 10 }] },
+    projects.get(edited.id).revision
+  );
+  assert.equal(renderStart.job.candidates[0].edit.segments.length, 2);
+  assert.notEqual(projects.get(edited.id).renderPlanHash, queuedHash);
 });

@@ -3,6 +3,7 @@ const test = require("node:test");
 const { AnthropicProviderAdapter } = require("../electron/ai/adapters/anthropic.cjs");
 const { OpenAIProviderAdapter } = require("../electron/ai/adapters/openai.cjs");
 const { OpenAICompatibleProviderAdapter, parseConfiguredCapabilities } = require("../electron/ai/adapters/openai-compatible.cjs");
+const { ElevenLabsProviderAdapter } = require("../electron/ai/adapters/elevenlabs.cjs");
 const { createOriginLockedFetch, normalizeCustomEndpoint } = require("../electron/ai/endpoint-validation.cjs");
 
 test("OpenAI adapter uses Responses structured output and normalizes tool calls", async () => {
@@ -62,6 +63,104 @@ test("OpenAI adapter requests timestamped transcription without exposing credent
   });
   assert.equal(request.response_format, "verbose_json");
   assert.deepEqual(request.timestamp_granularities, ["segment", "word"]);
+});
+
+test("OpenAI adapter generates bounded WAV speech with a built-in voice", async () => {
+  let request;
+  const wav = Buffer.alloc(64, 1);
+  const adapter = new OpenAIProviderAdapter({
+    clientFactory: () => ({
+      audio: {
+        speech: {
+          create: async (input) => {
+            request = input;
+            return { arrayBuffer: async () => wav };
+          }
+        }
+      }
+    })
+  });
+  const audio = await adapter.generateSpeech({
+    credentials: { apiKey: "sk-private-key" },
+    modelId: "gpt-4o-mini-tts",
+    input: "This is an AI-generated voice preview.",
+    voice: "marin",
+    instructions: "Speak clearly."
+  });
+  assert.deepEqual(audio, wav);
+  assert.equal(request.response_format, "wav");
+  assert.equal(request.voice, "marin");
+  assert.equal(JSON.stringify(request).includes("sk-private-key"), false);
+});
+
+test("OpenAI adapter passes custom voices as id objects", async () => {
+  let request;
+  const adapter = new OpenAIProviderAdapter({
+    clientFactory: () => ({
+      audio: {
+        speech: {
+          create: async (input) => {
+            request = input;
+            return { arrayBuffer: async () => Buffer.alloc(64, 1) };
+          }
+        }
+      }
+    })
+  });
+  await adapter.generateSpeech({
+    credentials: { apiKey: "sk-private-key" },
+    modelId: "gpt-4o-mini-tts",
+    input: "Synthetic likeness.",
+    voice: "voice_1234",
+    voiceType: "custom"
+  });
+  assert.deepEqual(request.voice, { id: "voice_1234" });
+});
+
+test("ElevenLabs validates, creates an authorized clone, and returns bounded WAV speech", async () => {
+  const calls = [];
+  const adapter = new ElevenLabsProviderAdapter({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/v1/user")) return { ok: true };
+      if (url.endsWith("/v1/voices/add")) {
+        return { ok: true, json: async () => ({ voice_id: "voice-eleven" }) };
+      }
+      return { ok: true, arrayBuffer: async () => Buffer.alloc(80, 1) };
+    }
+  });
+  const credentials = { apiKey: "eleven-private" };
+  await adapter.validate(credentials, "eleven_multilingual_v2");
+  const recording = {
+    path: require.resolve("./provider-adapters.test.cjs"),
+    name: "voice.wav",
+    type: "audio/wav"
+  };
+  const created = await adapter.createCustomVoice({
+    credentials,
+    name: "Authorized",
+    consentRecording: recording,
+    sampleRecording: recording
+  });
+  assert.equal(created.id, "voice-eleven");
+  assert.match(created.consentEvidenceHash, /^[a-f0-9]{64}$/);
+  const wav = await adapter.generateSpeech({
+    credentials,
+    modelId: "eleven_multilingual_v2",
+    input: "Synthetic speech.",
+    voice: created.id
+  });
+  await adapter.deleteCustomVoice({ credentials, voiceId: created.id });
+  assert.equal(wav.subarray(0, 4).toString(), "RIFF");
+  assert.equal(
+    calls.some((call) => call.url.endsWith("/v1/voices/voice-eleven") && call.options.method === "DELETE"),
+    true
+  );
+  assert.equal(
+    calls.every((call) => call.options.headers["xi-api-key"] === "eleven-private"),
+    true
+  );
+  assert.equal(JSON.stringify(calls.map((call) => call.options.body)).includes("eleven-private"), false);
 });
 
 test("Anthropic adapter uses structured output and normalizes Claude tool blocks", async () => {
@@ -155,7 +254,14 @@ test("custom profiles expose only explicitly configured capabilities", () => {
     (error) => error.code === "INVALID_PROVIDER_CAPABILITIES"
   );
   const adapter = new OpenAICompatibleProviderAdapter({ clientFactory: () => ({}) });
-  assert.deepEqual(adapter.listModels({ publicValues: { modelId: "local-model", capabilities: "text_generation" } }), [
-    { id: "local-model", name: "local-model", capabilities: ["text_generation"] }
-  ]);
+  assert.deepEqual(
+    adapter.listModels({
+      publicValues: { modelId: "local-model", capabilities: "text_generation", voiceId: "local-voice" }
+    }),
+    [{ id: "local-model", name: "local-model", capabilities: ["text_generation"] }]
+  );
+  assert.equal(
+    adapter.credentialFields.some((field) => field.key === "voiceId" && field.required === false),
+    true
+  );
 });

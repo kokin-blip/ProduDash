@@ -7,6 +7,7 @@ const { boundedString, requireId } = require("../validation.cjs");
 const { writeJsonAtomic } = require("../atomic-json.cjs");
 const { getMediaBinaries } = require("./binaries.cjs");
 const { createEmptyMediaIndex, loadMediaIndex } = require("./media-index.cjs");
+const { LOCAL_SEARCH_MODEL, buildSearchDocument, scoreSearchDocument } = require("./semantic-search.cjs");
 
 const SUPPORTED_EXTENSIONS = new Set([".mp4", ".mov", ".m4v", ".webm", ".mkv"]);
 const UNSUPPORTED_VIDEO_EXTENSIONS = new Set([".avi", ".wmv", ".flv", ".mpeg", ".mpg"]);
@@ -19,6 +20,17 @@ function createId(prefix) {
 
 function sourceKey(filePath) {
   return crypto.createHash("sha256").update(filePath).digest("hex");
+}
+
+function mediaFingerprint(clip) {
+  const signature = [
+    Number(clip.size) || 0,
+    Number(Number(clip.duration).toFixed(3)) || 0,
+    Number(clip.width) || 0,
+    Number(clip.height) || 0,
+    String(clip.codec || "")
+  ].join(":");
+  return crypto.createHash("sha256").update(signature).digest("hex");
 }
 
 function simplifyAspect(width, height) {
@@ -178,6 +190,7 @@ class MediaLibrary {
     this.index = loaded.index;
     this.notices = loaded.notices;
     this.mutationQueue = Promise.resolve();
+    this.searchIndexGeneration = 0;
   }
 
   getNotices() {
@@ -191,6 +204,9 @@ class MediaLibrary {
   }
 
   persist() {
+    for (const clip of this.index.clips) {
+      if (!clip.searchDocument) clip.searchDocument = buildSearchDocument(clip);
+    }
     this.index.updatedAt = new Date().toISOString();
     writeJsonAtomic(this.filePath, this.index);
   }
@@ -334,6 +350,7 @@ class MediaLibrary {
         error: error instanceof AppError ? error.message : "The video could not be inspected."
       });
     }
+    clip.searchDocument = buildSearchDocument(clip);
     return clip;
   }
 
@@ -454,6 +471,7 @@ class MediaLibrary {
       const clip = this.index.clips.find((item) => item.id === clipId);
       if (!clip) throw new AppError("CLIP_NOT_FOUND", "Clip not found.");
       clip.tags = normalized;
+      clip.searchDocument = buildSearchDocument(clip);
       this.persist();
       return this.query({});
     });
@@ -484,14 +502,19 @@ class MediaLibrary {
     const sort = ["name", "modified_desc", "duration_desc", "size_desc"].includes(options.sort) ? options.sort : "modified_desc";
     const offset = Math.max(0, Number.parseInt(options.offset, 10) || 0);
     const limit = Math.max(1, Math.min(MAX_QUERY_LIMIT, Number.parseInt(options.limit, 10) || 40));
-    let clips = this.index.clips.filter((clip) => {
-      if (query && !`${clip.name} ${(clip.tags || []).join(" ")}`.toLowerCase().includes(query)) return false;
-      if (folderId && !clip.locations?.some((location) => location.folderId === folderId)) return false;
-      if (status && clip.status !== status) return false;
-      return true;
-    });
+    let clips = this.index.clips
+      .map((clip) => ({ clip, search: query ? scoreSearchDocument(clip.searchDocument, query) : { score: 0, matchedTerms: [] } }))
+      .filter(({ clip, search }) => {
+        if (query && search.score <= 0) return false;
+        if (folderId && !clip.locations?.some((location) => location.folderId === folderId)) return false;
+        if (status && clip.status !== status) return false;
+        return true;
+      });
     const compareText = (left, right) => String(left || "").localeCompare(String(right || ""));
-    clips = clips.sort((left, right) => {
+    clips = clips.sort((leftEntry, rightEntry) => {
+      const left = leftEntry.clip;
+      const right = rightEntry.clip;
+      if (query && rightEntry.search.score !== leftEntry.search.score) return rightEntry.search.score - leftEntry.search.score;
       if (sort === "name") return compareText(left.name, right.name);
       if (sort === "duration_desc") return Number(right.duration || 0) - Number(left.duration || 0);
       if (sort === "size_desc") return Number(right.size || 0) - Number(left.size || 0);
@@ -506,7 +529,7 @@ class MediaLibrary {
         error: folder.error,
         clipCount: this.index.clips.filter((clip) => clip.locations?.some((location) => location.folderId === folder.id)).length
       })),
-      clips: clips.slice(offset, offset + limit).map((clip) => ({
+      clips: clips.slice(offset, offset + limit).map(({ clip, search }) => ({
         id: clip.id,
         name: clip.name,
         extension: clip.extension,
@@ -519,16 +542,50 @@ class MediaLibrary {
         size: clip.size,
         modifiedAt: clip.modifiedAt,
         previewable: clip.previewable,
+        fingerprint: mediaFingerprint(clip),
         tags: structuredClone(clip.tags || []),
         error: clip.error,
         previewUrl: clip.previewable ? `produdash-media://clip/${clip.id}` : null,
-        thumbnailUrl: clip.thumbnailAvailable ? `produdash-media://thumbnail/${clip.id}` : null
+        thumbnailUrl: clip.thumbnailAvailable ? `produdash-media://thumbnail/${clip.id}` : null,
+        search: query
+          ? {
+              score: search.score,
+              matchedTerms: search.matchedTerms,
+              modelId: clip.searchDocument.modelId,
+              provenance: clip.searchDocument.provenance.source
+            }
+          : null
       })),
       total: clips.length,
       offset,
       limit,
       notices: structuredClone(this.notices)
     };
+  }
+
+  async rebuildSearchIndex({ modelId = LOCAL_SEARCH_MODEL } = {}) {
+    const generation = ++this.searchIndexGeneration;
+    return this.enqueue(async () => {
+      let indexed = 0;
+      for (const clip of this.index.clips) {
+        if (generation !== this.searchIndexGeneration) {
+          throw new AppError("SEARCH_INDEX_CANCELED", "The previous local search-index rebuild was canceled.");
+        }
+        clip.searchDocument = buildSearchDocument(clip, { modelId });
+        indexed += 1;
+        if (indexed % 100 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      if (generation !== this.searchIndexGeneration) {
+        throw new AppError("SEARCH_INDEX_CANCELED", "The previous local search-index rebuild was canceled.");
+      }
+      this.persist();
+      return { modelId, indexed, source: "local_metadata" };
+    });
+  }
+
+  cancelSearchIndexRebuild() {
+    this.searchIndexGeneration += 1;
+    return { canceled: true };
   }
 
   getClipSummary(clipId) {
@@ -540,7 +597,8 @@ class MediaLibrary {
       name: clip.name,
       status: clip.status,
       duration: clip.duration,
-      previewable: clip.previewable
+      previewable: clip.previewable,
+      fingerprint: mediaFingerprint(clip)
     };
   }
 

@@ -1,8 +1,15 @@
 import { escapeHtml, formatDate, statusLabel } from "./format.js";
 import { asArray, resolveWorkload, ui } from "./state.js";
 import { renderStatusBadge } from "./views/shared.js";
+export { celebrateAdvisor } from "./advisor-reactions.js";
 
-export const ADVISOR_CATEGORIES = ["dashboard_summary", "commerce_aggregates", "integration_health", "media_summaries"];
+export const ADVISOR_CATEGORIES = [
+  "dashboard_summary",
+  "commerce_aggregates",
+  "integration_health",
+  "media_summaries",
+  "application_context"
+];
 
 const SUGGESTED_QUESTIONS = [
   "What needs my attention today?",
@@ -19,8 +26,6 @@ const ADVISOR_ART = Object.freeze({
 const ADVISOR_AVATAR = "./assets/advisor/states/advisor-avatar.png";
 const ADVISOR_IDLE_BLINK = "./assets/advisor/states/advisor-idle-blink.png";
 const ADVISOR_AVATAR_BLINK = "./assets/advisor/states/advisor-avatar-blink.png";
-const ADVISOR_JOURNAL_A = "./assets/advisor/states/advisor-journal-a.png";
-const ADVISOR_JOURNAL_B = "./assets/advisor/states/advisor-journal-b.png";
 const JOURNAL_CADENCES = ["calm", "patient", "reflective"];
 const journalCadence = JOURNAL_CADENCES[Math.floor(Math.random() * JOURNAL_CADENCES.length)];
 let previousArtState = null;
@@ -62,7 +67,7 @@ function renderTurns() {
     return `
       <div class="advisor-empty">
         <strong>Ask about the workspace</strong>
-        <p>Advisor can summarize verified local data with a small, read-only tool set.</p>
+        <p>${escapeHtml(ui.appState.advisorSettings?.displayName || "Juanito")} can summarize verified local data with a small, read-only tool set.</p>
       </div>
     `;
   }
@@ -71,7 +76,7 @@ function renderTurns() {
       (turn) => `
         <article class="advisor-turn ${turn.role === "user" ? "user" : "assistant"}">
           <div>
-            <strong>${turn.role === "user" ? "You" : escapeHtml(ui.appState.advisorSettings?.displayName || "Advisor")}</strong>
+            <strong>${turn.role === "user" ? "You" : escapeHtml(ui.appState.advisorSettings?.displayName || "Juanito")}</strong>
             <time datetime="${escapeHtml(turn.at || "")}">${escapeHtml(formatDate(turn.at))}</time>
           </div>
           <p>${escapeHtml(turn.text)}</p>
@@ -92,8 +97,9 @@ function renderConsent(provider) {
       <div>
         <strong>Cloud access for this session</strong>
         <p>
-          ${escapeHtml(provider.name)} · ${escapeHtml(provider.modelId)} may receive bounded dashboard summaries, commerce aggregates,
-          integration health, and media-job summaries. Customer identity, addresses, emails, raw messages, credentials, and files are excluded.
+          ${escapeHtml(provider.name)} · ${escapeHtml(provider.modelId)} may receive bounded dashboard summaries, defined Shopify aggregates
+          and equal-window comparisons, integration health, media-job summaries, the selected local record identifier, and normalized visible
+          errors. Customer identity, addresses, emails, raw messages, credentials, and files are excluded.
         </p>
       </div>
       <button
@@ -114,7 +120,7 @@ export function renderAdvisor() {
   const busy = Boolean(ui.advisorRequest);
   const artState = advisorArtState();
   const animateArt = ui.advisorOpen && (!previousOpenState || previousArtState !== artState);
-  const displayName = ui.appState.advisorSettings?.displayName || "Advisor";
+  const displayName = ui.appState.advisorSettings?.displayName || "Juanito";
   const providerLabel = provider ? `${provider.name} · ${provider.modelId}` : "No provider assigned";
   const stateLabel =
     ui.advisorStatus === "thinking"
@@ -131,7 +137,7 @@ export function renderAdvisor() {
 
   root.innerHTML = `
     <button
-      class="advisor-launcher"
+      class="advisor-launcher${ui.advisorOpen ? " is-panel-open" : ""}"
       type="button"
       data-advisor-toggle
       aria-expanded="${ui.advisorOpen}"
@@ -168,8 +174,7 @@ export function renderAdvisor() {
                 artState === "idle"
                   ? `
                     <span class="advisor-journal-sequence">
-                      <img class="advisor-journal-frame advisor-journal-a" src="${ADVISOR_JOURNAL_A}" alt="" />
-                      <img class="advisor-journal-frame advisor-journal-b" src="${ADVISOR_JOURNAL_B}" alt="" />
+                      <span class="advisor-journal-sprite"></span>
                     </span>
                   `
                   : ""
@@ -192,7 +197,7 @@ export function renderAdvisor() {
         )}
         <button class="text-button" type="button" data-advisor-clear ${busy ? "disabled" : ""}>Clear history</button>
       </div>
-      ${ui.advisorError ? `<div class="inline-message error" role="alert" tabindex="-1"><strong>Advisor paused</strong><span>${escapeHtml(ui.advisorError)}</span></div>` : ""}
+      ${ui.advisorError ? `<div class="inline-message error" role="alert" tabindex="-1"><strong>${escapeHtml(displayName)} paused</strong><span>${escapeHtml(ui.advisorError)}</span></div>` : ""}
       <div class="advisor-history" id="advisorHistory" aria-live="polite">${renderTurns()}</div>
       ${
         !provider
@@ -220,7 +225,7 @@ export function renderAdvisor() {
                         ? `<button class="ghost-button small" type="button" data-advisor-cancel="${escapeHtml(
                             ui.advisorRequest
                           )}">Cancel</button>`
-                        : `<button class="primary-button small" type="submit" data-pending-label="Thinking…">Ask Advisor</button>`
+                        : `<button class="primary-button small" type="submit" data-pending-label="Thinking…">Ask ${escapeHtml(displayName)}</button>`
                     }
                   </div>
                 </form>

@@ -1,10 +1,15 @@
 import { escapeHtml, formatDate, statusLabel } from "../format.js";
 import { asArray, integrationReady, isPending, ui } from "../state.js";
 import { renderStatusBadge } from "./shared.js";
+import { renderCandidateReview } from "./candidate-review.js";
+import { renderProjects } from "./projects.js";
+import { renderBrandTemplates } from "./templates.js";
 
 const STUDIO_TABS = [
+  ["projects", "Projects"],
   ["library", "Library"],
   ["create", "Create clips"],
+  ["templates", "Brand templates"],
   ["publishing", "Publishing"]
 ];
 
@@ -23,9 +28,15 @@ export function renderStudio() {
         `
       ).join("")}
     </div>
-    <section role="tabpanel" class="studio-tab-panel">
-      ${ui.studioTab === "create" ? renderCreateClips() : ui.studioTab === "publishing" ? renderPublishing() : renderLibrary()}
-    </section>
+    ${
+      ui.studioTab === "projects"
+        ? renderProjects()
+        : ui.studioTab === "templates"
+          ? renderBrandTemplates()
+          : `<section role="tabpanel" class="studio-tab-panel">${
+              ui.studioTab === "create" ? renderCreateClips() : ui.studioTab === "publishing" ? renderPublishing() : renderLibrary()
+            }</section>`
+    }
   `;
 }
 
@@ -102,6 +113,7 @@ function renderLibrary() {
         <p>${library.total} indexed video${library.total === 1 ? "" : "s"} · source files remain in place</p>
       </div>
       <div>
+        <button class="ghost-button" type="button" data-rebuild-clip-search data-pending-label="Indexing…">Rebuild smart index</button>
         <button class="ghost-button" type="button" data-add-clip-files data-pending-label="Inspecting…" ${
           isPending("add-clip-files") ? "disabled" : ""
         }>Add videos</button>
@@ -115,7 +127,7 @@ function renderLibrary() {
         <span class="sr-only">Search clips</span>
         <input name="query" type="search" maxlength="200" value="${escapeHtml(
           ui.libraryFilters.query
-        )}" placeholder="Search names and tags" />
+        )}" placeholder="Smart local search across names, tags, and metadata" />
       </label>
       <label>
         <span class="sr-only">Folder</span>
@@ -250,6 +262,13 @@ function renderClipRow(clip, selected) {
                 .join(" ")
             : "No tags"
         }</span>
+        ${
+          clip.search
+            ? `<span class="clip-search-match">Local match ${Math.round(clip.search.score * 100)}% · ${escapeHtml(
+                clip.search.matchedTerms.join(", ") || "metadata"
+              )}</span>`
+            : ""
+        }
       </span>
       ${renderStatusBadge(clip.status || "unknown")}
     </button>
@@ -306,7 +325,7 @@ function renderCreateClips() {
     <section class="studio-grid single-workflow">
       <article class="panel">
         <div class="section-heading">
-          <div><h2>Create clips</h2><p>Choose local heuristics or an explicitly consented provider, review every candidate, then render approved clips locally.</p></div>
+          <div><h2>Create clips</h2><p>Choose Smart local cuts or an explicitly consented provider, review every candidate, then render approved clips locally.</p></div>
           ${renderStatusBadge(
             secureStorageUnavailable ? "error" : "available",
             secureStorageUnavailable ? "Secure storage required" : "Local processing"
@@ -323,7 +342,7 @@ function renderCreateClips() {
           <label><span>Job title</span><input name="title" maxlength="120" required autocomplete="off" /></label>
           <label><span>Clip goal</span><input name="goal" maxlength="500" autocomplete="off" placeholder="Optional local context" /></label>
           <div class="media-settings-grid">
-            <label><span>Maximum clips</span><input name="maxClips" type="number" min="1" max="20" value="3" required /></label>
+            <label><span>Maximum final clips</span><input name="maxClips" type="number" min="1" max="20" value="3" required /></label>
             <label><span>Target seconds</span><input name="targetDuration" type="number" min="5" max="180" value="30" required /></label>
             <label><span>Aspect</span><select name="targetAspect">
               <option value="original">Original</option><option value="vertical">Vertical 9:16</option>
@@ -337,11 +356,11 @@ function renderCreateClips() {
           <label><span>Captions</span><select name="captionMode">
             <option value="off">Off</option><option value="srt">SRT file</option><option value="srt_burned">SRT + burned in</option>
           </select></label>
-          <label><span>Caption text</span><textarea name="captionText" maxlength="2000" placeholder="Required only when captions are enabled"></textarea></label>
+          <label><span>Manual caption fallback</span><textarea name="captionText" maxlength="2000" placeholder="Optional when no timestamped transcript is available"></textarea></label>
           <label>
             <span>Analysis mode</span>
             <select name="analysisMode">
-              <option value="local_heuristics">Local heuristics — no upload</option>
+              <option value="local_heuristics">Smart local cuts — no upload</option>
               ${cloudOptions
                 .map(
                   (option) =>
@@ -405,8 +424,9 @@ function renderMediaJob(job) {
   const status = job.status || "queued";
   const canCancel = ["queued", "render_queued", "processing", "awaiting_review", "failed", "interrupted"].includes(status);
   const canRetry = ["failed", "interrupted", "canceled"].includes(status) && (job.retryable || status === "canceled");
+  const fileArtifacts = asArray(job.artifacts).filter((artifact) => artifact.kind !== "thumbnail");
   return `
-    <div class="media-job">
+    <div class="media-job" data-media-job="${escapeHtml(job.id)}">
       <div class="media-job-heading">
         <div><strong>${escapeHtml(job.title)}</strong><span>${escapeHtml(job.sourceName || "Indexed source")} → ${escapeHtml(
           job.outputFolderName
@@ -426,9 +446,10 @@ function renderMediaJob(job) {
           : ""
       }
       ${status === "awaiting_review" ? renderCandidateReview(job) : ""}
+      ${status === "completed" ? renderThumbnailReview(job) : ""}
       ${
-        asArray(job.artifacts).length
-          ? `<div class="artifact-list">${asArray(job.artifacts)
+        fileArtifacts.length
+          ? `<div class="artifact-list">${fileArtifacts
               .map((artifact) => `<span>${escapeHtml(artifact.kind)} · ${escapeHtml(artifact.name)}</span>`)
               .join("")}</div>`
           : ""
@@ -442,44 +463,159 @@ function renderMediaJob(job) {
   `;
 }
 
-function renderCandidateReview(job) {
+function safeJobThumbnailUrl(value) {
+  return typeof value === "string" && /^produdash-media:\/\/job-thumbnail\/artifact-[a-f0-9]{24}$/.test(value) ? value : null;
+}
+
+function thumbnailPositionLabel(value) {
+  const ratio = Number(value);
+  if (!Number.isFinite(ratio)) return "Frame";
+  if (ratio < 0.35) return "Early";
+  if (ratio > 0.65) return "Late";
+  return "Middle";
+}
+
+function thumbnailChoiceLabel(thumbnail) {
+  return thumbnail.source === "user_import" ? "Custom" : thumbnailPositionLabel(thumbnail.positionRatio);
+}
+
+function renderThumbnailPlatformPreview(job, thumbnail) {
+  if (!thumbnail) return "";
+  const platformIds = asArray(job.settings?.platforms).filter((id) => ["tiktok", "instagram", "youtube"].includes(id));
+  if (!platformIds.length) return "";
+  const names = new Map(asArray(ui.appState.creatorPlatforms).map((platform) => [platform.id, platform.name]));
   return `
-    <form class="candidate-review" data-media-candidates-form="${escapeHtml(job.id)}">
-      <fieldset>
-        <legend>Human approval required</legend>
-        ${asArray(job.candidates)
+    <div class="thumbnail-platform-review">
+      <div><strong>Platform framing check</strong><span>Approximate edge-clearance preview only—not an official publishing preview.</span></div>
+      <div class="thumbnail-platform-grid">
+        ${platformIds
           .map(
-            (candidate, index) => `
-              <label>
-                <input type="checkbox" name="candidateIds" value="${escapeHtml(candidate.id)}" ${index === 0 ? "checked" : ""} />
-                <span><strong>${escapeHtml(candidate.title)}</strong><small>${formatDuration(candidate.start)}–${formatDuration(
-                  candidate.end
-                )} · confidence ${Math.round(Number(candidate.confidence || 0) * 100)}%</small><small>${escapeHtml(
-                  candidate.rationale || "Deterministic local interval."
-                )}</small></span>
-              </label>
+            (platformId) => `
+              <figure class="thumbnail-platform-card">
+                <div class="thumbnail-platform-frame">
+                  <img src="${escapeHtml(thumbnail.previewUrl)}" alt="${escapeHtml(
+                    `${names.get(platformId) || statusLabel(platformId)} thumbnail framing preview`
+                  )}" loading="lazy" />
+                  <span class="thumbnail-safe-region" aria-hidden="true"></span>
+                </div>
+                <figcaption>${escapeHtml(names.get(platformId) || statusLabel(platformId))}</figcaption>
+              </figure>
             `
           )
           .join("")}
-      </fieldset>
-      <button class="primary-button small" type="submit" data-pending-label="Approving…">Approve and render selected</button>
-    </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderThumbnailReview(job) {
+  const thumbnails = asArray(job.artifacts).filter(
+    (artifact) => artifact.kind === "thumbnail" && artifact.id && artifact.groupId && safeJobThumbnailUrl(artifact.previewUrl)
+  );
+  if (!thumbnails.length) return "";
+  const groups = new Map();
+  for (const thumbnail of thumbnails) {
+    if (!groups.has(thumbnail.groupId)) groups.set(thumbnail.groupId, []);
+    groups.get(thumbnail.groupId).push(thumbnail);
+  }
+  const selectedIds = new Set(asArray(job.thumbnailSelections).map((selection) => selection.artifactId));
+  return `
+    <section class="thumbnail-review" aria-label="Thumbnail choices">
+      <div class="thumbnail-review-heading">
+        <div><strong>Choose a preferred thumbnail</strong><span>Real frames from the local render. Your choice does not edit, upload, or publish anything.</span></div>
+        ${renderStatusBadge(selectedIds.size === groups.size ? "connected" : "pending", selectedIds.size === groups.size ? "Chosen" : "Needs choice")}
+      </div>
+      ${[...groups.values()]
+        .map(
+          (items, index) => `
+            <fieldset class="thumbnail-group">
+              <legend><span>${groups.size > 1 ? `Rendered clip ${index + 1}` : "Rendered clip"}</span><button
+                class="text-button"
+                type="button"
+                data-add-job-thumbnail="${escapeHtml(job.id)}"
+                data-thumbnail-group="${escapeHtml(items[0].groupId)}"
+                data-pending-label="Adding…"
+              >Add custom image</button></legend>
+              <div class="thumbnail-grid">
+                ${items
+                  .sort(
+                    (left, right) =>
+                      (left.source === "user_import" ? 2 : Number(left.positionRatio ?? 0)) -
+                      (right.source === "user_import" ? 2 : Number(right.positionRatio ?? 0))
+                  )
+                  .map((thumbnail) => {
+                    const selected = selectedIds.has(thumbnail.id);
+                    return `
+                      <button
+                        class="thumbnail-choice${selected ? " selected" : ""}"
+                        type="button"
+                        aria-pressed="${selected}"
+                        data-select-job-thumbnail="${escapeHtml(job.id)}"
+                        data-thumbnail-id="${escapeHtml(thumbnail.id)}"
+                        data-pending-label="Saving…"
+                      >
+                        <img src="${escapeHtml(thumbnail.previewUrl)}" alt="${escapeHtml(
+                          `${thumbnailChoiceLabel(thumbnail)} frame thumbnail`
+                        )}" loading="lazy" />
+                        <span><strong>${escapeHtml(thumbnailChoiceLabel(thumbnail))}</strong><small>${
+                          selected ? "Preferred" : "Choose"
+                        }</small></span>
+                      </button>
+                    `;
+                  })
+                  .join("")}
+              </div>
+              ${renderThumbnailPlatformPreview(
+                job,
+                items.find((thumbnail) => selectedIds.has(thumbnail.id))
+              )}
+            </fieldset>
+          `
+        )
+        .join("")}
+    </section>
   `;
 }
 
 function renderPublishing() {
   const jobs = asArray(ui.appState.clipperJobs);
+  const renderedJobs = asArray(ui.appState.mediaJobs).filter(
+    (job) => job.status === "completed" && asArray(job.artifacts).some((artifact) => artifact.kind === "video")
+  );
   const posts = asArray(ui.appState.postQueue);
+  const scheduledPosts = posts
+    .filter((plan) => Number.isFinite(Date.parse(plan.schedule?.scheduledFor)))
+    .sort((left, right) => Date.parse(left.schedule.scheduledFor) - Date.parse(right.schedule.scheduledFor));
+  const now = Date.now();
+  const overdue = scheduledPosts.filter(
+    (plan) => Date.parse(plan.schedule.scheduledFor) < now && !["export_ready", "canceled"].includes(plan.status)
+  ).length;
+  const upcoming = scheduledPosts.filter(
+    (plan) => Date.parse(plan.schedule.scheduledFor) >= now && !["export_ready", "canceled"].includes(plan.status)
+  ).length;
+  const awaitingApproval = posts.filter((plan) => plan.status === "needs_approval").length;
+  const completed = posts.filter((plan) => plan.status === "export_ready").length;
   return `
+    <div class="inline-message neutral">
+      <strong>Local publishing outbox</strong>
+      <span>ProduDash can prepare, approve, plan, and export safe post packages. It does not connect accounts or publish in this phase.</span>
+    </div>
     <section class="studio-grid single-workflow">
       <article class="panel">
         <div class="section-heading">
-          <div><h2>Prepare a post plan</h2><p>Create an approval-gated record for manual export.</p></div>
+          <div><h2>Prepare a publishing package</h2><p>Attach completed media, review shared copy, and preserve an immutable approval snapshot.</p></div>
           ${renderStatusBadge("pending", "Approval required")}
         </div>
         <form class="studio-form" data-post-form>
           <label>
-            <span>Clip plan</span>
+            <span>Rendered media</span>
+            <select name="mediaJobId">
+              <option value="">No rendered media selected</option>
+              ${renderedJobs.map((job) => `<option value="${escapeHtml(job.id)}">${escapeHtml(job.title)}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            <span>Legacy clip plan</span>
             <select name="clipJobId">
               <option value="">No clip selected</option>
               ${jobs.map((job) => `<option value="${escapeHtml(job.id)}">${escapeHtml(job.title)}</option>`).join("")}
@@ -487,17 +623,45 @@ function renderPublishing() {
           </label>
           <label><span>Post title</span><input name="title" maxlength="120" required autocomplete="off" /></label>
           <label><span>Caption</span><textarea name="caption" maxlength="2200"></textarea></label>
-          <label><span>Schedule target</span><input name="scheduledFor" type="datetime-local" /></label>
+          <label><span>Planning target</span><input name="scheduledFor" type="datetime-local" /><small>Saved with your current time zone. This does not automatically publish.</small></label>
           ${renderPlatformChecks()}
-          <button class="primary-button" type="submit" data-pending-label="Creating…">Create post plan</button>
+          <button class="primary-button" type="submit" data-pending-label="Creating…">Create publishing package</button>
         </form>
       </article>
       <article class="panel">
-        <div class="section-heading"><div><h2>Post plans</h2><p>${posts.length} approval-gated records</p></div></div>
+        <div class="section-heading"><div><h2>Schedule and outbox</h2><p>${posts.length} local approval-gated records</p></div></div>
+        <div class="publishing-summary" aria-label="Publishing outbox summary">
+          ${renderPublishingSummaryItem("Awaiting approval", awaitingApproval)}
+          ${renderPublishingSummaryItem("Upcoming", upcoming)}
+          ${renderPublishingSummaryItem("Past target", overdue)}
+          ${renderPublishingSummaryItem("Exported", completed)}
+        </div>
+        ${
+          scheduledPosts.length
+            ? `<div class="publishing-schedule" aria-label="Local publishing schedule">
+                ${scheduledPosts
+                  .map(
+                    (plan) => `
+                      <div class="compact-row">
+                        <span><strong>${escapeHtml(plan.title)}</strong><small>${escapeHtml(
+                          `${formatDate(plan.schedule.scheduledFor)} · ${plan.schedule.timeZone}`
+                        )}</small></span>
+                        ${renderStatusBadge(plan.status || "pending")}
+                      </div>
+                    `
+                  )
+                  .join("")}
+              </div>`
+            : `<p class="compact-note">No local planning targets yet.</p>`
+        }
         <div class="studio-list">${posts.length ? posts.map(renderPostPlan).join("") : `<div class="quiet-state compact"><p>No post plans yet.</p></div>`}</div>
       </article>
     </section>
   `;
+}
+
+function renderPublishingSummaryItem(label, count) {
+  return `<div><strong>${count}</strong><span>${escapeHtml(label)}</span></div>`;
 }
 
 function renderPlatformChecks() {
@@ -529,14 +693,43 @@ function renderClipJob(job) {
 function renderPostPlan(plan) {
   const platforms = asArray(plan.platforms);
   const officialReady = platforms.length > 0 && platforms.every((platform) => integrationReady(platform));
+  const canCancel = ["needs_approval", "approved_for_manual_export", "approved_for_official_api"].includes(plan.status);
+  const editable = plan.status === "needs_approval";
+  const packages = platforms.map(
+    (platformId) =>
+      asArray(plan.platformPackages).find((item) => item.platformId === platformId) || {
+        platformId,
+        title: plan.title,
+        caption: plan.caption || ""
+      }
+  );
   return `
-    <div class="studio-item">
+    <div class="studio-item post-plan-card">
       <div><strong>${escapeHtml(plan.title)}</strong><span>${escapeHtml(plan.caption || "No caption yet.")}</span><small>${
         platforms.map((item) => escapeHtml(statusLabel(item))).join(", ") || "No destination"
-      }</small></div>
-      <div>${renderStatusBadge(plan.status || "pending")}<small>${escapeHtml(
-        plan.scheduledFor ? formatDate(plan.scheduledFor) : "No schedule"
+      }</small><small>${escapeHtml(
+        plan.mediaSnapshot
+          ? `${plan.mediaSnapshot.videos?.length || 0} approved media filename${plan.mediaSnapshot.videos?.length === 1 ? "" : "s"} · ${plan.mediaSnapshot.outputFolderName}`
+          : "Copy-only package"
       )}</small></div>
+      <div>${renderStatusBadge(plan.status || "pending")}<small>${escapeHtml(
+        plan.schedule?.scheduledFor ? `${formatDate(plan.schedule.scheduledFor)} · ${plan.schedule.timeZone}` : "No planning target"
+      )}</small></div>
+      ${
+        editable
+          ? renderPostDraftForm(plan, packages)
+          : `<div class="post-plan-locked">
+              <div class="inline-message neutral">
+                <strong>${plan.approvalSnapshot ? "Approved snapshot locked" : "Plan locked"}</strong>
+                <span>${
+                  plan.approvalSnapshot
+                    ? "Destination copy and schedule are read-only after approval. Create a new plan to make changes."
+                    : "This plan is no longer editable. Create a new plan to make changes."
+                }</span>
+              </div>
+              ${renderPostPackages(packages)}
+            </div>`
+      }
       <div class="approval-actions">
         ${
           plan.status === "needs_approval"
@@ -553,15 +746,97 @@ function renderPostPlan(plan) {
             : ""
         }
         ${
-          plan.status === "approved_for_manual_export"
-            ? `<button class="text-button" type="button" data-export-post="${escapeHtml(
+          plan.status === "approved_for_manual_export" && plan.approvalSnapshot
+            ? `<button class="primary-button small" type="button" data-export-post="${escapeHtml(
                 plan.id
-              )}" data-pending-label="Updating…">Mark export-ready</button>`
+              )}" data-pending-label="Exporting…">Export approved package…</button>`
+            : ""
+        }
+        ${
+          plan.status === "approved_for_manual_export" && !plan.approvalSnapshot
+            ? `<span class="compact-note">Recreate this legacy plan to produce a verifiable export snapshot.</span>`
+            : ""
+        }
+        ${
+          plan.status === "export_ready" && plan.exportReceipt
+            ? `<span class="compact-note">Exported from approval ${escapeHtml(String(plan.exportReceipt.snapshotHash || "").slice(0, 10))}</span>`
+            : ""
+        }
+        ${
+          canCancel
+            ? `<button class="text-button danger-text" type="button" data-cancel-post="${escapeHtml(
+                plan.id
+              )}" data-pending-label="Canceling…">Cancel plan</button>`
             : ""
         }
       </div>
     </div>
   `;
+}
+
+function renderPostDraftForm(plan, packages) {
+  return `
+    <form class="post-draft-form" data-post-draft-form="${escapeHtml(plan.id)}">
+      <div class="post-package-grid">
+        ${
+          packages.length
+            ? packages
+                .map(
+                  (item) => `
+                    <fieldset class="post-package-editor">
+                      <legend>${escapeHtml(platformName(item.platformId))}</legend>
+                      <input name="platformId" type="hidden" value="${escapeHtml(item.platformId)}" />
+                      <label><span>Title</span><input name="platformTitle" maxlength="120" required value="${escapeHtml(
+                        item.title
+                      )}" /></label>
+                      <label><span>Caption</span><textarea name="platformCaption" maxlength="2200">${escapeHtml(
+                        item.caption
+                      )}</textarea></label>
+                    </fieldset>
+                  `
+                )
+                .join("")
+            : `<p class="compact-note">Add a destination by creating a new plan.</p>`
+        }
+      </div>
+      <label>
+        <span>Local planning target</span>
+        <input name="scheduledFor" type="datetime-local" value="${escapeHtml(localDateTimeValue(plan.schedule?.scheduledFor))}" />
+        <small>Editable until approval. This does not schedule a provider upload.</small>
+      </label>
+      <button class="ghost-button small" type="submit" data-pending-label="Saving…">Save copy and schedule</button>
+    </form>
+  `;
+}
+
+function renderPostPackages(packages) {
+  if (!packages.length) return `<p class="compact-note">No destination copy is attached.</p>`;
+  return `
+    <div class="post-package-list">
+      ${packages
+        .map(
+          (item) => `
+            <div>
+              <strong>${escapeHtml(platformName(item.platformId))}</strong>
+              <span>${escapeHtml(item.title)}</span>
+              <small>${escapeHtml(item.caption || "No caption.")}</small>
+            </div>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function platformName(platformId) {
+  return asArray(ui.appState.creatorPlatforms).find((item) => item.id === platformId)?.name || statusLabel(platformId);
+}
+
+function localDateTimeValue(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function formatDuration(value) {

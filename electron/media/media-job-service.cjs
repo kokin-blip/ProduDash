@@ -2,7 +2,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { AppError } = require("../errors.cjs");
-const { validateCandidateSelection, validateMediaJobPayload } = require("../validation.cjs");
+const { validateCandidateEdits, validateCandidateSelection, validateMediaJobPayload } = require("../validation.cjs");
+const { deriveCaptionSegments, wrapCaptionText } = require("./captions.cjs");
+const { hashRenderPlan, rebaseTranscript } = require("../projects/render-plan.cjs");
 
 const RETRYABLE_STATUSES = new Set(["failed", "interrupted", "canceled"]);
 const PROGRESS_BUCKET = 10;
@@ -39,20 +41,124 @@ async function createOutputDirectory(parentPath, title, jobId) {
   throw new AppError("OUTPUT_COLLISION", "ProduDash could not create a collision-free output folder.");
 }
 
-function sanitizeArtifacts(artifacts) {
+function artifactId(jobId, kind, name) {
+  if (!jobId || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(jobId)) return null;
+  return `artifact-${crypto.createHash("sha256").update(`${jobId}:${kind}:${name}`).digest("hex").slice(0, 24)}`;
+}
+
+function thumbnailGroupId(jobId, name) {
+  const stem = path
+    .basename(name, path.extname(name))
+    .replace(/-thumb-(early|middle|late)$/i, "")
+    .slice(0, 180);
+  return `thumbgroup-${crypto.createHash("sha256").update(`${jobId}:${stem}`).digest("hex").slice(0, 20)}`;
+}
+
+function hasSupportedImageSignature(filePath, extension) {
+  const bytes = Buffer.alloc(12);
+  const file = fs.openSync(filePath, "r");
+  try {
+    fs.readSync(file, bytes, 0, bytes.length, 0);
+  } finally {
+    fs.closeSync(file);
+  }
+  if ([".jpg", ".jpeg"].includes(extension)) return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (extension === ".png") return bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  if (extension === ".webp") return bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+  return false;
+}
+
+function sanitizeArtifacts(artifacts, jobId = null) {
   return (Array.isArray(artifacts) ? artifacts : [])
     .filter((artifact) => artifact && ["video", "caption", "thumbnail", "manifest"].includes(artifact.kind))
-    .map((artifact) => ({
-      kind: artifact.kind,
-      name: path.basename(String(artifact.name || "")).slice(0, 180)
-    }))
+    .map((artifact) => {
+      const name = path.basename(String(artifact.name || "")).slice(0, 180);
+      const id = artifactId(jobId, artifact.kind, name);
+      const positionRatio = Number(artifact.variant?.positionRatio);
+      if (artifact.kind !== "thumbnail" || !id) return { kind: artifact.kind, name };
+      const source = artifact.variant?.source === "user_import" ? "user_import" : "local_render";
+      const groupId = /^thumbgroup-[a-f0-9]{20}$/.test(String(artifact.variant?.groupId || ""))
+        ? artifact.variant.groupId
+        : thumbnailGroupId(jobId, name);
+      return {
+        id,
+        kind: artifact.kind,
+        name,
+        source,
+        positionRatio:
+          source === "local_render" && Number.isFinite(positionRatio) && positionRatio >= 0 && positionRatio <= 1 ? positionRatio : null,
+        groupId,
+        previewUrl: `produdash-media://job-thumbnail/${id}`
+      };
+    })
     .filter((artifact) => artifact.name);
 }
 
+function readTranscript(tempPath) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(tempPath, "transcript.json"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function editableCandidates(candidates, job, sourceDuration, transcript) {
+  return (Array.isArray(candidates) ? candidates : []).map((candidate) => {
+    const original = Object.freeze({
+      title: candidate.title,
+      start: candidate.start,
+      end: candidate.end,
+      duration: Number((candidate.end - candidate.start).toFixed(3))
+    });
+    const transcriptCaptions = transcript ? deriveCaptionSegments(transcript, candidate.start, candidate.end) : [];
+    const manualCaptionText = transcriptCaptions.length ? "" : job.settings.captionText || "";
+    const captionSegments =
+      transcriptCaptions.length || !manualCaptionText
+        ? transcriptCaptions
+        : [
+            {
+              id: "caption-1",
+              start: 0,
+              end: original.duration,
+              text: wrapCaptionText(manualCaptionText)
+            }
+          ];
+    return {
+      ...candidate,
+      original,
+      edit: {
+        ...original,
+        captionSegments,
+        manualCaptionText,
+        captionSource: transcriptCaptions.length ? "transcript" : manualCaptionText ? "manual" : "none",
+        captionStyle: "clean",
+        captionPosition: "lower",
+        captionSafeArea: "standard",
+        aspectTreatment: job.settings.aspectTreatment,
+        targetAspect: job.settings.targetAspect,
+        updatedAt: null
+      },
+      sourceDuration
+    };
+  });
+}
+
 class MediaJobService {
-  constructor({ store, mediaLibrary, credentialVault, runner, analysisService = null, startAccessingBookmark, onEvent = () => {} }) {
+  constructor({
+    store,
+    mediaLibrary,
+    projects = null,
+    brandAssets = null,
+    credentialVault,
+    runner,
+    analysisService = null,
+    startAccessingBookmark,
+    onEvent = () => {}
+  }) {
     this.store = store;
     this.mediaLibrary = mediaLibrary;
+    this.projects = projects;
+    this.brandAssets = brandAssets;
     this.credentialVault = credentialVault;
     this.runner = runner;
     this.analysisService = analysisService;
@@ -67,7 +173,9 @@ class MediaJobService {
   async initialize() {
     await this.store.interruptActiveMediaJobs();
     if (this.credentialVault) {
-      for (const job of this.store.getAppState().mediaJobs.filter((item) => item.status === "completed")) {
+      for (const job of this.store
+        .getAppState()
+        .mediaJobs.filter((item) => item.status === "completed" && item.jobType !== "project_prepare")) {
         const values = this.credentialVault.get(`media-job-${job.id}`);
         if (values.tempPath) await fs.promises.rm(values.tempPath, { recursive: true, force: true }).catch(() => {});
       }
@@ -137,10 +245,16 @@ class MediaJobService {
     try {
       const state = await this.store.createMediaJobSummary({
         id: jobId,
+        jobType: "clip_generation",
+        projectId: null,
+        renderPlanVersion: null,
+        renderPlanHash: null,
         title: input.title,
         goal: input.goal,
         sourceMediaId: input.sourceMediaId,
         sourceName: clip.name,
+        sourcePreviewUrl: clip.previewable ? `produdash-media://clip/${clip.id}` : null,
+        sourceDuration: Number.isFinite(Number(clip.duration)) ? Number(clip.duration) : null,
         outputFolderName: path.basename(outputPath),
         status: "queued",
         stage: "queued",
@@ -160,6 +274,7 @@ class MediaJobService {
         selectedCandidateIds: [],
         warnings: [],
         artifacts: [],
+        thumbnailSelections: [],
         error: null,
         retryable: false,
         createdAt: now,
@@ -167,6 +282,297 @@ class MediaJobService {
         startedAt: null,
         completedAt: null
       });
+      this.schedule();
+      return state;
+    } catch (error) {
+      await this.credentialVault.remove(`media-job-${jobId}`);
+      await fs.promises.rm(outputPath, { recursive: true, force: true });
+      throw error;
+    }
+  }
+
+  async createProjectPreparation(projectId) {
+    if (!this.projects) throw new AppError("PROJECTS_UNAVAILABLE", "Projects are unavailable.");
+    if (!this.credentialVault) {
+      throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure storage is required before preparing a project.");
+    }
+    const project = this.projects.get(projectId);
+    if (project.source.status !== "available") throw new AppError("SOURCE_UNAVAILABLE", "Relink the project source before preparing it.");
+    const existing = this.store.getAppState().mediaJobs.find((job) => job.projectId === projectId && job.jobType === "project_prepare");
+    if (existing && ["queued", "processing", "completed"].includes(existing.status)) return this.store.getAppState();
+    if (existing && RETRYABLE_STATUSES.has(existing.status)) return this.retry(existing.id);
+    const jobId = createId("mediajob");
+    const sourcePath = this.mediaLibrary.resolveClipPath(project.source.mediaId);
+    const cachePath = path.join(this.projects.userDataPath, "project-cache", project.id);
+    await fs.promises.mkdir(cachePath, { recursive: true });
+    await this.credentialVault.replace(`media-job-${jobId}`, {
+      sourcePath,
+      outputPath: cachePath,
+      tempPath: cachePath,
+      outputBookmark: ""
+    });
+    const now = new Date().toISOString();
+    const state = await this.store.createMediaJobSummary({
+      id: jobId,
+      jobType: "project_prepare",
+      projectId: project.id,
+      renderPlanVersion: project.draft.version,
+      renderPlanHash: project.renderPlanHash,
+      title: `Prepare ${project.title}`,
+      goal: "Local editor preparation",
+      sourceMediaId: project.source.mediaId,
+      sourceName: project.source.name,
+      sourcePreviewUrl: project.source.previewUrl,
+      sourceDuration: project.source.duration,
+      outputFolderName: "Local project cache",
+      status: "queued",
+      stage: "queued",
+      progress: 0,
+      settings: {
+        maxClips: 1,
+        targetDuration: Math.max(5, Math.min(180, Math.round(project.source.duration))),
+        captionMode: "off",
+        captionText: "",
+        aspectTreatment: "fit_pad",
+        targetAspect: "original",
+        analysisMode: "local_heuristics",
+        cloudConsent: null,
+        platforms: project.platforms
+      },
+      candidates: [],
+      selectedCandidateIds: [],
+      warnings: [],
+      artifacts: [],
+      thumbnailSelections: [],
+      error: null,
+      retryable: false,
+      createdAt: now,
+      updatedAt: now,
+      startedAt: null,
+      completedAt: null
+    });
+    this.schedule();
+    return state;
+  }
+
+  async createProjectRender(projectId, outputSelectionId) {
+    if (!this.projects) throw new AppError("PROJECTS_UNAVAILABLE", "Projects are unavailable.");
+    if (!this.credentialVault) {
+      throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure storage is required before rendering a project.");
+    }
+    const project = this.projects.get(projectId);
+    if (project.source.status !== "available") throw new AppError("SOURCE_UNAVAILABLE", "Relink the project source before rendering.");
+    if (!project.preparation) throw new AppError("PROJECT_NOT_PREPARED", "Prepare the project before rendering.");
+    if (project.draft.totalDuration < 5 || project.draft.totalDuration > 21_600) {
+      throw new AppError("INVALID_RENDER_PLAN", "The edited project must be between 5 seconds and 6 hours.");
+    }
+    if (
+      this.store
+        .getAppState()
+        .mediaJobs.some(
+          (job) =>
+            job.projectId === project.id &&
+            job.jobType === "project_render" &&
+            ["queued", "render_queued", "processing"].includes(job.status)
+        )
+    ) {
+      throw new AppError("PROJECT_RENDER_ALREADY_QUEUED", "This project already has an active approved render.");
+    }
+    const selection = this.consumeOutputSelection(outputSelectionId);
+    const jobId = createId("mediajob");
+    let stopOutputAccess = null;
+    let outputPath;
+    try {
+      if (selection.bookmark && this.startAccessingBookmark) stopOutputAccess = this.startAccessingBookmark(selection.bookmark);
+      outputPath = await createOutputDirectory(selection.path, project.title, jobId);
+    } finally {
+      if (typeof stopOutputAccess === "function") stopOutputAccess();
+    }
+    const tempPath = path.join(outputPath, ".produdash-job");
+    await fs.promises.mkdir(tempPath, { recursive: true });
+    const assetPaths = {};
+    const assetSnapshots = {};
+    const composition = project.draft.composition || {};
+    const brollTracks = (project.draft.intelligentTracks?.broll || []).filter((item) => item.reviewed);
+    const voiceovers = (project.draft.localization?.voiceovers || []).filter((item) => item.status === "reviewed");
+    const references = [
+      ...(composition.overlays || [])
+        .filter((overlay) => overlay.type === "logo")
+        .map((overlay) => ({ id: overlay.assetId, kinds: "logo" })),
+      ...(composition.music ? [{ id: composition.music.assetId, kinds: "music" }] : []),
+      ...(composition.introAssetId ? [{ id: composition.introAssetId, kinds: "intro" }] : []),
+      ...(composition.outroAssetId ? [{ id: composition.outroAssetId, kinds: "outro" }] : []),
+      ...(project.draft.intelligentTracks?.sfx || []).filter((item) => item.reviewed).map((item) => ({ id: item.assetId, kinds: "music" })),
+      ...voiceovers.map((item) => ({ id: item.assetId, kinds: "voiceover", voiceover: item }))
+    ];
+    if (references.length && !this.brandAssets) {
+      throw new AppError("BRAND_ASSETS_UNAVAILABLE", "Brand assets are unavailable.");
+    }
+    const assetDirectory = path.join(tempPath, "assets");
+    if (references.length) await fs.promises.mkdir(assetDirectory, { recursive: true });
+    for (const reference of references) {
+      if (assetPaths[reference.id]) continue;
+      const resolved = this.brandAssets.resolve(reference.id, reference.kinds);
+      if (reference.voiceover) {
+        const sourceCue = project.draft.transcript.find((cue) => cue.id === reference.voiceover.sourceId);
+        const activeVariant = project.draft.localization?.activeVariantId
+          ? project.draft.localization.variants.find((variant) => variant.id === project.draft.localization.activeVariantId)
+          : null;
+        const text = activeVariant?.cues?.find((cue) => cue.sourceId === reference.voiceover.sourceId)?.text || sourceCue?.text || "";
+        const textHash = crypto.createHash("sha256").update(text).digest("hex");
+        if (
+          resolved.asset.provenance?.textHash !== textHash ||
+          reference.voiceover.provenance.textHash !== textHash ||
+          resolved.asset.provenance?.providerProfileId !== reference.voiceover.provenance.providerProfileId ||
+          resolved.asset.provenance?.modelId !== reference.voiceover.provenance.modelId ||
+          resolved.asset.provenance?.voice !== reference.voiceover.provenance.voice
+        ) {
+          throw new AppError("VOICEOVER_SOURCE_CHANGED", "A reviewed voiceover no longer matches the selected transcript text.");
+        }
+      }
+      const snapshotPath = path.join(assetDirectory, `${reference.id}${path.extname(resolved.filePath).toLowerCase()}`);
+      await fs.promises.copyFile(resolved.filePath, snapshotPath);
+      assetPaths[reference.id] = snapshotPath;
+      assetSnapshots[reference.id] = {
+        id: resolved.asset.id,
+        kind: resolved.asset.kind,
+        name: resolved.asset.name,
+        fingerprint: resolved.asset.fingerprint,
+        duration: resolved.asset.duration,
+        hasAudio: resolved.asset.hasAudio
+      };
+    }
+    for (const track of brollTracks) {
+      const summary = this.mediaLibrary.getClipSummary(track.mediaId);
+      if (summary.status !== "available" || summary.fingerprint !== track.provenance.fingerprint) {
+        throw new AppError("BROLL_SOURCE_CHANGED", "A reviewed B-roll source is unavailable or has changed.");
+      }
+      let stopAccess = null;
+      const source = this.mediaLibrary.resolveClipPath(track.mediaId);
+      const snapshotPath = path.join(assetDirectory, `${track.mediaId}${path.extname(source).toLowerCase()}`);
+      try {
+        stopAccess = this.mediaLibrary.startClipAccess(track.mediaId);
+        await fs.promises.mkdir(assetDirectory, { recursive: true });
+        await fs.promises.copyFile(source, snapshotPath);
+      } finally {
+        if (typeof stopAccess === "function") stopAccess();
+      }
+      assetPaths[track.mediaId] = snapshotPath;
+      assetSnapshots[track.mediaId] = {
+        id: track.mediaId,
+        kind: "broll",
+        name: summary.name,
+        fingerprint: summary.fingerprint,
+        duration: summary.duration
+      };
+    }
+    const projectCache = path.join(this.projects.userDataPath, "project-cache", project.id);
+    for (const artifact of ["metadata.json", "analysis.json"]) {
+      await fs.promises.copyFile(path.join(projectCache, artifact), path.join(tempPath, artifact)).catch(() => {
+        throw new AppError("PROJECT_NOT_PREPARED", "Validated project preparation artifacts are unavailable.");
+      });
+    }
+    const sourcePath = this.mediaLibrary.resolveClipPath(project.source.mediaId);
+    await this.credentialVault.replace(`media-job-${jobId}`, {
+      sourcePath,
+      outputPath,
+      tempPath,
+      assetPaths,
+      outputBookmark: selection.bookmark || ""
+    });
+    const now = new Date().toISOString();
+    const planHash = hashRenderPlan(project.draft);
+    const captionSegments = rebaseTranscript(project.draft);
+    const selectedLanguageVariant = project.draft.localization?.activeVariantId
+      ? project.draft.localization.variants.find((variant) => variant.id === project.draft.localization.activeVariantId)
+      : null;
+    const candidate = {
+      id: "project-edit",
+      title: project.title,
+      start: 0,
+      end: project.draft.totalDuration,
+      duration: project.draft.totalDuration,
+      confidence: 1,
+      scores: {},
+      rationale: "Human-edited project render plan.",
+      original: { title: project.title, start: 0, end: project.draft.totalDuration, duration: project.draft.totalDuration },
+      edit: {
+        title: project.title,
+        start: 0,
+        end: project.draft.totalDuration,
+        duration: project.draft.totalDuration,
+        segments: project.draft.segments,
+        captionSegments,
+        manualCaptionText: "",
+        captionSource: captionSegments.length ? "transcript" : "none",
+        captionStyle: project.draft.presentation.captionStyle,
+        captionPosition: project.draft.presentation.captionPosition,
+        captionSafeArea: project.draft.presentation.captionSafeArea,
+        captionTextColor: project.draft.presentation.captionTextColor,
+        captionBackgroundColor: project.draft.presentation.captionBackgroundColor,
+        captionScale: project.draft.presentation.captionScale,
+        aspectTreatment: project.draft.presentation.aspectTreatment,
+        targetAspect: project.draft.presentation.targetAspect,
+        enhancement: project.draft.presentation.enhancement,
+        templateRef: project.draft.templateRef,
+        composition: project.draft.composition,
+        intelligentTracks: project.draft.intelligentTracks,
+        voiceovers,
+        languageVariant: selectedLanguageVariant
+          ? {
+              id: selectedLanguageVariant.id,
+              language: selectedLanguageVariant.language,
+              label: selectedLanguageVariant.label,
+              provenance: selectedLanguageVariant.provenance
+            }
+          : null,
+        assetSnapshots,
+        updatedAt: now
+      }
+    };
+    try {
+      const state = await this.store.createMediaJobSummary({
+        id: jobId,
+        jobType: "project_render",
+        projectId: project.id,
+        renderPlanVersion: project.draft.version,
+        renderPlanHash: planHash,
+        title: project.title,
+        goal: project.instructions,
+        sourceMediaId: project.source.mediaId,
+        sourceName: project.source.name,
+        sourcePreviewUrl: project.source.previewUrl,
+        sourceDuration: project.source.duration,
+        outputFolderName: path.basename(outputPath),
+        status: "render_queued",
+        stage: "queued",
+        progress: 75,
+        settings: {
+          maxClips: 1,
+          targetDuration: Math.max(5, Math.min(180, Math.round(project.draft.totalDuration))),
+          captionMode: project.draft.presentation.captionMode,
+          captionText: "",
+          aspectTreatment: project.draft.presentation.aspectTreatment,
+          targetAspect: project.draft.presentation.targetAspect,
+          enhancement: project.draft.presentation.enhancement,
+          templateRef: project.draft.templateRef,
+          analysisMode: "local_heuristics",
+          cloudConsent: null,
+          platforms: project.platforms
+        },
+        candidates: [candidate],
+        selectedCandidateIds: [candidate.id],
+        warnings: [],
+        artifacts: [],
+        thumbnailSelections: [],
+        error: null,
+        retryable: false,
+        createdAt: now,
+        updatedAt: now,
+        startedAt: null,
+        completedAt: null
+      });
+      await this.projects.recordRenderApproval(project.id, jobId, planHash).catch(() => {});
       this.schedule();
       return state;
     } catch (error) {
@@ -187,9 +593,26 @@ class MediaJobService {
       throw new AppError("MEDIA_JOB_TRANSITION_INVALID", "Candidates can only be approved while a media job awaits review.");
     }
     const normalized = validateCandidateSelection(candidateIds);
+    if (normalized.length > job.settings.maxClips) {
+      throw new AppError("CANDIDATE_LIMIT_EXCEEDED", `Choose no more than ${job.settings.maxClips} final clips for this job.`);
+    }
     const knownIds = new Set(job.candidates.map((candidate) => candidate.id));
     if (normalized.some((id) => !knownIds.has(id))) {
       throw new AppError("CANDIDATE_NOT_FOUND", "One or more selected clip candidates are unavailable.");
+    }
+    const selected = normalized.map((id) => job.candidates.find((candidate) => candidate.id === id));
+    for (let left = 0; left < selected.length; left += 1) {
+      for (let right = left + 1; right < selected.length; right += 1) {
+        const leftStart = Number(selected[left].edit?.start ?? selected[left].start);
+        const leftEnd = Number(selected[left].edit?.end ?? selected[left].end);
+        const rightStart = Number(selected[right].edit?.start ?? selected[right].start);
+        const rightEnd = Number(selected[right].edit?.end ?? selected[right].end);
+        const overlap = Math.max(0, Math.min(leftEnd, rightEnd) - Math.max(leftStart, rightStart));
+        const shorter = Math.min(leftEnd - leftStart, rightEnd - rightStart);
+        if (shorter > 0 && overlap / shorter > 0.2) {
+          throw new AppError("CANDIDATE_OVERLAP", "Approved clips cannot overlap by more than 20% of the shorter clip.");
+        }
+      }
     }
     const state = await this.store.updateMediaJobSummary(
       jobId,
@@ -205,6 +628,38 @@ class MediaJobService {
     );
     this.schedule();
     return state;
+  }
+
+  async updateCandidate(jobId, candidateId, values) {
+    const job = this.store.getMediaJob(jobId);
+    if (job.status !== "awaiting_review") {
+      throw new AppError("MEDIA_JOB_TRANSITION_INVALID", "Candidate edits are allowed only while a media job awaits review.");
+    }
+    const candidate = job.candidates.find((item) => item.id === candidateId);
+    if (!candidate) throw new AppError("CANDIDATE_NOT_FOUND", "The selected clip candidate is unavailable.");
+    const edit = validateCandidateEdits(values, {
+      sourceDuration: job.sourceDuration,
+      candidates: [],
+      candidateId
+    });
+    const candidates = job.candidates.map((item) =>
+      item.id === candidateId
+        ? {
+            ...item,
+            edit: {
+              ...item.edit,
+              ...edit,
+              captionSource: edit.captionSegments.length
+                ? item.edit?.captionSource || "manual"
+                : edit.manualCaptionText
+                  ? "manual"
+                  : "none",
+              updatedAt: new Date().toISOString()
+            }
+          }
+        : item
+    );
+    return this.store.updateMediaJobSummary(jobId, { candidates }, `Saved non-destructive edits for clip candidate: ${candidate.title}.`);
   }
 
   async cancel(jobId) {
@@ -241,15 +696,139 @@ class MediaJobService {
     const nextStatus = job.selectedCandidateIds.length ? "render_queued" : "queued";
     const state = await this.store.updateMediaJobSummary(
       jobId,
-      { status: nextStatus, stage: "queued", error: null, retryable: false },
+      { status: nextStatus, stage: "queued", error: null, retryable: false, thumbnailSelections: [] },
       `Retried media job: ${job.title}.`
     );
     this.schedule();
     return state;
   }
 
+  async selectThumbnail(jobId, thumbnailId) {
+    const job = this.store.getMediaJob(jobId);
+    if (job.status !== "completed") {
+      throw new AppError("MEDIA_JOB_TRANSITION_INVALID", "A preferred thumbnail can be selected only after rendering completes.");
+    }
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(String(thumbnailId || ""))) {
+      throw new AppError("INVALID_INPUT", "The selected thumbnail is invalid.");
+    }
+    const artifact = job.artifacts.find((item) => item.kind === "thumbnail" && item.id === thumbnailId);
+    if (!artifact?.groupId) throw new AppError("THUMBNAIL_NOT_FOUND", "The selected thumbnail is unavailable.");
+    const existing = Array.isArray(job.thumbnailSelections) ? job.thumbnailSelections : [];
+    if (existing.some((item) => item.groupId === artifact.groupId && item.artifactId === artifact.id)) {
+      return this.store.getAppState();
+    }
+    const thumbnailSelections = [
+      ...existing.filter((item) => item.groupId !== artifact.groupId),
+      {
+        groupId: artifact.groupId,
+        artifactId: artifact.id,
+        selectedAt: new Date().toISOString()
+      }
+    ];
+    return this.store.updateMediaJobSummary(
+      jobId,
+      { thumbnailSelections },
+      `Selected a preferred local thumbnail for media job: ${job.title}.`
+    );
+  }
+
+  async importThumbnail(jobId, groupId, selection) {
+    const job = this.store.getMediaJob(jobId);
+    if (job.status !== "completed") {
+      throw new AppError("MEDIA_JOB_TRANSITION_INVALID", "A custom thumbnail can be added only after rendering completes.");
+    }
+    if (!/^thumbgroup-[a-f0-9]{20}$/.test(String(groupId || ""))) {
+      throw new AppError("INVALID_INPUT", "The selected thumbnail group is invalid.");
+    }
+    if (!job.artifacts.some((artifact) => artifact.kind === "thumbnail" && artifact.groupId === groupId)) {
+      throw new AppError("THUMBNAIL_NOT_FOUND", "The rendered clip for this thumbnail is unavailable.");
+    }
+    if (job.artifacts.filter((artifact) => artifact.kind === "thumbnail" && artifact.source === "user_import").length >= 12) {
+      throw new AppError("THUMBNAIL_LIMIT_REACHED", "This media job already has the maximum of 12 custom thumbnails.");
+    }
+    if (!selection?.path) throw new AppError("THUMBNAIL_IMPORT_CANCELED", "Custom thumbnail selection was canceled.");
+    let stopAccess = null;
+    let sourcePath;
+    let outputPath;
+    try {
+      if (selection.bookmark && this.startAccessingBookmark) stopAccess = this.startAccessingBookmark(selection.bookmark);
+      sourcePath = fs.realpathSync(selection.path);
+      outputPath = fs.realpathSync(this.getPrivatePaths(jobId).outputPath);
+      const stat = fs.statSync(sourcePath);
+      const extension = path.extname(sourcePath).toLowerCase();
+      if (
+        !stat.isFile() ||
+        stat.size < 512 ||
+        stat.size > 20 * 1024 * 1024 ||
+        ![".jpg", ".jpeg", ".png", ".webp"].includes(extension) ||
+        !hasSupportedImageSignature(sourcePath, extension)
+      ) {
+        throw new AppError("INVALID_THUMBNAIL", "Choose a valid JPG, PNG, or WebP image up to 20 MB.");
+      }
+      const normalizedExtension = extension === ".jpeg" ? ".jpg" : extension;
+      const name = `custom-thumbnail-${groupId.slice(-8)}-${crypto.randomBytes(4).toString("hex")}${normalizedExtension}`;
+      const destinationPath = path.join(outputPath, name);
+      await fs.promises.copyFile(sourcePath, destinationPath, fs.constants.COPYFILE_EXCL);
+      const [artifact] = sanitizeArtifacts([{ kind: "thumbnail", name, variant: { source: "user_import", groupId } }], jobId);
+      const thumbnailSelections = [
+        ...(Array.isArray(job.thumbnailSelections) ? job.thumbnailSelections : []).filter((item) => item.groupId !== groupId),
+        { groupId, artifactId: artifact.id, selectedAt: new Date().toISOString() }
+      ];
+      try {
+        return await this.store.updateMediaJobSummary(
+          jobId,
+          { artifacts: [...job.artifacts, artifact], thumbnailSelections },
+          `Added and selected a custom local thumbnail for media job: ${job.title}.`
+        );
+      } catch (error) {
+        await fs.promises.unlink(destinationPath).catch(() => {});
+        throw error;
+      }
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError("THUMBNAIL_IMPORT_FAILED", "ProduDash could not safely copy the selected thumbnail.");
+    } finally {
+      if (typeof stopAccess === "function") stopAccess();
+    }
+  }
+
+  resolveThumbnailArtifact(thumbnailId) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(String(thumbnailId || ""))) {
+      throw new AppError("THUMBNAIL_NOT_FOUND", "The requested thumbnail is unavailable.");
+    }
+    const job = this.store
+      .getAppState()
+      .mediaJobs.find(
+        (item) =>
+          item.status === "completed" && item.artifacts.some((artifact) => artifact.kind === "thumbnail" && artifact.id === thumbnailId)
+      );
+    const artifact = job?.artifacts.find((item) => item.kind === "thumbnail" && item.id === thumbnailId);
+    if (!job || !artifact || artifact.name !== path.basename(artifact.name)) {
+      throw new AppError("THUMBNAIL_NOT_FOUND", "The requested thumbnail is unavailable.");
+    }
+    let outputPath;
+    let filePath;
+    try {
+      outputPath = fs.realpathSync(this.getPrivatePaths(job.id).outputPath);
+      filePath = fs.realpathSync(path.join(outputPath, artifact.name));
+    } catch {
+      throw new AppError("THUMBNAIL_NOT_FOUND", "The requested thumbnail is unavailable.");
+    }
+    const relative = path.relative(outputPath, filePath);
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new AppError("THUMBNAIL_NOT_FOUND", "The requested thumbnail is unavailable.");
+    }
+    if (![".jpg", ".jpeg", ".png", ".webp"].includes(path.extname(filePath).toLowerCase())) {
+      throw new AppError("THUMBNAIL_NOT_FOUND", "The requested thumbnail is unavailable.");
+    }
+    return filePath;
+  }
+
   revealOutput(jobId, showItemInFolder) {
     const job = this.store.getMediaJob(jobId);
+    if (job.jobType === "project_prepare") {
+      throw new AppError("OUTPUT_UNAVAILABLE", "Project preparation does not create user-facing output.");
+    }
     const paths = this.getPrivatePaths(jobId);
     showItemInFolder(paths.outputPath);
     return { jobId: job.id };
@@ -312,14 +891,17 @@ class MediaJobService {
       const handle = this.runner.start(
         {
           id: job.id,
+          jobType: job.jobType || "clip_generation",
           mode,
           sourcePath: paths.sourcePath,
           outputPath: paths.outputPath,
           tempPath: paths.tempPath,
           settings: job.settings,
+          candidates: job.candidates,
           selectedCandidateIds: job.selectedCandidateIds,
           warnings: job.warnings,
-          existingArtifactNames: job.artifacts.map((artifact) => artifact.name)
+          existingArtifactNames: job.artifacts.map((artifact) => artifact.name),
+          assetPaths: paths.assetPaths || {}
         },
         (message) => {
           const bucket = Math.floor(Number(message.progress || 0) / PROGRESS_BUCKET);
@@ -364,6 +946,7 @@ class MediaJobService {
           },
           `Media job needs attention: ${job.title}.`
         );
+        this.onEvent({ jobId: job.id, terminal: true });
       }
     } finally {
       if (typeof stopOutputAccess === "function") stopOutputAccess();
@@ -375,6 +958,27 @@ class MediaJobService {
 
   async finish(jobId, result) {
     const job = this.store.getMediaJob(jobId);
+    if (job.jobType === "project_prepare") {
+      if (result.type === "awaiting_review") {
+        await this.projects.setPreparation(job.projectId, result.preparation || {});
+        await this.store.updateMediaJobSummary(
+          jobId,
+          {
+            status: "completed",
+            stage: "complete",
+            progress: 100,
+            warnings: result.warnings || [],
+            error: null,
+            retryable: false,
+            sourceDuration: result.metadata?.duration || job.sourceDuration,
+            completedAt: new Date().toISOString()
+          },
+          `Prepared local editor signals for project ${job.projectId}.`
+        );
+        this.onEvent({ jobId, terminal: true });
+        return;
+      }
+    }
     if (result.type === "awaiting_review" && (job.settings.analysisMode || "local_heuristics") !== "local_heuristics") {
       if (!this.analysisService) {
         result = {
@@ -400,13 +1004,21 @@ class MediaJobService {
     if (result.type === "awaiting_review") {
       const method =
         (job.settings.analysisMode || "local_heuristics") === "local_heuristics" ? "local heuristics" : "the selected AI provider";
+      const sourceDuration = Number(
+        result.metadata?.duration ||
+          job.sourceDuration ||
+          Math.max(...(Array.isArray(result.candidates) ? result.candidates.map((candidate) => Number(candidate.end) || 0) : [0]))
+      );
+      const transcript = readTranscript(this.getPrivatePaths(jobId).tempPath);
+      const candidates = editableCandidates(result.candidates, job, sourceDuration, transcript);
       await this.store.updateMediaJobSummary(
         jobId,
         {
           status: "awaiting_review",
           stage: "candidate_review",
           progress: 75,
-          candidates: result.candidates,
+          candidates,
+          sourceDuration,
           warnings: result.warnings || [],
           error: null,
           retryable: false
@@ -429,7 +1041,8 @@ class MediaJobService {
           status: "completed",
           stage: "complete",
           progress: 100,
-          artifacts: sanitizeArtifacts(result.artifacts),
+          artifacts: sanitizeArtifacts(result.artifacts, jobId),
+          thumbnailSelections: [],
           warnings,
           error: null,
           retryable: false,
@@ -444,7 +1057,7 @@ class MediaJobService {
         // A completed job remains truthful; stale hidden work is retried during startup cleanup.
       }
     } else if (result.type === "canceled") {
-      const partialArtifacts = sanitizeArtifacts(result.artifacts);
+      const partialArtifacts = sanitizeArtifacts(result.artifacts, jobId);
       const warnings = [...job.warnings];
       if (partialArtifacts.length && !warnings.includes("Some generated files remain in the output folder and will be reused on retry.")) {
         warnings.push("Some generated files remain in the output folder and will be reused on retry.");
@@ -463,7 +1076,7 @@ class MediaJobService {
       );
     } else {
       const error = result.error || {};
-      const partialArtifacts = sanitizeArtifacts(result.artifacts);
+      const partialArtifacts = sanitizeArtifacts(result.artifacts, jobId);
       const warnings = [...job.warnings];
       if (partialArtifacts.length && !warnings.includes("Some generated files remain in the output folder and will be reused on retry.")) {
         warnings.push("Some generated files remain in the output folder and will be reused on retry.");

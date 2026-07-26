@@ -11,6 +11,7 @@ const { GeminiProviderAdapter } = require("./ai/adapters/gemini.cjs");
 const { OpenAIProviderAdapter } = require("./ai/adapters/openai.cjs");
 const { AnthropicProviderAdapter } = require("./ai/adapters/anthropic.cjs");
 const { OpenAICompatibleProviderAdapter } = require("./ai/adapters/openai-compatible.cjs");
+const { ElevenLabsProviderAdapter } = require("./ai/adapters/elevenlabs.cjs");
 const { WhisperCppProviderAdapter } = require("./ai/adapters/whisper-cpp.cjs");
 const { ProviderRegistry } = require("./ai/provider-registry.cjs");
 const { ProviderService } = require("./ai/provider-service.cjs");
@@ -23,6 +24,9 @@ const { MediaAnalysisService } = require("./media/media-analysis-service.cjs");
 const { AdvisorHistory } = require("./advisor/advisor-history.cjs");
 const { AdvisorService } = require("./advisor/advisor-service.cjs");
 const { createAdvisorTools } = require("./advisor/advisor-tools.cjs");
+const { ProjectStore } = require("./projects/project-store.cjs");
+const { TemplateStore } = require("./projects/template-store.cjs");
+const { BrandAssetStore } = require("./projects/brand-asset-store.cjs");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -95,6 +99,7 @@ if (hasSingleInstanceLock) {
         new GeminiProviderAdapter({ connector: connectors.gemini }),
         new OpenAIProviderAdapter(),
         new AnthropicProviderAdapter(),
+        new ElevenLabsProviderAdapter(),
         new OpenAICompatibleProviderAdapter(),
         new WhisperCppProviderAdapter({
           startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
@@ -106,6 +111,12 @@ if (hasSingleInstanceLock) {
         credentialVault: store.credentialVault,
         startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
       });
+      const projects = new ProjectStore(app.getPath("userData"), { mediaLibrary, appStore: store });
+      store.notices.push(...projects.getNotices());
+      const templates = new TemplateStore(app.getPath("userData"));
+      store.notices.push(...templates.getNotices());
+      const brandAssets = new BrandAssetStore(app.getPath("userData"));
+      store.notices.push(...brandAssets.getNotices());
       const transcriptionService = new TranscriptionService({ providerService: providers });
       const mediaAnalysisService = new MediaAnalysisService({
         providerService: providers,
@@ -114,6 +125,8 @@ if (hasSingleInstanceLock) {
       const mediaJobs = new MediaJobService({
         store,
         mediaLibrary,
+        projects,
+        brandAssets,
         credentialVault: store.credentialVault,
         runner: new MediaUtilityRunner({ utilityProcess }),
         analysisService: mediaAnalysisService,
@@ -127,15 +140,15 @@ if (hasSingleInstanceLock) {
       const advisor = new AdvisorService({
         providerService: providers,
         history: advisorHistory,
-        tools: createAdvisorTools({ store, mediaLibrary }),
+        tools: createAdvisorTools({ store, mediaLibrary, projects }),
         onEvent: (event) => {
           if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("produdash:advisorEvent", event);
         }
       });
       store.notices.push(...advisorHistory.getNotices());
       const connections = new ConnectionService({ store, shopify: connectors.shopify, providerService: providers });
-      protocol.handle("produdash-media", createMediaProtocolHandler(mediaLibrary));
-      registerIpc({ store, connections, providers, mediaLibrary, mediaJobs, advisor, appUrl, shell });
+      protocol.handle("produdash-media", createMediaProtocolHandler(mediaLibrary, brandAssets, mediaJobs));
+      registerIpc({ store, connections, providers, mediaLibrary, projects, templates, brandAssets, mediaJobs, advisor, appUrl, shell });
       await mediaJobs.initialize();
       Menu.setApplicationMenu(null);
       createWindow();

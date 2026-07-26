@@ -21,10 +21,69 @@ export function renderIntegrations() {
       </div>
       <div class="connection-stack">${renderShopifyConnection()}</div>
       ${renderAiProviders()}
+      ${renderLocalVoiceOptions()}
       ${renderWorkloads()}
       ${renderPlannedConnections()}
       ${renderLocalDataControls()}
       ${renderCompliancePanel()}
+    </section>
+  `;
+}
+
+function renderLocalVoiceOptions() {
+  const report = ui.localVoiceReport;
+  const pending = isPending("local-voice-scan");
+  return `
+    <section class="section-block" aria-labelledby="localVoiceTitle">
+      <div class="section-heading">
+        <div>
+          <h2 id="localVoiceTitle">Local voice engines</h2>
+          <p>Compare six local speech, likeness, and voice-conversion engines against this computer without uploading device inventory.</p>
+        </div>
+        <button class="ghost-button small" type="button" data-local-voice-scan data-pending-label="Scanning…" ${
+          pending ? "disabled" : ""
+        }>${report ? "Scan again" : "Scan this computer"}</button>
+      </div>
+      ${
+        report
+          ? `<div class="panel connection-section">
+              <div class="connection-heading">
+                <div>
+                  <div class="connection-title"><h3>Private compatibility report</h3>${renderStatusBadge(
+                    report.bestEngineId ? "connected" : "warning",
+                    report.bestEngineId ? "Recommendation ready" : "No strong recommendation"
+                  )}</div>
+                  <p>${escapeHtml(report.privacy)}</p>
+                </div>
+                <small>${escapeHtml(
+                  `${report.device.platform} · ${report.device.architecture} · ${report.device.cpuCores} cores · ${report.device.memoryGb} GB · ${report.device.accelerator}`
+                )}</small>
+              </div>
+              <div class="divided-list local-engine-list">
+                ${asArray(report.engines)
+                  .map(
+                    (engine) => `<div class="compact-row static-row">
+                      <span><strong>${escapeHtml(engine.name)}${
+                        report.bestEngineId === engine.id ? " · Best match" : ""
+                      }</strong><small>${escapeHtml(engine.description)} ${escapeHtml(engine.reason)}</small></span>
+                      ${renderStatusBadge(
+                        engine.status === "installed"
+                          ? "connected"
+                          : engine.status === "recommended"
+                            ? "approved"
+                            : engine.status === "compatible"
+                              ? "planned"
+                              : "warning",
+                        engine.status.replaceAll("_", " ")
+                      )}
+                    </div>`
+                  )
+                  .join("")}
+              </div>
+              <div class="inline-message neutral"><strong>Setup remains explicit</strong><span>ProduDash does not download executables or model weights. License terms, disk use, and model provenance must be reviewed before configuring a local runtime.</span></div>
+            </div>`
+          : `<div class="empty-row"><strong>No scan has run</strong><span>The scan reports coarse hardware compatibility and installed commands only. It does not read personal files.</span></div>`
+      }
     </section>
   `;
 }

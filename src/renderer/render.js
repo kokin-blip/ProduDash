@@ -18,7 +18,11 @@ const VIEW_META = {
     "Local media workspace",
     "Index videos, create human-approved clips locally, and prepare post plans without publishing externally."
   ],
-  analytics: ["Analytics", "Official sources required", "Social reporting remains unavailable until approved connectors are implemented."],
+  analytics: [
+    "Analytics",
+    "Verified commerce reporting",
+    "Review supported Shopify metrics with source definitions and freshness. Social reporting still requires official connectors."
+  ],
   integrations: [
     "Integrations",
     "Connections and local data",
