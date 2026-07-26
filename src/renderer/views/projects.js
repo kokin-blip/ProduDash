@@ -676,7 +676,7 @@ function renderLocalization(project) {
   const localLikenessProfiles = [
     ...new Map(
       speechProviders
-        .filter(({ profile }) => ["chatterbox-local", "xtts-local"].includes(profile.providerType))
+        .filter(({ profile }) => ["chatterbox-local", "tortoise-local", "xtts-local"].includes(profile.providerType))
         .map(({ profile }) => [profile.id, profile])
     ).values()
   ];

@@ -251,8 +251,11 @@ Nothing below is currently exposed as a placeholder control.
   Chatterbox uses the same authorization gate with its distinct official
   English, multilingual-v3, nano, and turbo Python APIs, an explicitly selected
   local cache, forced Hugging Face offline mode, and a network-denying wrapper.
-  The other scanned engines remain
-  compatibility-only pending their distinct runtime and likeness contracts.
+  Tortoise TTS now has its own direct adapter using its official local Python
+  API, an explicitly selected model folder and reference WAV, fixed quality
+  presets, forced offline mode, and the same versioned likeness-authorization
+  gate. Its connection check loads the selected model without synthesizing the
+  likeness. No local engine is downloaded or installed by ProduDash.
   Loopback OpenAI-compatible endpoints may explicitly declare
   `speech_generation`.
   Custom likenesses now have a separately confirmed removal lifecycle:

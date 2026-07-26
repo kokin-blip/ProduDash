@@ -18,6 +18,7 @@ const { KokoroLocalProviderAdapter } = require("./ai/adapters/kokoro-local.cjs")
 const { RvcLocalProviderAdapter } = require("./ai/adapters/rvc-local.cjs");
 const { XttsLocalProviderAdapter } = require("./ai/adapters/xtts-local.cjs");
 const { ChatterboxLocalProviderAdapter } = require("./ai/adapters/chatterbox-local.cjs");
+const { TortoiseLocalProviderAdapter } = require("./ai/adapters/tortoise-local.cjs");
 const { ProviderRegistry } = require("./ai/provider-registry.cjs");
 const { ProviderService } = require("./ai/provider-service.cjs");
 const { MediaLibrary } = require("./media/media-library.cjs");
@@ -122,6 +123,9 @@ if (hasSingleInstanceLock) {
           startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
         }),
         new ChatterboxLocalProviderAdapter({
+          startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
+        }),
+        new TortoiseLocalProviderAdapter({
           startAccessingBookmark: (bookmark) => app.startAccessingSecurityScopedResource(bookmark)
         })
       ]);

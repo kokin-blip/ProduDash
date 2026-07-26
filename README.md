@@ -12,7 +12,7 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - Up to 100 recent products and 100 recent orders per refresh, with cursor pagination and safe partial-sync reporting.
 - Locally derived revenue, order, fulfillment, and zero-inventory signals based only on imported Shopify data.
 - Capability-based AI provider profiles, model metadata, and independent Advisor, Inbox Drafting, Clip Analysis, and Transcription workload assignments.
-- Gemini, OpenAI, Anthropic Claude, custom OpenAI-compatible, local whisper.cpp, and user-configured local Piper/Kokoro/XTTS provider adapters with injected test clients and capability-gated workloads.
+- Gemini, OpenAI, Anthropic Claude, custom OpenAI-compatible, local whisper.cpp, and user-configured local Piper, Kokoro, XTTS, Chatterbox, Tortoise TTS, and RVC provider adapters with injected test clients and capability-gated workloads.
 - OpenAI timestamped cloud transcription and optional user-supplied whisper.cpp executable/model paths; ProduDash never downloads local models.
 - Explicit local, transcript-only, transcript-plus-frames, and Gemini native-video analysis modes with exact per-job provider/model/data-category consent and no silent provider or mode fallback.
 - Schema-validated AI candidates with bounded timestamps, overlap/duplicate rejection, limited boundary snapping, eleven stored component scores, and concise rationale.
@@ -76,7 +76,7 @@ Public distribution must replace manual custom-app tokens with a hosted OAuth fl
 
 ## Configure AI providers
 
-1. Choose Gemini, OpenAI, Anthropic Claude, a custom OpenAI-compatible endpoint, local whisper.cpp, local Piper, local Kokoro CLI, or local XTTS.
+1. Choose Gemini, OpenAI, Anthropic Claude, a custom OpenAI-compatible endpoint, local whisper.cpp, or one of the supported local speech and voice-conversion runtimes.
 2. Open **Integrations** in ProduDash.
 3. Under **AI providers**, enter the key and choose **Save and validate**.
 4. Review the model’s verified capabilities and choose compatible assignments under **Workload assignments**.
@@ -125,6 +125,20 @@ loads only the selected cached model; generation remains unavailable until the
 configured likeness is separately authorized. Review the
 [official Chatterbox repository](https://github.com/resemble-ai/chatterbox)
 and the specific model license before use.
+
+Tortoise TTS is also available as an explicitly configured offline likeness
+runtime. Choose a separately installed Tortoise Python executable, a complete
+local model folder, an authorized WAV reference, and one of Tortoise’s
+`ultra_fast`, `fast`, `standard`, or `high_quality` presets. ProduDash points
+`TORTOISE_MODELS_DIR` at that folder, forces Hugging Face and Transformers
+offline mode, blocks socket connections inside its bundled wrapper, and never
+installs or downloads packages or model weights. Validation loads the selected
+model without synthesizing the likeness. The configured voice remains
+unavailable until the user accepts the versioned likeness terms and separately
+authorizes it. Tortoise is compute-intensive; compatibility scan results are
+only guidance and do not guarantee usable speed. Review the
+[official Tortoise TTS repository](https://github.com/neonbjb/tortoise-tts)
+and the selected model license before use.
 
 Inbox draft requests include only the selected business, a bounded operator instruction, and the latest bounded messages from one conversation. Output is schema-validated before storage. It can contain a draft, intent, summary, possible order details, a recommended action, and risk flags. It cannot send a message or perform an external side effect, and ProduDash never silently switches providers.
 
@@ -253,13 +267,12 @@ personal files or uploading device inventory. “Compatible” means only that t
 hardware meets the documented baseline; “installed” requires a matching local
 command. ProduDash never downloads local executables or model weights
 automatically. Piper, the separately installed `kokoro-tts` CLI, and the
-offline user-configured XTTS and Chatterbox runtimes are direct local speech
-adapters, while RVC is a direct local voice-conversion adapter.
+offline user-configured XTTS, Chatterbox, and Tortoise runtimes are direct local
+speech adapters, while RVC is a direct local voice-conversion adapter.
 Each becomes available only after its selected runtime creates a valid WAV in
 a local connection test. An explicitly configured
 loopback OpenAI-compatible endpoint may also declare `speech_generation` after
-its connection test succeeds. Tortoise remains compatibility-only until its
-distinct runtime and consent adapter is completed.
+its connection test succeeds.
 
 ## Projects and local editor
 

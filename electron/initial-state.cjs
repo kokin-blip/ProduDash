@@ -412,6 +412,24 @@ function createInitialState() {
         publicValues: { variant: "nano", language: "en", device: "cpu" },
         lastValidatedAt: null,
         error: null
+      },
+      {
+        id: "tortoise-local",
+        providerType: "tortoise-local",
+        name: "Local Tortoise TTS",
+        status: "disconnected",
+        credentialStatus: "missing",
+        selectedModelId: "tortoise-local-model",
+        models: [
+          {
+            id: "tortoise-local-model",
+            name: "Configured local Tortoise TTS model",
+            capabilities: ["speech_generation"]
+          }
+        ],
+        publicValues: { preset: "fast" },
+        lastValidatedAt: null,
+        error: null
       }
     ],
     aiWorkloads: {
