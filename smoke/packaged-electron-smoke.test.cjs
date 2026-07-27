@@ -13,7 +13,38 @@ test("packaged ProduDash starts with secure local resources", { timeout: 90_000 
   const userDataPath = path.join(parent, "User data with spaces");
   fs.mkdirSync(userDataPath);
   let application;
+  let page;
+  let completed = false;
+  const consoleProblems = [];
   t.after(async () => {
+    // Report what the page looked like when an assertion failed. Without this the
+    // collected console output is discarded and the failure gives no cause.
+    if (!completed && page) {
+      let details = "(page state unavailable)";
+      try {
+        details = await page.evaluate(() => ({
+          sections: Array.from(document.querySelectorAll("[data-section]")).map(
+            (node) => `${node.dataset.section}=${node.getAttribute("aria-current")}`
+          ),
+          navigation: document.querySelector(".nav-list")?.outerHTML?.slice(0, 1500) || "(no .nav-list)",
+          viewRoot: document.querySelector("#viewRoot")?.innerHTML?.slice(0, 1500) || "(no #viewRoot)"
+        }));
+      } catch (error) {
+        details = `(page state unavailable: ${error.message})`;
+      }
+      process.stderr.write(
+        [
+          "",
+          "--- packaged smoke diagnostics ---",
+          `console problems: ${consoleProblems.length ? `\n  ${consoleProblems.join("\n  ")}` : "(none)"}`,
+          `sections: ${Array.isArray(details.sections) ? details.sections.join(", ") : details}`,
+          `nav-list: ${details.navigation || details}`,
+          `viewRoot: ${details.viewRoot || details}`,
+          "--- end packaged smoke diagnostics ---",
+          ""
+        ].join("\n")
+      );
+    }
     if (application) await application.close();
     if (process.env.PRODUDASH_SMOKE_KEEP_USER_DATA !== "1") fs.rmSync(parent, { recursive: true, force: true });
   });
@@ -26,8 +57,7 @@ test("packaged ProduDash starts with secure local resources", { timeout: 90_000 
       ELECTRON_ENABLE_SECURITY_WARNINGS: "true"
     }
   });
-  const page = await application.firstWindow();
-  const consoleProblems = [];
+  page = await application.firstWindow();
   const outboundRequests = [];
   page.on("console", (message) => {
     if (["error", "warning"].includes(message.type())) consoleProblems.push(message.text());
@@ -72,4 +102,5 @@ test("packaged ProduDash starts with secure local resources", { timeout: 90_000 
     false,
     consoleProblems.join("\n")
   );
+  completed = true;
 });
