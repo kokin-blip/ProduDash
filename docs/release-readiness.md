@@ -30,6 +30,8 @@ Production packaging accepts only private Git LFS files under the native target 
 
 The gate rejects missing binaries, Git LFS pointer stubs, path traversal, malformed metadata, mismatched target/architecture, hash mismatches, absent notices, unexpected binary versions, or detected nonfree configuration. Passing the automated gate records technical evidence; it is not a substitute for owner/legal approval.
 
+The supplied `win-x64` bundle currently fails this gate. Its binaries match their recorded hashes, and their embedded configuration confirms the GPL-2.0-or-later approval, but they import `libwinpthread-1.dll`, which is neither bundled nor provided by Windows, so they cannot start. Windows x64 packaging is blocked alongside macOS x64 until the bundle is rebuilt with a statically linked pthread runtime and re-approved. The macOS arm64 bundle loads only OS-provided libraries and is unaffected. `docs/prerelease.md` records the reproduction and the rebuild requirements.
+
 ## Signing and installation
 
 Unsigned mode is explicitly internal and does not claim notarization. Signed macOS mode fails unless the Developer ID certificate, password, App Store Connect API key, issuer, key ID, and team ID exist. Signed Windows mode fails unless its certificate and password exist.
