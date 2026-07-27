@@ -54,8 +54,11 @@ function auditPackage(appOutDir, expectedMedia = {}) {
 
   for (const entry of entries) {
     if (!TEXT_FILE.test(entry)) continue;
-    if (asar.statFile(asarPath, entry).files) continue;
-    const content = asar.extractFile(asarPath, entry).toString("utf8");
+    // Archive lookups resolve directories with path.sep, so the normalized
+    // entry has to be converted back before asar can find it on Windows.
+    const archiveEntry = entry.split("/").join(path.sep);
+    if (asar.statFile(asarPath, archiveEntry).files) continue;
+    const content = asar.extractFile(asarPath, archiveEntry).toString("utf8");
     assertSafeText(entry, content);
   }
   for (const filePath of listFiles(resourcesDirectory)) {
