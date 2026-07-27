@@ -1,2 +1,8 @@
+# Normalize text line endings so Windows checkouts match the LF content in
+# the repository. Without this, Git for Windows converts files to CRLF and
+# `prettier --check` fails on every file during the prerelease workflow.
+* text=auto eol=lf
+
+# LFS media binaries must never be treated as text.
 vendor/media/*/ffmpeg* filter=lfs diff=lfs merge=lfs -text
 vendor/media/*/ffprobe* filter=lfs diff=lfs merge=lfs -text
