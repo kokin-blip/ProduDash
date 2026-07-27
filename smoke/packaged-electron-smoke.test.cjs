@@ -16,6 +16,7 @@ test("packaged ProduDash starts with secure local resources", { timeout: 90_000 
   let page;
   let completed = false;
   const consoleProblems = [];
+  const mainProcessOutput = [];
   t.after(async () => {
     // Report what the page looked like when an assertion failed. Without this the
     // collected console output is discarded and the failure gives no cause.
@@ -37,6 +38,7 @@ test("packaged ProduDash starts with secure local resources", { timeout: 90_000 
           "",
           "--- packaged smoke diagnostics ---",
           `console problems: ${consoleProblems.length ? `\n  ${consoleProblems.join("\n  ")}` : "(none)"}`,
+          `main process: ${mainProcessOutput.length ? `\n  ${mainProcessOutput.join("\n  ")}` : "(none)"}`,
           `sections: ${Array.isArray(details.sections) ? details.sections.join(", ") : details}`,
           `nav-list: ${details.navigation || details}`,
           `viewRoot: ${details.viewRoot || details}`,
@@ -54,8 +56,13 @@ test("packaged ProduDash starts with secure local resources", { timeout: 90_000 
     args: [`--user-data-dir=${userDataPath}`],
     env: {
       ...process.env,
-      ELECTRON_ENABLE_SECURITY_WARNINGS: "true"
+      ELECTRON_ENABLE_SECURITY_WARNINGS: "true",
+      PRODUDASH_TRACE_IPC_SENDER: "1"
     }
+  });
+  application.process().stderr?.on("data", (chunk) => {
+    const text = String(chunk).trim();
+    if (text) mainProcessOutput.push(text);
   });
   page = await application.firstWindow();
   const outboundRequests = [];

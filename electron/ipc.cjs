@@ -13,7 +13,18 @@ const { analyticsReportCsv } = require("./analytics-report.cjs");
 function createTrustedSender(appUrl) {
   return (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
-    return Boolean(window && event.senderFrame && event.senderFrame === window.webContents.mainFrame && event.senderFrame.url === appUrl);
+    const trusted = Boolean(
+      window && event.senderFrame && event.senderFrame === window.webContents.mainFrame && event.senderFrame.url === appUrl
+    );
+    // Opt-in trace for packaged smoke testing. A rejection here renders a fatal
+    // startup error with no indication of which value differed.
+    if (!trusted && process.env.PRODUDASH_TRACE_IPC_SENDER === "1") {
+      process.stderr.write(
+        `[produdash] untrusted IPC sender expected=${appUrl} actual=${event.senderFrame?.url ?? "(no sender frame)"} ` +
+          `window=${Boolean(window)} mainFrame=${Boolean(window && event.senderFrame === window.webContents.mainFrame)}\n`
+      );
+    }
+    return trusted;
   };
 }
 
