@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "platform": "darwin",
+  "architecture": "arm64",
+  "version": "8.1.2",
+  "source": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz",
+  "approvedForDistribution": true,
+  "approvalReference": "OWNER-DIRECTIVE-2026-07-26-PRODUDASH-ALPHA1",
+  "nonfreeBuild": false,
+  "license": {
+    "spdx": "GPL-2.0-or-later",
+    "noticeFile": "NOTICE.txt"
+  },
+  "binaries": {
+    "ffmpeg": {
+      "file": "ffmpeg",
+      "sha256": "857d2e29919c4db0016a8d23382443a56c21319e5a869fd4f0678cdfacb0fe7b"
+    },
+    "ffprobe": {
+      "file": "ffprobe",
+      "sha256": "dde7c1db6311549a8e60924f5be06134325e744281511ad7ddc030e6dac4f400"
+    }
+  }
+}

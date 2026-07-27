@@ -45,6 +45,7 @@ module.exports = {
     "!assets/advisor/concepts/**/*",
     "!node_modules/ffmpeg-static/**/*",
     "!node_modules/@derhuerst/ffprobe-static/**/*",
+    "!node_modules/protobufjs/scripts/**/*",
     "!node_modules/**/{test,tests,__tests__,docs,example,examples}/**/*"
   ],
   extraResources: [

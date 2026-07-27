@@ -9,7 +9,7 @@ const packageMetadata = require("../package.json");
 const builderConfiguration = require("../electron-builder.config.cjs");
 const { loadApprovedMediaManifest } = require("../electron/media/binaries.cjs");
 const { workerEnvironment } = require("../electron/media/utility-runner.cjs");
-const { auditPackage } = require("../scripts/package-audit.cjs");
+const { auditPackage, resolveResourcesDirectory } = require("../scripts/package-audit.cjs");
 const { createDirectory } = require("./helpers.cjs");
 
 function hash(value) {
@@ -57,6 +57,7 @@ test("prerelease identity and builder configuration are fixed and non-publishing
   assert.match(builderConfiguration.mac.artifactName, /mac-\$\{arch\}/);
   assert.match(builderConfiguration.win.artifactName, /win-\$\{arch\}-setup/);
   assert.ok(builderConfiguration.files.includes("!node_modules/ffmpeg-static/**/*"));
+  assert.ok(builderConfiguration.files.includes("!node_modules/protobufjs/scripts/**/*"));
 });
 
 test("signed packaging fails closed when platform credentials are absent", () => {
@@ -107,6 +108,8 @@ test("package audit rejects test content while accepting approved media resource
   fs.mkdirSync(resources, { recursive: true });
   fs.writeFileSync(path.join(source, "index.html"), "<p>ProduDash</p>");
   fs.writeFileSync(path.join(source, "package.json"), '{"name":"produdash"}');
+  fs.mkdirSync(path.join(source, "dependency.js"));
+  fs.writeFileSync(path.join(source, "dependency.js", "index.js"), "module.exports = true;");
   await asar.createPackage(source, path.join(resources, "app.asar"));
   writeApprovedMedia(path.join(resources, "media"));
   assert.equal(auditPackage(appOut).mediaVersion, "6.0");
@@ -116,6 +119,14 @@ test("package audit rejects test content while accepting approved media resource
   fs.rmSync(path.join(resources, "app.asar"));
   await asar.createPackage(source, path.join(resources, "app.asar"));
   assert.throws(() => auditPackage(appOut), /forbidden files/);
+});
+
+test("package audit resolves the native macOS application resources layout", (t) => {
+  const directory = createDirectory("produdash-mac-package-audit-");
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const resources = path.join(directory, "ProduDash.app", "Contents", "Resources");
+  fs.mkdirSync(resources, { recursive: true });
+  assert.equal(resolveResourcesDirectory(directory), resources);
 });
 
 test("packaged worker environment forwards only required media resource metadata", () => {

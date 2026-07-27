@@ -25,8 +25,20 @@ function assertSafeText(label, content) {
   if (SECRET_VALUE.test(content)) throw new Error(`${label} contains a credential-shaped value.`);
 }
 
+function resolveResourcesDirectory(appOutDir) {
+  const direct = path.join(appOutDir, "resources");
+  if (fs.statSync(direct, { throwIfNoEntry: false })?.isDirectory()) return direct;
+  const applications = fs
+    .readdirSync(appOutDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.endsWith(".app"));
+  if (applications.length === 1) {
+    return path.join(appOutDir, applications[0].name, "Contents", "Resources");
+  }
+  throw new Error("Packaged application resources directory is unavailable.");
+}
+
 function auditPackage(appOutDir, expectedMedia = {}) {
-  const resourcesDirectory = path.join(appOutDir, "resources");
+  const resourcesDirectory = resolveResourcesDirectory(appOutDir);
   const asarPath = path.join(resourcesDirectory, "app.asar");
   if (!fs.statSync(asarPath, { throwIfNoEntry: false })?.isFile()) {
     throw new Error("Packaged application is missing resources/app.asar.");
@@ -42,6 +54,7 @@ function auditPackage(appOutDir, expectedMedia = {}) {
 
   for (const entry of entries) {
     if (!TEXT_FILE.test(entry)) continue;
+    if (asar.statFile(asarPath, entry).files) continue;
     const content = asar.extractFile(asarPath, entry).toString("utf8");
     assertSafeText(entry, content);
   }
@@ -71,4 +84,4 @@ function auditPackage(appOutDir, expectedMedia = {}) {
   };
 }
 
-module.exports = { auditPackage };
+module.exports = { auditPackage, resolveResourcesDirectory };

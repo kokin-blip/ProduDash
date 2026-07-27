@@ -1,0 +1,63 @@
+ProduDash internal alpha media-tool notice
+==========================================
+
+Approval reference
+------------------
+
+OWNER-DIRECTIVE-2026-07-26-PRODUDASH-ALPHA1
+
+This bundle was approved by the ProduDash owner for the private
+0.1.0-alpha.1 macOS arm64 prerelease. It is not an approval to publish the
+application or its bundled media tools publicly.
+
+FFmpeg
+------
+
+Version: 8.1.2
+Source: https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
+Signature: https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
+Release-key fingerprint: FCF986EA15E6E293A5644F10B4322F04D67658D8
+Signature verification: successful
+Source modifications: none
+
+x264
+----
+
+Commit: b35605ace3ddf7c1a5d67a2eb553f034aef41d55
+Source: https://code.videolan.org/videolan/x264/-/commit/b35605ace3ddf7c1a5d67a2eb553f034aef41d55
+Source modifications: none
+
+Build
+-----
+
+Target: macOS arm64
+Compiler: Apple clang
+FFmpeg license reported by the built binaries: GPL version 2 or later
+Nonfree components: disabled
+
+x264 configuration:
+
+  ./configure --enable-static --disable-cli --disable-opencl
+
+FFmpeg configuration:
+
+  ./configure --disable-debug --disable-doc --disable-ffplay
+  --disable-network --disable-autodetect --enable-static --disable-shared
+  --enable-gpl --enable-libx264
+
+The x264 library was linked statically so ProduDash retains its existing
+H.264/AAC render behavior. The resulting ffmpeg and ffprobe programs are
+separate executables launched by ProduDash.
+
+License
+-------
+
+This bundle contains FFmpeg and x264 under GPL-2.0-or-later. The complete
+GPL version 2 license text is included as NOTICE-GPL-2.0.txt. Copyrights
+remain with their respective authors. These programs are provided without
+warranty.
+
+For any distribution beyond this private internal alpha, retain this
+notice and the license text, make the exact corresponding FFmpeg 8.1.2 and
+x264 source available with the distributed binaries, and complete the
+owner's release compliance review.
