@@ -12,16 +12,78 @@ This guide covers the private macOS and Windows alpha. It does not authorize pub
 
 The application ID is `com.kokinblip.produdash`. The approved PD mark is the temporary alpha icon. No automatic updater or publishing provider is present.
 
-## Current release blocker
+## Current release blockers
 
 Installer creation requires owner-approved FFmpeg and ffprobe bundles in:
 
-- `vendor/media/mac-arm64` — supplied (FFmpeg 8.1.2, GPL-2.0-or-later)
-- `vendor/media/win-x64` — supplied (FFmpeg 8.1.2, GPL-2.0-or-later)
+- `vendor/media/mac-arm64` — supplied and verified (FFmpeg 8.1.2, GPL-2.0-or-later)
+- `vendor/media/win-x64` — rebuilt and verified on 2026-07-27; see below
 - `vendor/media/mac-x64` — still required
 
-Intel macOS packaging stays blocked until its bundle is supplied. Apple
-silicon macOS and Windows x64 can package now.
+Intel macOS packaging stays blocked until its bundle is supplied. Apple silicon
+macOS and Windows x64 can package now.
+
+### Resolved: win-x64 bundle linked a runtime library it did not ship
+
+The bundle approved as `OWNER-DIRECTIVE-2026-07-26-PRODUDASH-ALPHA1-WIN` could
+not start on a clean Windows host. Both `ffmpeg.exe` and `ffprobe.exe` exited
+`0xC0000135` (`STATUS_DLL_NOT_FOUND`) because they imported
+`libwinpthread-1.dll`, a MinGW runtime library that was neither included in the
+bundle nor provided by Windows, so `npm run check:distribution` failed with
+`Distribution check failed: ffmpeg exited unsuccessfully.`
+
+Both files matched their recorded SHA-256 hashes, so the bundle was intact and
+was the one covered by that approval. The defect was in how the binaries were
+linked, not in how they were delivered. Their embedded configuration reported
+`--enable-gpl` and `--enable-static` with neither `--enable-version3` nor
+`--enable-nonfree`, so the recorded GPL-2.0-or-later license was accurate; only
+the pthread runtime was left dynamically linked. The macOS arm64 binaries were
+unaffected and load only OS-provided libraries.
+
+The bundle was rebuilt on 2026-07-27 under
+`OWNER-DIRECTIVE-2026-07-27-PRODUDASH-ALPHA1-WIN-REBUILD` from the same
+GPG-verified FFmpeg 8.1.2 release tarball and the same pinned x264 commit, with
+`-static` added to `--extra-ldflags` and `--disable-asm` dropped. The rebuilt
+binaries import only Windows system libraries, report version `8.1.2`, retain
+`--disable-network`, and expose no network protocol.
+`vendor/media/win-x64/NOTICE.txt` records the full provenance.
+
+The configure flags recovered from the superseded binary were:
+
+```
+--prefix=/private/tmp/produdash-win-media/out
+--target-os=mingw32 --arch=x86_64 --cross-prefix=x86_64-w64-mingw32-
+--enable-gpl --enable-static --disable-shared --enable-libx264
+--disable-asm --disable-autodetect --disable-debug --disable-doc
+--disable-ffplay --disable-network
+--pkg-config-flags=--static
+--extra-cflags=-I/private/tmp/produdash-win-media/deps/include
+--extra-ldflags=-L/private/tmp/produdash-win-media/deps/lib
+```
+
+The `/private/tmp` prefixes show it was cross-compiled from macOS with a
+mingw-w64 toolchain, reusing the `--extra-ldflags` pattern from the macOS
+build. `--pkg-config-flags=--static` was already present; it governs how
+pkg-config reports third-party dependencies and does not control linkage of the
+toolchain's own runtime. The omission was `-static` in `--extra-ldflags`, which
+left mingw-w64 resolving `libwinpthread-1.dll` at load time.
+
+The rebuild was performed natively on Windows under MSYS2 with the same
+mingw-w64 GCC 16.1.0, adding `-static` and dropping `--disable-asm` because
+NASM was available. Dropping `--disable-asm` restores SIMD; the macOS arm64
+bundle was never built with it, so the two targets are now closer in
+configuration, not further apart.
+
+Publicly distributed Windows FFmpeg builds were considered and rejected as a
+substitute. The BtbN and gyan.dev builds are configured with
+`--enable-version3` and are therefore GPL-3.0-or-later, which conflicts with
+the recorded GPL-2.0-or-later approval and with the licensing rationale in
+`docs/release-readiness.md`. They also enable network protocols, which this
+project's build deliberately disables, and are roughly four times the size.
+
+A corrected bundle is accepted only once `npm run check:distribution` passes
+natively on Windows x64 and both binaries report their version without a loader
+error. The rebuilt bundle satisfies both conditions.
 
 Use private Git LFS for the executable files. Each directory must contain a completed `manifest.json`, its referenced notice file, and the exact binaries named by the manifest. The example in `vendor/media/manifest.example.json` documents the contract.
 
@@ -107,6 +169,7 @@ Signed macOS artifacts must pass `codesign`, Gatekeeper assessment, and stapler 
 
 - **Approved media metadata is unavailable:** the native Git LFS files or `manifest.json` are absent.
 - **Integrity validation failed:** a binary does not match its approved SHA-256; do not package it.
+- **Media binary exits `0xC0000135` on Windows:** the executable depends on a DLL that is neither bundled nor provided by the operating system. Inspect its imports and rebuild it with that runtime linked statically. Do not copy the missing DLL into the bundle.
 - **Target platform or architecture differs:** run the check on the native target runner.
 - **Secure credential storage unavailable:** connections stay disabled; do not attempt a plaintext fallback.
 - **Unsigned application warning:** confirm the artifact is the intended internal checksum-matched build, or use the signed workflow.
