@@ -228,6 +228,11 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
     const approvalError = await page.locator('[role="alert"]').allTextContents();
     assert.deepEqual(approvalError, []);
     await waitForMediaJobTerminal(page, smokeJobId);
+    await page.waitForFunction(
+      (jobId) => document.querySelector(`[data-media-job="${jobId}"]`)?.textContent.includes("completed"),
+      smokeJobId,
+      { timeout: 30_000 }
+    );
     assert.match(await page.locator(`[data-media-job="${smokeJobId}"]`).textContent(), /completed/);
     assert.equal(await page.locator(`[data-media-job="${smokeJobId}"] .artifact-list`).count(), 1);
     assert.ok(await page.locator("[data-advisor-celebration]").count());
