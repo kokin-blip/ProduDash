@@ -39,6 +39,7 @@ test("packaged ProduDash starts with secure local resources", { timeout: 90_000 
 
   await page.waitForSelector("#viewRoot");
   assert.equal(await application.evaluate(({ app }) => app.isPackaged), true);
+  await page.waitForFunction(() => document.querySelector('[data-section="overview"]')?.getAttribute("aria-current") === "page");
   assert.equal(await page.locator('[data-section="overview"]').getAttribute("aria-current"), "page");
   await page.click('[data-section="analytics"]');
   await page.waitForFunction(() => document.querySelector('[data-section="analytics"]').getAttribute("aria-current") === "page");
