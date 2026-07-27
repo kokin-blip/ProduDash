@@ -16,9 +16,12 @@ The application ID is `com.kokinblip.produdash`. The approved PD mark is the tem
 
 Installer creation requires owner-approved FFmpeg and ffprobe bundles in:
 
-- `vendor/media/mac-arm64`
-- `vendor/media/mac-x64`
-- `vendor/media/win-x64`
+- `vendor/media/mac-arm64` — supplied (FFmpeg 8.1.2, GPL-2.0-or-later)
+- `vendor/media/win-x64` — supplied (FFmpeg 8.1.2, GPL-2.0-or-later)
+- `vendor/media/mac-x64` — still required
+
+Intel macOS packaging stays blocked until its bundle is supplied. Apple
+silicon macOS and Windows x64 can package now.
 
 Use private Git LFS for the executable files. Each directory must contain a completed `manifest.json`, its referenced notice file, and the exact binaries named by the manifest. The example in `vendor/media/manifest.example.json` documents the contract.
 
@@ -26,10 +29,19 @@ Use private Git LFS for the executable files. Each directory must contain a comp
 
 ## Building privately
 
-Run the manual **Internal desktop prerelease** workflow. Choose:
+Run the manual **Internal desktop prerelease** workflow. Choose a signing mode:
 
 - `unsigned` for a clearly labeled internal build; or
 - `signed` only after configuring all required platform secrets.
+
+Then choose which platforms to package:
+
+- `all` builds every target in one run; or
+- `mac-arm64`, `mac-x64`, or `win-x64` builds that target alone.
+
+Select a single target when the other platforms still lack approved media
+bundles, so a run is not spent on a target that cannot pass the distribution
+check.
 
 The workflow performs a clean install, complete validation, production dependency audit, distribution check, native packaging, package-content audit, unpacked/DMG/ZIP/installer smoke testing, signature validation, checksums, SBOM generation, and build metadata generation. It retains private workflow artifacts for 14 days and does not create a release.
 

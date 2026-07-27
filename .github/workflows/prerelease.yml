@@ -11,31 +11,58 @@ on:
         options:
           - unsigned
           - signed
+      targets:
+        description: Platforms to package
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - mac-arm64
+          - mac-x64
+          - win-x64
 
 permissions:
   contents: read
 
 jobs:
+  plan:
+    name: Select targets
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - id: select
+        shell: bash
+        env:
+          REQUESTED_TARGETS: ${{ inputs.targets }}
+        run: |
+          set -euo pipefail
+          all='[
+            {"key":"mac-arm64","label":"macOS arm64","os":"macos-14","target":"mac","arch":"arm64"},
+            {"key":"mac-x64","label":"macOS x64","os":"macos-15-intel","target":"mac","arch":"x64"},
+            {"key":"win-x64","label":"Windows x64","os":"windows-latest","target":"win","arch":"x64"}
+          ]'
+          if [ "$REQUESTED_TARGETS" = "all" ]; then
+            selected=$(jq -c '.' <<<"$all")
+          else
+            selected=$(jq -c --arg key "$REQUESTED_TARGETS" '[.[] | select(.key == $key)]' <<<"$all")
+          fi
+          if [ "$(jq 'length' <<<"$selected")" -eq 0 ]; then
+            echo "No packaging targets matched the request." >&2
+            exit 1
+          fi
+          echo "matrix=$selected" >> "$GITHUB_OUTPUT"
+
   package:
     name: Package ${{ matrix.label }}
+    needs: plan
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - label: macOS arm64
-            os: macos-14
-            target: mac
-            arch: arm64
-          - label: macOS x64
-            os: macos-15-intel
-            target: mac
-            arch: x64
-          - label: Windows x64
-            os: windows-latest
-            target: win
-            arch: x64
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       PRODUDASH_SIGNING_MODE: ${{ inputs.signing_mode }}
       CSC_LINK: ${{ matrix.target == 'mac' && secrets.MAC_CSC_LINK || secrets.WIN_CSC_LINK }}
