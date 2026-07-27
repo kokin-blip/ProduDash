@@ -1,0 +1,84 @@
+name: Internal desktop prerelease
+
+on:
+  workflow_dispatch:
+    inputs:
+      signing_mode:
+        description: Build signing mode
+        required: true
+        default: unsigned
+        type: choice
+        options:
+          - unsigned
+          - signed
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            os: macos-14
+            target: mac
+            arch: arm64
+          - label: macOS x64
+            os: macos-15-intel
+            target: mac
+            arch: x64
+          - label: Windows x64
+            os: windows-latest
+            target: win
+            arch: x64
+    env:
+      PRODUDASH_SIGNING_MODE: ${{ inputs.signing_mode }}
+      CSC_LINK: ${{ matrix.target == 'mac' && secrets.MAC_CSC_LINK || secrets.WIN_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ matrix.target == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || secrets.WIN_CSC_KEY_PASSWORD }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - if: matrix.target == 'mac' && inputs.signing_mode == 'signed'
+        name: Prepare Apple notarization key
+        shell: bash
+        env:
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+        run: |
+          set -euo pipefail
+          test -n "$APPLE_API_KEY_CONTENT"
+          printf '%s' "$APPLE_API_KEY_CONTENT" > "$RUNNER_TEMP/AuthKey.p8"
+          chmod 600 "$RUNNER_TEMP/AuthKey.p8"
+          echo "APPLE_API_KEY=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run validate
+      - run: npm audit --omit=dev
+      - run: npm run check:distribution
+      - run: npm run package:${{ matrix.target }}
+      - run: npm run verify:artifacts
+      - run: npm run verify:signatures
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ProduDash-0.1.0-alpha.1-${{ matrix.target }}-${{ matrix.arch }}-${{ inputs.signing_mode }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*-checksums.txt
+            dist/*-sbom.cdx.json
+            dist/*-build-metadata.json
+          if-no-files-found: error
+          retention-days: 14

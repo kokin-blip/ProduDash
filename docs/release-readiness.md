@@ -1,85 +1,58 @@
 # ProduDash release readiness
 
-ProduDash is validated as a local development MVP. This document separates
-working product behavior from the owner-controlled work required before any
-external distribution or hosted feature is enabled.
+ProduDash is validated as a local development MVP and is configured for a private `0.1.0-alpha.1` macOS/Windows prerelease. Packaging remains fail-closed until the owner supplies approved FFmpeg and ffprobe files for every native target.
 
-## Automated on every supported desktop OS
+## Automated validation
 
-GitHub Actions runs on current Ubuntu, macOS, and Windows runners. Each runner:
+The regular validation workflow runs clean installation, syntax checks, linting, formatting, production dependency audit, unit/integration/renderer tests, real tiny-media tests, and Electron smoke coverage on Ubuntu, macOS, and Windows.
 
-- installs from the lockfile;
-- checks syntax, linting, and formatting;
-- verifies the resolved FFmpeg and ffprobe executables;
-- runs the complete unit, integration, renderer, and real tiny-media suite; and
-- launches the Electron smoke test, using Xvfb only on Linux.
+The manual prerelease workflow uses native hosts:
 
-The Ubuntu quality job also audits production dependencies. Smoke screenshots
-are retained as CI artifacts for visual inspection.
+- `macos-14` for macOS arm64;
+- `macos-15-intel` for macOS x64; and
+- `windows-latest` for Windows x64.
 
-`npm run check:media` reports the exact installed static-package versions,
-declared licenses, executable version lines, and whether a binary advertises a
-nonfree build configuration. It intentionally does not convert legal review
-into an automated approval. `npm run check:distribution` applies the release
-gate and exits unsuccessfully while the current media-binary block exists.
+Each prerelease job repeats the complete validation suite, enforces the approved-media gate, packages with Electron Builder, audits application contents, launches unpacked and installed artifacts with isolated non-ASCII user-data paths, verifies signatures when signed mode is selected, and generates checksums, a CycloneDX SBOM, and path-free build metadata. Private workflow artifacts expire after 14 days. The workflow cannot create a GitHub Release or publish through Electron Builder.
 
-## Distribution is blocked
+## Distribution remains blocked
 
-The development dependencies `ffmpeg-static` and
-`@derhuerst/ffprobe-static` currently declare `GPL-3.0-or-later`. The selected
-binary build may also report `--enable-nonfree`. ProduDash therefore must not
-package or redistribute these development binaries until the owner completes
-license review and supplies an approved distribution decision or replacement
-builds. Passing CI is not legal approval.
+The development packages `ffmpeg-static` and `@derhuerst/ffprobe-static` declare `GPL-3.0-or-later`, and the selected development build advertises `--enable-nonfree`. They remain available for development and tests but are explicitly excluded from packaged applications.
 
-No installer target is configured. A release additionally requires:
+Production packaging accepts only private Git LFS files under the native target directory. Each target requires:
 
-- final product name, bundle/application identifiers, versioning policy, and
-  platform icons;
-- Apple Developer ID signing, hardened-runtime entitlements, notarization, and
-  a tested macOS minimum version;
-- Windows code-signing credentials, installer choice, and SmartScreen testing;
-- Linux package targets plus documented secure-secret-service requirements;
-- signed update metadata and an owner-approved update/rollback policy;
-- a dependency and asset-license inventory for every bundled model, voice,
-  font, image, sound, and native executable; and
-- privacy policy, terms, synthetic-media disclosures, retention policy, and
-  jurisdiction-specific release review.
+- exact FFmpeg and ffprobe executables;
+- an immutable HTTPS source;
+- version and SPDX license metadata;
+- an owner/legal approval reference;
+- `nonfreeBuild: false`;
+- SHA-256 hashes for both binaries; and
+- the referenced license notice.
 
-## Live connectors are blocked
+The gate rejects missing binaries, Git LFS pointer stubs, path traversal, malformed metadata, mismatched target/architecture, hash mismatches, absent notices, unexpected binary versions, or detected nonfree configuration. Passing the automated gate records technical evidence; it is not a substitute for owner/legal approval.
 
-ProduDash does not claim live TikTok, Meta/Instagram, YouTube, Stripe,
-cross-device collaboration, webhook delivery, or public API availability.
-Those features require owner-controlled external systems:
+## Signing and installation
 
-- approved platform applications, client identifiers, secrets, scopes, review
-  status, redirect URIs, and test accounts;
-- a hosted HTTPS callback service with OAuth state/PKCE/HMAC verification,
-  encrypted token custody, rotation, revocation, webhook verification, and
-  audit operations;
-- a selected identity provider, transactional database, tenant/data-residency
-  policy, encryption and key-custody design, backups, retention jobs, incident
-  response, and support ownership; and
-- deployment domains, DNS/TLS control, monitoring, rate limiting, abuse
-  handling, signing/wrapping keys, and production secret delivery.
+Unsigned mode is explicitly internal and does not claim notarization. Signed macOS mode fails unless the Developer ID certificate, password, App Store Connect API key, issuer, key ID, and team ID exist. Signed Windows mode fails unless its certificate and password exist.
 
-The repository contains tested local publishing, analytics, collaboration, and
-developer-platform contracts. They remain UI/network-disabled until these
-prerequisites are supplied and live acceptance tests pass. ProduDash never
-substitutes scraping, browser automation, fake connection states, or mock
-provider output for a missing official connector.
+macOS signed builds enable hardened runtime with only Electron’s JIT and unsigned-executable-memory entitlements, then require code-signature assessment, notarization, and stapling validation. Windows uses an assisted per-user NSIS installer with no administrator requirement, no automatic launch, a Start menu shortcut, and preserved ProduDash user data during repair, upgrade, and uninstall.
 
-## Owner acceptance before release
+There is no updater, update feed, public publishing provider, release tag automation, or rollback service in this alpha.
 
-Before a public build, record:
+## Live and public features remain blocked
 
-1. The approved media-binary distribution strategy and all required notices.
-2. The exact platforms and versions supported by the release.
-3. Signing/notarization results for each produced artifact.
-4. Live-provider tests performed with owner-controlled test accounts.
-5. Synthetic voice/likeness policy and provider-specific consent requirements.
-6. Security, privacy, accessibility, backup/restore, and deletion test results.
-7. Checksums and a software bill of materials for the final immutable build.
+ProduDash does not claim live TikTok, Meta/Instagram, YouTube, Stripe, cross-device collaboration, webhook delivery, or public API availability. Those require approved platform applications, a hosted HTTPS OAuth/webhook service, tenant-aware storage and key custody, deployment ownership, monitoring, incident response, live acceptance tests, and a separate release decision.
 
-Until every applicable item is complete, ProduDash should remain a local
-development MVP rather than a publicly distributed or hosted product.
+ProduDash never substitutes scraping, browser automation, fake connection states, or mock provider output for missing official connectors.
+
+## Owner acceptance before distribution
+
+Before generating the first immutable internal installer set:
+
+1. Supply and approve all three native media-tool bundles and notices.
+2. Run the manual native prerelease workflow.
+3. Record whether each artifact is unsigned or signed/notarized.
+4. Inspect the generated application icon and Analytics navigation glyph.
+5. Review packaged-app screenshots and smoke logs.
+6. Verify checksums, SBOM, package-content audit, and build metadata.
+
+Before any public release, additionally complete the privacy, terms, synthetic-media, retention, accessibility, support, incident-response, updater, signing, and jurisdiction-specific reviews described in the product roadmap.

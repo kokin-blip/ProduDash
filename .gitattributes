@@ -1,0 +1,2 @@
+vendor/media/*/ffmpeg* filter=lfs diff=lfs merge=lfs -text
+vendor/media/*/ffprobe* filter=lfs diff=lfs merge=lfs -text

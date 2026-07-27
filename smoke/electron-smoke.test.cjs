@@ -85,6 +85,13 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
     assert.equal(await page.locator(`[data-section="${section}"]`).getAttribute("aria-current"), "page");
     assert.equal(await page.locator(".nav-list").getAttribute("data-active-section"), section);
   }
+  assert.equal(
+    await page.locator(".nav-list").evaluate((navigation) => {
+      const iconPath = navigation.querySelector('[data-section="analytics"] .nav-icon path');
+      return iconPath?.getAttribute("d") === "M4 19V11M10 19V6M16 19v-5M3 19h18M4 11l6-5 6 8 4-4";
+    }),
+    true
+  );
   assert.ok((await page.evaluate(() => window.__viewTransitionStarts)) >= sections.length - 1);
   await page.waitForFunction(() => document.querySelector("#pageTitle").textContent.includes("Connections and local data"));
   assert.equal(await page.locator('[data-section="integrations"]').getAttribute("aria-current"), "page");

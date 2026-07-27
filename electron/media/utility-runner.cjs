@@ -4,7 +4,7 @@ const { AppError } = require("../errors.cjs");
 const TERMINAL_TYPES = new Set(["awaiting_review", "completed", "canceled", "error"]);
 
 function workerEnvironment(environment = process.env) {
-  const allowed = ["PATH", "TMPDIR", "TEMP", "TMP", "SystemRoot", "WINDIR"];
+  const allowed = ["PATH", "TMPDIR", "TEMP", "TMP", "SystemRoot", "WINDIR", "PRODUDASH_PACKAGED", "PRODUDASH_RESOURCES_PATH"];
   return Object.fromEntries(allowed.filter((key) => environment[key]).map((key) => [key, environment[key]]));
 }
 

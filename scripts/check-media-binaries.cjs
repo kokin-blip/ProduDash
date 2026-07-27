@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
-const { getMediaBinaries } = require("../electron/media/binaries.cjs");
+const { getMediaBinaries, loadApprovedMediaManifest } = require("../electron/media/binaries.cjs");
 
 const EXPECTED_PACKAGES = Object.freeze([
   { name: "ffmpeg-static", expectedLicense: "GPL-3.0-or-later" },
@@ -41,6 +41,10 @@ function inspectBinary(label, binaryPath) {
 
 function main() {
   const enforceDistribution = process.argv.includes("--distribution");
+  if (enforceDistribution) {
+    inspectApprovedDistribution();
+    return;
+  }
   const packages = EXPECTED_PACKAGES.map(({ name, expectedLicense }) => {
     const metadata = packageMetadata(name);
     assert.equal(metadata.license, expectedLicense, `${name} license metadata changed and requires review.`);
@@ -73,4 +77,46 @@ function main() {
   }
 }
 
-main();
+function inspectApprovedDistribution() {
+  const platform = process.env.PRODUDASH_TARGET_PLATFORM || process.platform;
+  const architecture = process.env.PRODUDASH_TARGET_ARCH || process.arch;
+  if (platform !== process.platform || architecture !== process.arch) {
+    throw new Error("Distribution media checks must run natively on the target platform and architecture.");
+  }
+  const resourcePlatform = platform === "darwin" ? "mac" : platform === "win32" ? "win" : platform;
+  const directory = path.join(__dirname, "..", "vendor", "media", `${resourcePlatform}-${architecture}`);
+  const approved = loadApprovedMediaManifest(directory, { platform, architecture });
+  const binaries = [inspectBinary("ffmpeg", approved.ffmpegPath), inspectBinary("ffprobe", approved.ffprobePath)];
+  assert.equal(
+    binaries.some(({ nonfreeBuild }) => nonfreeBuild),
+    false,
+    "Approved media binaries must not enable nonfree components."
+  );
+  assert.equal(
+    binaries.every(({ versionLine }) => versionLine.includes(approved.manifest.version)),
+    true,
+    "Approved media binary versions do not match the manifest."
+  );
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        platform,
+        architecture,
+        version: approved.manifest.version,
+        license: approved.manifest.license.spdx,
+        approvalReference: approved.manifest.approvalReference,
+        binaries: binaries.map(({ versionLine }) => ({ versionLine })),
+        distribution: "approved"
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
+try {
+  main();
+} catch (error) {
+  process.stderr.write(`Distribution check failed: ${error instanceof Error ? error.message : "Media validation failed."}\n`);
+  process.exitCode = 2;
+}

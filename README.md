@@ -2,6 +2,20 @@
 
 ProduDash is a local-first Electron dashboard for merchant operations. The secure MVP connects Shopify data, routes approval-only drafting through provider-neutral AI profiles, indexes local video, creates human-approved clips with isolated local media tools, and provides a read-only operations Advisor. Media analysis is local by default and can use one explicitly selected cloud provider only after a per-job disclosure and consent. Incomplete social, publishing, and analytics features remain visibly separated from working functionality.
 
+## Internal desktop prerelease
+
+The repository is configured for the private `0.1.0-alpha.1` desktop prerelease:
+
+- macOS arm64 and x64 DMG and ZIP artifacts;
+- a Windows x64 assisted, per-user installer;
+- permanent application ID `com.kokinblip.produdash`;
+- the existing PD mark as the temporary prerelease application icon; and
+- no automatic updates, public publishing, or GitHub Release creation.
+
+ProduDash packages only owner-approved, checksummed FFmpeg and ffprobe builds from the private Git LFS intake. The current npm static binaries remain development/test tools and are excluded from installers. `npm run check:distribution` intentionally blocks packaging until every native target has its approved binaries, provenance, approval reference, SHA-256 values, and license notice.
+
+See [the internal prerelease guide](docs/prerelease.md) for artifact names, installation behavior, signing, verification, data locations, and the exact release blockers.
+
 ## What works
 
 - Recoverable schema-versioned local state with atomic writes, last-known-good backups, bounded recovery snapshots, and a 500-entry audit log.
@@ -38,7 +52,7 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 - External publishing or any unapproved media upload.
 - Social analytics or Shopify profit/conversion figures without official reporting, cost, and traffic inputs.
 - Hosted accounts, cross-device synchronization, OAuth callbacks, webhooks, or token refresh.
-- Signed installers, notarization, automatic updates, or production release packaging.
+- Publicly distributed installers, automatic updates, or production release publishing. Internal installer configuration exists but remains blocked by the approved-media gate.
 - General multi-source editing, speed/freeze effects, advanced audio mixing, animated overlays, model-generated embeddings, and hosted collaboration.
 
 ProduDash never substitutes scraped data, browser automation, emulators, password-based automation, fabricated analytics, or silent mock results for these missing capabilities.
@@ -315,33 +329,31 @@ Validation commands:
 ```bash
 npm run check:syntax
 npm run check:media
+npm run check:package-config
 npm run lint
 npm run format:check
 npm test
 npm run test:smoke
 npm run validate
 npm audit --omit=dev
+npm run check:distribution
 ```
 
 `npm run validate` runs syntax, executable media-tool checks, lint, formatting, unit/integration/renderer tests, real tiny bundled-binary analysis/render tests, and the Electron smoke test. Provider tests use injected clients and encryption fakes; they never require or contact live Shopify, Gemini, OpenAI, Anthropic, or custom endpoints. Live-provider acceptance therefore requires owner-supplied credentials and an explicit media-consent test outside automation.
 
-CI repeats media and Electron validation across Ubuntu, macOS, and Windows. See
-[the release-readiness gate](docs/release-readiness.md) for the exact
-owner-controlled licensing, signing, hosted-service, and live-connector work
-that remains intentionally blocked. `npm run check:distribution` is a separate
-release gate and is expected to fail while the development-only media binaries
-remain selected.
+CI repeats media and Electron validation across Ubuntu, macOS, and Windows. A separate manual prerelease workflow builds natively on macOS arm64, macOS x64, and Windows x64, then checks package contents, launches unpacked and installed artifacts, verifies signing when requested, and produces SHA-256 checksums, a CycloneDX SBOM, and path-free build metadata. It never creates a public release.
+
+See [the release-readiness gate](docs/release-readiness.md) for the exact owner-controlled licensing, signing, hosted-service, and live-connector work that remains intentionally blocked.
 
 The browser-only `npm run web` command can display static assets but cannot use local persistence or credentials because the secure preload bridge is available only in Electron.
 
 ## Release requirements
 
-Installer creation is intentionally deferred. A production release still needs:
+Internal installer configuration is implemented. A public production release still needs:
 
-- Final application identity and bundle identifiers.
-- Platform-specific icons.
-- Apple Developer ID signing and notarization.
-- Windows code signing.
+- Approved native FFmpeg and ffprobe builds plus license notices for every target.
+- Apple Developer ID signing and notarization credentials.
+- Windows code signing credentials and owner verification of SmartScreen behavior.
 - Linux packaging targets and secure-secret-provider documentation.
 - An updater design and signed update metadata.
 - A hosted backend for OAuth callbacks, app-owned secrets, webhooks, and optional cross-device synchronization.

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "platform": "darwin",
+  "architecture": "arm64",
+  "version": "REPLACE_WITH_FFMPEG_VERSION",
+  "source": "https://REPLACE_WITH_IMMUTABLE_SOURCE",
+  "approvedForDistribution": false,
+  "approvalReference": "REPLACE_WITH_OWNER_LEGAL_APPROVAL_REFERENCE",
+  "nonfreeBuild": false,
+  "license": {
+    "spdx": "REPLACE_WITH_SPDX_IDENTIFIER",
+    "noticeFile": "NOTICE.txt"
+  },
+  "binaries": {
+    "ffmpeg": {
+      "file": "ffmpeg",
+      "sha256": "REPLACE_WITH_64_CHARACTER_SHA256"
+    },
+    "ffprobe": {
+      "file": "ffprobe",
+      "sha256": "REPLACE_WITH_64_CHARACTER_SHA256"
+    }
+  }
+}

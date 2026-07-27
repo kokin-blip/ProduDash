@@ -1,6 +1,6 @@
 {
   "name": "produdash",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "private": true,
   "type": "module",
   "description": "Secure local operations workspace for connected commerce and approval-gated AI workflows.",
@@ -12,12 +12,20 @@
     "check:syntax": "node scripts/check-syntax.cjs",
     "check:media": "node scripts/check-media-binaries.cjs",
     "check:distribution": "node scripts/check-media-binaries.cjs --distribution",
-    "lint": "eslint electron src test smoke scripts",
-    "format": "prettier --write electron src test smoke scripts .github package.json README.md index.html eslint.config.mjs .prettierrc.json",
-    "format:check": "prettier --check electron src test smoke scripts .github package.json README.md index.html eslint.config.mjs .prettierrc.json",
+    "check:package-config": "node scripts/check-builder-config.cjs",
+    "check:package": "node scripts/check-package-contents.cjs",
+    "build:icons": "node scripts/build-icons.cjs",
+    "package:mac": "node scripts/prepare-prerelease.cjs mac",
+    "package:win": "node scripts/prepare-prerelease.cjs win",
+    "test:packaged": "node --test smoke/packaged-electron-smoke.test.cjs",
+    "verify:artifacts": "node scripts/verify-packaged-artifacts.cjs",
+    "verify:signatures": "node scripts/verify-signatures.cjs",
+    "lint": "eslint electron src test smoke scripts electron-builder.config.cjs",
+    "format": "prettier --write electron src test smoke scripts .github docs/prerelease.md docs/release-readiness.md package.json README.md index.html electron-builder.config.cjs eslint.config.mjs .prettierrc.json \"vendor/**/*.md\" \"vendor/**/*.json\"",
+    "format:check": "prettier --check electron src test smoke scripts .github docs/prerelease.md docs/release-readiness.md package.json README.md index.html electron-builder.config.cjs eslint.config.mjs .prettierrc.json \"vendor/**/*.md\" \"vendor/**/*.json\"",
     "test": "node --test test/*.test.cjs",
-    "test:smoke": "node --test smoke/*.test.cjs",
-    "validate": "npm run check:syntax && npm run check:media && npm run lint && npm run format:check && npm test && npm run test:smoke"
+    "test:smoke": "node --test smoke/electron-smoke.test.cjs",
+    "validate": "npm run check:syntax && npm run check:media && npm run check:package-config && npm run lint && npm run format:check && npm test && npm run test:smoke"
   },
   "keywords": [
     "dashboard",
@@ -36,6 +44,7 @@
   },
   "devDependencies": {
     "electron": "43.2.0",
+    "electron-builder": "26.15.3",
     "eslint": "^10.7.0",
     "jsdom": "^29.1.1",
     "playwright": "^1.61.1",

@@ -47,6 +47,11 @@ let mainWindow;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
+app.setAppUserModelId("com.kokinblip.produdash");
+if (app.isPackaged) {
+  process.env.PRODUDASH_PACKAGED = "1";
+  process.env.PRODUDASH_RESOURCES_PATH = process.resourcesPath;
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({

@@ -30,7 +30,7 @@ export default [
     ignores: ["node_modules/**", "dist/**", "coverage/**"]
   },
   {
-    files: ["electron/**/*.cjs", "scripts/**/*.cjs", "test/**/*.cjs", "smoke/**/*.cjs"],
+    files: ["electron/**/*.cjs", "scripts/**/*.cjs", "test/**/*.cjs", "smoke/**/*.cjs", "electron-builder.config.cjs"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "commonjs",

@@ -216,7 +216,7 @@ function setPendingUi(trigger) {
   });
   if (container) container.setAttribute("aria-busy", "true");
   const label = trigger.dataset.pendingLabel;
-  const originalLabel = trigger.textContent;
+  const originalContent = [...trigger.childNodes].map((node) => node.cloneNode(true));
   trigger.setAttribute("aria-busy", "true");
   trigger.classList.add("is-pending");
   if (label) {
@@ -233,7 +233,8 @@ function setPendingUi(trigger) {
     container,
     states,
     trigger,
-    originalLabel,
+    originalContent,
+    labelApplied: Boolean(label),
     originalInlineSize,
     originalAriaBusy,
     originalAriaLabel,
@@ -256,7 +257,7 @@ function restorePendingUi(pendingUi) {
   pendingUi.trigger.style.inlineSize = pendingUi.originalInlineSize;
   if (pendingUi.originalAriaLabel === null) pendingUi.trigger.removeAttribute("aria-label");
   else pendingUi.trigger.setAttribute("aria-label", pendingUi.originalAriaLabel);
-  pendingUi.trigger.textContent = pendingUi.originalLabel;
+  if (pendingUi.labelApplied) pendingUi.trigger.replaceChildren(...pendingUi.originalContent);
 }
 
 async function handleClick(event) {

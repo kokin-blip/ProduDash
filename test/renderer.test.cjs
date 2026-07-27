@@ -1329,6 +1329,7 @@ test("pending actions expose loading state and destructive controls require conf
         finishRefresh = resolve;
       });
     },
+    getAnalyticsReport: async () => ({ ok: true, data: null }),
     deleteAllLocalData: async () => {
       deleteCalls += 1;
       return { ok: true, data: state };
@@ -1364,6 +1365,13 @@ test("pending actions expose loading state and destructive controls require conf
   document.querySelector("[data-delete-all]").click();
   await Promise.resolve();
   assert.equal(deleteCalls, 0);
+
+  const analyticsButton = document.querySelector('.nav-item[data-section="analytics"]');
+  assert.ok(analyticsButton.querySelector(".nav-icon path"));
+  analyticsButton.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(document.querySelector('.nav-item[data-section="analytics"] .nav-icon path'));
+  assert.equal(document.querySelector('.nav-item[data-section="analytics"] span').textContent, "Analytics");
 });
 
 test("focused theme removes glass effects and keeps the restrictive CSP", () => {
