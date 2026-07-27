@@ -17,31 +17,38 @@ The application ID is `com.kokinblip.produdash`. The approved PD mark is the tem
 Installer creation requires owner-approved FFmpeg and ffprobe bundles in:
 
 - `vendor/media/mac-arm64` — supplied and verified (FFmpeg 8.1.2, GPL-2.0-or-later)
-- `vendor/media/win-x64` — supplied but rejected; see below
+- `vendor/media/win-x64` — rebuilt and verified on 2026-07-27; see below
 - `vendor/media/mac-x64` — still required
 
-Intel macOS packaging stays blocked until its bundle is supplied. Windows x64
-packaging stays blocked until its bundle is rebuilt. Apple silicon macOS can
-package now.
+Intel macOS packaging stays blocked until its bundle is supplied. Apple silicon
+macOS and Windows x64 can package now.
 
-### Windows x64 bundle links a runtime library it does not ship
+### Resolved: win-x64 bundle linked a runtime library it did not ship
 
-`vendor/media/win-x64/ffmpeg.exe` and `ffprobe.exe` fail to start on a clean
-Windows host, exiting `0xC0000135` (`STATUS_DLL_NOT_FOUND`). Both import
-`libwinpthread-1.dll`, a MinGW runtime library that is neither included in the
-bundle nor provided by Windows. `npm run check:distribution` consequently fails
-with `Distribution check failed: ffmpeg exited unsuccessfully.`
+The bundle approved as `OWNER-DIRECTIVE-2026-07-26-PRODUDASH-ALPHA1-WIN` could
+not start on a clean Windows host. Both `ffmpeg.exe` and `ffprobe.exe` exited
+`0xC0000135` (`STATUS_DLL_NOT_FOUND`) because they imported
+`libwinpthread-1.dll`, a MinGW runtime library that was neither included in the
+bundle nor provided by Windows, so `npm run check:distribution` failed with
+`Distribution check failed: ffmpeg exited unsuccessfully.`
 
-Both files match the SHA-256 hashes recorded in `manifest.json`, so the bundle
-is intact and is the one covered by
-`OWNER-DIRECTIVE-2026-07-26-PRODUDASH-ALPHA1-WIN`. The defect is in how the
-binaries were linked, not in how they were delivered. Their embedded
-configuration reports `--enable-gpl` and `--enable-static` with neither
-`--enable-version3` nor `--enable-nonfree`, so the recorded GPL-2.0-or-later
-license is accurate; only the pthread runtime was left dynamically linked. The
-macOS arm64 binaries are unaffected and load only OS-provided libraries.
+Both files matched their recorded SHA-256 hashes, so the bundle was intact and
+was the one covered by that approval. The defect was in how the binaries were
+linked, not in how they were delivered. Their embedded configuration reported
+`--enable-gpl` and `--enable-static` with neither `--enable-version3` nor
+`--enable-nonfree`, so the recorded GPL-2.0-or-later license was accurate; only
+the pthread runtime was left dynamically linked. The macOS arm64 binaries were
+unaffected and load only OS-provided libraries.
 
-The configure flags recovered from the shipped binary are:
+The bundle was rebuilt on 2026-07-27 under
+`OWNER-DIRECTIVE-2026-07-27-PRODUDASH-ALPHA1-WIN-REBUILD` from the same
+GPG-verified FFmpeg 8.1.2 release tarball and the same pinned x264 commit, with
+`-static` added to `--extra-ldflags` and `--disable-asm` dropped. The rebuilt
+binaries import only Windows system libraries, report version `8.1.2`, retain
+`--disable-network`, and expose no network protocol.
+`vendor/media/win-x64/NOTICE.txt` records the full provenance.
+
+The configure flags recovered from the superseded binary were:
 
 ```
 --prefix=/private/tmp/produdash-win-media/out
@@ -54,32 +61,29 @@ The configure flags recovered from the shipped binary are:
 --extra-ldflags=-L/private/tmp/produdash-win-media/deps/lib
 ```
 
-The `/private/tmp` prefixes show this was cross-compiled from macOS with a
+The `/private/tmp` prefixes show it was cross-compiled from macOS with a
 mingw-w64 toolchain, reusing the `--extra-ldflags` pattern from the macOS
-build. `--pkg-config-flags=--static` is already present; it governs how
+build. `--pkg-config-flags=--static` was already present; it governs how
 pkg-config reports third-party dependencies and does not control linkage of the
-toolchain's own runtime. The omission is `-static` in `--extra-ldflags`, which
+toolchain's own runtime. The omission was `-static` in `--extra-ldflags`, which
 left mingw-w64 resolving `libwinpthread-1.dll` at load time.
 
-Resolution requires rebuilding this configuration with `-static` added to
-`--extra-ldflags`, then confirming the result imports no non-system DLL. A
-rebuilt bundle needs refreshed SHA-256 hashes in `manifest.json` and a new owner
-approval reference.
+The rebuild was performed natively on Windows under MSYS2 with the same
+mingw-w64 GCC 16.1.0, adding `-static` and dropping `--disable-asm` because
+NASM was available. Dropping `--disable-asm` restores SIMD; the macOS arm64
+bundle was never built with it, so the two targets are now closer in
+configuration, not further apart.
 
-Note also that the Windows build sets `--disable-asm` while the macOS arm64
-build does not, so it has no SIMD acceleration and encodes substantially more
-slowly. This does not block packaging, but a rebuild is the natural point to
-supply nasm to the cross toolchain and drop that flag.
-
-Publicly distributed Windows FFmpeg builds are not a substitute. The BtbN and
-gyan.dev builds are configured with `--enable-version3` and are therefore
-GPL-3.0-or-later, which conflicts with the recorded GPL-2.0-or-later approval
-and with the licensing rationale in `docs/release-readiness.md`. Adopting one
-would be a licensing decision for the owner, not a packaging fix.
+Publicly distributed Windows FFmpeg builds were considered and rejected as a
+substitute. The BtbN and gyan.dev builds are configured with
+`--enable-version3` and are therefore GPL-3.0-or-later, which conflicts with
+the recorded GPL-2.0-or-later approval and with the licensing rationale in
+`docs/release-readiness.md`. They also enable network protocols, which this
+project's build deliberately disables, and are roughly four times the size.
 
 A corrected bundle is accepted only once `npm run check:distribution` passes
 natively on Windows x64 and both binaries report their version without a loader
-error.
+error. The rebuilt bundle satisfies both conditions.
 
 Use private Git LFS for the executable files. Each directory must contain a completed `manifest.json`, its referenced notice file, and the exact binaries named by the manifest. The example in `vendor/media/manifest.example.json` documents the contract.
 

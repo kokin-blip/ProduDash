@@ -30,7 +30,7 @@ Production packaging accepts only private Git LFS files under the native target 
 
 The gate rejects missing binaries, Git LFS pointer stubs, path traversal, malformed metadata, mismatched target/architecture, hash mismatches, absent notices, unexpected binary versions, or detected nonfree configuration. Passing the automated gate records technical evidence; it is not a substitute for owner/legal approval.
 
-The supplied `win-x64` bundle currently fails this gate. Its binaries match their recorded hashes, and their embedded configuration confirms the GPL-2.0-or-later approval, but they import `libwinpthread-1.dll`, which is neither bundled nor provided by Windows, so they cannot start. Windows x64 packaging is blocked alongside macOS x64 until the bundle is rebuilt with a statically linked pthread runtime and re-approved. The macOS arm64 bundle loads only OS-provided libraries and is unaffected. `docs/prerelease.md` records the reproduction and the rebuild requirements.
+The `win-x64` bundle originally supplied failed this gate. Its binaries matched their recorded hashes, and their embedded configuration confirmed the GPL-2.0-or-later approval, but they imported `libwinpthread-1.dll`, which is neither bundled nor provided by Windows, so they could not start. The bundle was rebuilt on 2026-07-27 with `-static` added to `--extra-ldflags`, re-approved, and now passes the gate; Windows x64 packaging is unblocked. macOS x64 remains blocked because no bundle has been supplied. The macOS arm64 bundle loads only OS-provided libraries and was unaffected. `docs/prerelease.md` records the reproduction and the rebuild.
 
 ## Signing and installation
 

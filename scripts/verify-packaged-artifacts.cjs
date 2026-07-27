@@ -68,5 +68,13 @@ try {
     throw new Error("Packaged artifact verification supports only macOS and Windows.");
   }
 } finally {
-  fs.rmSync(temporary, { recursive: true, force: true });
+  // The NSIS uninstaller relaunches itself from a copy under the temporary
+  // directory and returns before that copy exits, so the directory can still
+  // be held here. Removing it is not part of the verification contract, so a
+  // failure to clean up must not mask a successful verification.
+  try {
+    fs.rmSync(temporary, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+  } catch (error) {
+    process.stderr.write(`Could not remove ${temporary}: ${error.message}\n`);
+  }
 }

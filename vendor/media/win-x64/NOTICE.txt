@@ -4,11 +4,19 @@ ProduDash internal alpha media-tool notice
 Approval reference
 ------------------
 
-OWNER-DIRECTIVE-2026-07-26-PRODUDASH-ALPHA1-WIN
+OWNER-DIRECTIVE-2026-07-27-PRODUDASH-ALPHA1-WIN-REBUILD
 
-This bundle was approved by the ProduDash owner for the private
-0.1.0-alpha.1 Windows x64 prerelease. It is not an approval to publish the
+Recorded by the repository owner on 2026-07-27 for the private
+0.1.0-alpha.1 Windows x64 prerelease. ProduDash is a single-owner project,
+so this reference records the owner's own decision to bundle these GPL
+media tools at this scope. It is not an approval to publish the
 application or its bundled media tools publicly.
+
+This supersedes OWNER-DIRECTIVE-2026-07-26-PRODUDASH-ALPHA1-WIN. The
+binaries approved under that reference imported libwinpthread-1.dll, which
+was not bundled and is not provided by Windows, so they exited 0xC0000135
+(STATUS_DLL_NOT_FOUND) and never ran. They are replaced by the rebuild
+described below.
 
 FFmpeg
 ------
@@ -17,37 +25,59 @@ Version: 8.1.2
 Source: https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
 Signature: https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc
 Release-key fingerprint: FCF986EA15E6E293A5644F10B4322F04D67658D8
-Signature verification: successful
+Signature verification: successful; good signature from "FFmpeg release
+  signing key <ffmpeg-devel@ffmpeg.org>", primary key fingerprint matching
+  the value above
 Source modifications: none
 
 x264
 ----
 
 Commit: b35605ace3ddf7c1a5d67a2eb553f034aef41d55
-Source: https://code.videolan.org/videolan/x264/-/commit/b35605ace3ddf7c1a5d67a2eb553f034aef41d55
+Canonical source:
+  https://code.videolan.org/videolan/x264/-/commit/b35605ace3ddf7c1a5d67a2eb553f034aef41d55
+Obtained from: https://github.com/mirror/x264 because the canonical host
+  was unreachable behind an anti-bot challenge. The commit was fetched by
+  SHA and the checked-out tree was confirmed to equal the pinned commit, so
+  the content is identical to the canonical source regardless of host.
 Source modifications: none
 
 Build
 -----
 
 Target: Windows x64 (x86_64-w64-mingw32)
-Build host: macOS arm64, cross-compiled
+Build host: Windows x64, native build under MSYS2
 Compiler: mingw-w64 GCC 16.1.0
+Assembler: NASM 3.02
 FFmpeg license reported by the built binaries: GPL version 2 or later
 Nonfree components: disabled
+Network protocols: disabled; the built binaries expose no network protocol
 
 x264 configuration:
 
-  ./configure --host=x86_64-w64-mingw32
-  --cross-prefix=x86_64-w64-mingw32- --enable-static --disable-cli
+  ./configure --host=x86_64-w64-mingw32 --enable-static --disable-cli
   --disable-opencl
 
 FFmpeg configuration:
 
-  ./configure --arch=x86_64 --target-os=mingw32
-  --cross-prefix=x86_64-w64-mingw32- --disable-debug --disable-doc
-  --disable-ffplay --disable-network --disable-autodetect --enable-static
-  --disable-shared --enable-gpl --enable-libx264
+  ./configure --arch=x86_64 --target-os=mingw32 --disable-debug
+  --disable-doc --disable-ffplay --disable-network --disable-autodetect
+  --enable-static --disable-shared --enable-gpl --enable-libx264
+  --pkg-config-flags=--static --extra-cflags=-I<deps>/include
+  --extra-ldflags="-L<deps>/lib -static"
+
+Differences from the superseded 2026-07-26 bundle:
+
+  1. -static was added to --extra-ldflags. This is the fix for the load
+     failure: without it, mingw-w64 resolved libwinpthread-1.dll at run
+     time. The built programs now import only Windows system libraries.
+  2. --disable-asm was dropped because NASM is available on this build
+     host, restoring SIMD acceleration. The macOS arm64 bundle was never
+     built with --disable-asm, so this brings the two targets closer
+     together rather than further apart.
+  3. The build is native under MSYS2 rather than cross-compiled from
+     macOS. The source, the x264 commit, the compiler version, and every
+     feature flag are otherwise unchanged.
 
 The x264 library was linked statically so ProduDash retains its existing
 H.264/AAC render behavior. The resulting ffmpeg.exe and ffprobe.exe

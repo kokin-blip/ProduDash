@@ -5,7 +5,7 @@
   "version": "8.1.2",
   "source": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz",
   "approvedForDistribution": true,
-  "approvalReference": "OWNER-DIRECTIVE-2026-07-26-PRODUDASH-ALPHA1-WIN",
+  "approvalReference": "OWNER-DIRECTIVE-2026-07-27-PRODUDASH-ALPHA1-WIN-REBUILD",
   "nonfreeBuild": false,
   "license": {
     "spdx": "GPL-2.0-or-later",
@@ -14,11 +14,11 @@
   "binaries": {
     "ffmpeg": {
       "file": "ffmpeg.exe",
-      "sha256": "c8a716ff95a77f3632ff55bd5609f30c729a0264e0f2b3dde31d2bfeb5ff7c40"
+      "sha256": "c7b6142c396775921c731a5d0ccdc7e41aa285aeafa5725872efeeb96832568e"
     },
     "ffprobe": {
       "file": "ffprobe.exe",
-      "sha256": "96287716d4ed67f007871e842cee8d908768e16a6607c6ea042f6e179b627cbf"
+      "sha256": "e4a9f07d2a4705006b5bc7a5b7cbf5eb02a8793d64129bba7a0bf1ad099d4c3e"
     }
   }
 }
