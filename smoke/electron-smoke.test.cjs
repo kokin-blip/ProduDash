@@ -212,18 +212,7 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
     );
     await page.locator("[data-project-choose-output]").click();
     await page.locator("[data-project-render]").click();
-    await page.waitForFunction(
-      async () => {
-        const response = await window.produdash.getAppState();
-        return response.data.mediaJobs.some((job) => job.jobType === "project_render");
-      },
-      null,
-      { timeout: 30_000 }
-    );
-    const projectRenderIds = await page.evaluate(async () => {
-      const response = await window.produdash.getAppState();
-      return response.data.mediaJobs.filter((job) => job.jobType === "project_render").map((job) => job.id);
-    });
+    const projectRenderIds = await waitForMediaJobIds(page, "project_render");
     assert.equal(projectRenderIds.length, 1);
     const [projectRenderId] = projectRenderIds;
     const projectRenderStatus = await waitForMediaJobTerminal(page, projectRenderId);
@@ -529,6 +518,19 @@ async function setZoomFactor(application, factor) {
 
 async function hasHorizontalOverflow(page) {
   return page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+}
+
+async function waitForMediaJobIds(page, jobType, timeout = 30_000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeout) {
+    const ids = await page.evaluate(async (type) => {
+      const response = await window.produdash.getAppState();
+      return response.data.mediaJobs.filter((job) => job.jobType === type).map((job) => job.id);
+    }, jobType);
+    if (ids.length) return ids;
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`Timed out waiting for a ${jobType} media job.`);
 }
 
 async function waitForMediaJobTerminal(page, jobId, timeout = 45_000) {
