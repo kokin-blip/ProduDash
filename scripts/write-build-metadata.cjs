@@ -28,11 +28,16 @@ fs.writeFileSync(
   `${artifacts.map(({ name, sha256 }) => `${sha256}  ${name}`).join("\n")}\n`
 );
 
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const windows = process.platform === "win32";
+const npmCommand = windows ? "npm.cmd" : "npm";
+// Node refuses to spawn .cmd files without a shell, so Windows needs one.
+// The arguments are fixed literals, so nothing user-supplied reaches it.
 const sbom = spawnSync(npmCommand, ["sbom", "--omit=dev", "--sbom-format=cyclonedx"], {
   cwd: root,
-  encoding: "utf8"
+  encoding: "utf8",
+  shell: windows
 });
+if (sbom.error) throw new Error(`SBOM generation could not start: ${sbom.error.message}`);
 if (sbom.status !== 0) throw new Error(sbom.stderr || "SBOM generation failed.");
 JSON.parse(sbom.stdout);
 fs.writeFileSync(path.join(distDirectory, `${prefix}-sbom.cdx.json`), sbom.stdout);
