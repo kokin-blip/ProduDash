@@ -2229,11 +2229,24 @@ async function handleSubmit(event) {
     event.preventDefault();
     const submitter = event.submitter;
     const scheduleValue = form.elements.scheduledFor.value;
-    const packages = [...form.querySelectorAll(".post-package-editor")].map((editor) => ({
-      platformId: editor.elements.platformId.value,
-      title: editor.elements.platformTitle.value,
-      caption: editor.elements.platformCaption.value
-    }));
+    const packages = [...form.querySelectorAll(".post-package-editor")].map((editor) => {
+      // Provider-required choices are namespaced so they survive alongside the
+      // copy fields without the handler knowing which platform declared them.
+      const options = {};
+      for (const select of editor.querySelectorAll('select[name^="option:"]')) {
+        const key = select.name.slice("option:".length);
+        // An untouched required choice stays unset rather than becoming a value
+        // ProduDash picked; approval refuses the plan until it is made.
+        if (select.value === "") continue;
+        options[key] = select.value;
+      }
+      return {
+        platformId: editor.elements.platformId.value,
+        title: editor.elements.platformTitle.value,
+        caption: editor.elements.platformCaption.value,
+        options: Object.keys(options).length ? options : undefined
+      };
+    });
     await runAction(
       `update-post-${form.dataset.postDraftForm}`,
       submitter,

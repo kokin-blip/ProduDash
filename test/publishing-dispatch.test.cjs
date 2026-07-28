@@ -77,6 +77,18 @@ async function approvedPlan(t, { onPublish } = {}) {
     platforms: ["youtube"]
   });
   const planId = state.postQueue[0].id;
+  // YouTube requires an explicit audience declaration; approval refuses a plan
+  // that has not made one.
+  state = await harness.store.updatePostPlanDraft(planId, {
+    platformPackages: [
+      {
+        platformId: "youtube",
+        title: "Launch post",
+        caption: "Launch copy",
+        options: { selfDeclaredMadeForKids: false, privacyStatus: "private" }
+      }
+    ]
+  });
   state = await harness.store.approvePostPlan(planId, "official_api");
   assert.equal(state.postQueue[0].status, POST_PLAN_STATUSES.APPROVED_FOR_OFFICIAL_API);
 

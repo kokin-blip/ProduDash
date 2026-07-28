@@ -75,9 +75,10 @@ class PublishingDispatchService {
         accessToken: credentials.oauthAccessToken,
         title: pack.title,
         description: pack.caption,
-        // Never public unless the user explicitly approved that; the connector
-        // reports back what the provider actually applied.
-        privacyStatus: "private",
+        // Every per-destination choice comes from the immutable approved
+        // snapshot, never from current draft state or a default chosen here.
+        // The connector reports back what the provider actually applied.
+        ...(pack.options || {}),
         media: { body, contentLength, contentType: "video/*" }
       });
       return { result, accountId: integration?.authorization?.selectedAccount?.id || null };

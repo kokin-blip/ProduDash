@@ -104,7 +104,29 @@ test("manual export requires approval and repeated transitions are idempotent", 
   assert.equal(duplicateState.postQueue[0].id, planId);
   assert.equal(state.postQueue[0].schedule.timeZone, "UTC");
   assert.equal(state.postQueue[0].schedule.mode, "planned_local_only");
-  assert.deepEqual(state.postQueue[0].platformPackages, [{ platformId: "youtube", title: "Launch post", caption: "New launch" }]);
+  assert.deepEqual(state.postQueue[0].platformPackages, [
+    {
+      platformId: "youtube",
+      title: "Launch post",
+      caption: "New launch",
+      // Seeded from the registry: visibility has a safe default, the audience
+      // declaration deliberately does not.
+      options: { selfDeclaredMadeForKids: null, privacyStatus: "private" }
+    }
+  ]);
+  await assert.rejects(() => harness.store.approvePostPlan(planId, "manual_export"), { code: "PUBLISHING_OPTION_REQUIRED" });
+  state = await harness.store.updatePostPlanDraft(planId, {
+    platformPackages: [
+      {
+        platformId: "youtube",
+        title: "Launch post",
+        caption: "New launch",
+        options: { selfDeclaredMadeForKids: false, privacyStatus: "private" }
+      }
+    ],
+    scheduledFor: "2026-08-01T18:00:00Z",
+    timeZone: "UTC"
+  });
   await assert.rejects(
     () => harness.store.markPostExported(planId),
     (error) => error.code === "INVALID_TRANSITION"
@@ -256,6 +278,19 @@ test("destination copy and local schedules are editable only before publishing a
       }),
     { code: "INVALID_INPUT" }
   );
+  state = await harness.store.updatePostPlanDraft(planId, {
+    platformPackages: [
+      { platformId: "instagram", title: "Instagram launch", caption: "Short destination copy" },
+      {
+        platformId: "youtube",
+        title: "YouTube launch",
+        caption: "Long-form destination copy",
+        options: { selfDeclaredMadeForKids: false, privacyStatus: "private" }
+      }
+    ],
+    scheduledFor: "2026-12-10T19:30:00.000Z",
+    timeZone: "America/Phoenix"
+  });
   state = await harness.store.approvePostPlan(planId, "manual_export");
   const approvedPlan = state.postQueue.find((item) => item.id === planId);
   assert.equal(approvedPlan.approvalSnapshot.payload.platformPackages[0].title, "Instagram launch");
@@ -280,6 +315,13 @@ test("official API approval verifies genuine connection readiness", async (t) =>
     platforms: ["youtube"]
   });
   const planId = state.postQueue[0].id;
+  // Plan completeness is checked before connection readiness, so the required
+  // choices are made first to isolate the readiness gate under test.
+  await harness.store.updatePostPlanDraft(planId, {
+    platformPackages: [
+      { platformId: "youtube", title: "Official plan", caption: "", options: { selfDeclaredMadeForKids: true, privacyStatus: "unlisted" } }
+    ]
+  });
   await assert.rejects(
     () => harness.store.approvePostPlan(planId, "official_api"),
     (error) => error.code === "INTEGRATION_NOT_READY"

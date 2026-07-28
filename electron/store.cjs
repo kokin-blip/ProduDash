@@ -12,6 +12,7 @@ const { DISPATCHABLE_STATUSES, POST_PLAN_STATUSES, assertTransition } = require(
 const { isAlreadyPublished, normalizeReceipt } = require("./publishing/receipt.cjs");
 const { TOKEN_VAULT_KEYS, createAuthorizationRecord, normalizeAuthorizationRecord } = require("./platforms/authorization.cjs");
 const {
+  assertPublishingOptionsComplete,
   boundedString,
   normalizePublicCredentialValue,
   requireId,
@@ -72,7 +73,9 @@ function publishingApprovalSnapshot(plan, mode, mediaSnapshot) {
   };
   const hash = crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
   return {
-    version: 1,
+    // v2 adds per-destination publishing options to the payload. v1 snapshots
+    // remain valid and are verified against their own shape.
+    version: 2,
     hash,
     mode,
     approvedAt,
@@ -905,6 +908,10 @@ class ProduDashStore {
       const targetStatus = mode === "manual_export" ? "approved_for_manual_export" : "approved_for_official_api";
       if (plan.status === targetStatus) return this.getAppState();
       if (plan.status !== "needs_approval") throw new AppError("INVALID_TRANSITION", "This post plan cannot enter that approval path.");
+      // Plan completeness is checked before connection readiness so someone
+      // with an unfinished plan is told that first, rather than connecting an
+      // account and only then discovering a second problem.
+      assertPublishingOptionsComplete(plan.platformPackages);
       if (mode === "official_api") {
         if (!plan.platforms.length) throw new AppError("INVALID_INPUT", "Select at least one publishing destination.");
         const ready = plan.platforms.every((platformId) =>

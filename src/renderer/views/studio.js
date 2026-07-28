@@ -1,5 +1,5 @@
 import { escapeHtml, formatDate, statusLabel } from "../format.js";
-import { asArray, integrationReady, isPending, ui } from "../state.js";
+import { asArray, integrationReady, isPending, platformEntry, ui } from "../state.js";
 import { renderStatusBadge } from "./shared.js";
 import { renderCandidateReview } from "./candidate-review.js";
 import { renderProjects } from "./projects.js";
@@ -17,7 +17,7 @@ export function renderStudio() {
   return `
     <div class="inline-message neutral planning-banner">
       <strong>Local media workspace</strong>
-      <span>ProduDash processes media locally by default. A cloud analysis mode uploads only the categories named in a separate per-job consent; publishing still requires a future official connector.</span>
+      <span>ProduDash processes media locally by default. A cloud analysis mode uploads only the categories named in a separate per-job consent; publishing requires a connected platform and explicit approval.</span>
     </div>
     <div class="studio-tabs" role="tablist" aria-label="Content Studio">
       ${STUDIO_TABS.map(
@@ -822,6 +822,37 @@ function renderPostPlan(plan) {
   `;
 }
 
+// Per-destination choices the provider requires, rendered from the registry
+// definitions carried on the platform catalog. An option with no registry
+// default renders with no preselection, so the person has to actually choose.
+function renderPublishingOptionFields(item) {
+  const definitions = platformEntry(item.platformId)?.publishingOptions;
+  if (!definitions) return "";
+  return Object.entries(definitions)
+    .map(([key, definition]) => {
+      const current = item.options?.[key];
+      const unset = current === undefined || current === null;
+      return `
+        <label class="publishing-option" data-publishing-option="${escapeHtml(key)}">
+          <span>${escapeHtml(definition.label)}${definition.default === null ? " (required)" : ""}</span>
+          <select name="option:${escapeHtml(key)}" ${unset && definition.default === null ? "required" : ""}>
+            ${definition.default === null ? `<option value="" ${unset ? "selected" : ""} disabled>Choose…</option>` : ""}
+            ${definition.choices
+              .map(
+                (choice) =>
+                  `<option value="${escapeHtml(String(choice.value))}" ${
+                    String(choice.value) === String(current) ? "selected" : ""
+                  }>${escapeHtml(choice.label)}</option>`
+              )
+              .join("")}
+          </select>
+          <small>${escapeHtml(definition.help)}</small>
+        </label>
+      `;
+    })
+    .join("");
+}
+
 function renderPostDraftForm(plan, packages) {
   return `
     <form class="post-draft-form" data-post-draft-form="${escapeHtml(plan.id)}">
@@ -840,6 +871,7 @@ function renderPostDraftForm(plan, packages) {
                       <label><span>Caption</span><textarea name="platformCaption" maxlength="2200">${escapeHtml(
                         item.caption
                       )}</textarea></label>
+                      ${renderPublishingOptionFields(item)}
                     </fieldset>
                   `
                 )
@@ -857,6 +889,19 @@ function renderPostDraftForm(plan, packages) {
   `;
 }
 
+// The choices frozen into the approval, shown on a locked plan so the approved
+// audience and visibility stay visible after editing is closed.
+function renderApprovedOptions(item) {
+  const definitions = platformEntry(item.platformId)?.publishingOptions;
+  if (!definitions || !item.options) return "";
+  const parts = Object.entries(definitions).map(([key, definition]) => {
+    const value = item.options[key];
+    const choice = definition.choices.find((option) => String(option.value) === String(value));
+    return `${definition.label}: ${choice ? choice.label : "not chosen"}`;
+  });
+  return `<small class="approved-options" data-approved-options="${escapeHtml(item.platformId)}">${escapeHtml(parts.join(" · "))}</small>`;
+}
+
 function renderPostPackages(packages) {
   if (!packages.length) return `<p class="compact-note">No destination copy is attached.</p>`;
   return `
@@ -868,6 +913,7 @@ function renderPostPackages(packages) {
               <strong>${escapeHtml(platformName(item.platformId))}</strong>
               <span>${escapeHtml(item.title)}</span>
               <small>${escapeHtml(item.caption || "No caption.")}</small>
+              ${renderApprovedOptions(item)}
             </div>
           `
         )

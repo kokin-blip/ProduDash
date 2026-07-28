@@ -380,6 +380,18 @@ class YouTubeConnector {
   }
 
   buildVideoMetadata(request) {
+    // The audience declaration is a legal statement by the uploader. Coercing a
+    // missing value to false would be ProduDash declaring it on their behalf,
+    // so an absent or non-boolean value is refused outright.
+    if (typeof request.selfDeclaredMadeForKids !== "boolean") {
+      throw connectorError(
+        CONNECTOR_ERROR_CATEGORIES.VALIDATION,
+        "YOUTUBE_AUDIENCE_DECLARATION_REQUIRED",
+        "YouTube requires an explicit made-for-kids declaration for this upload.",
+        { platformId: this.id }
+      );
+    }
+    // An unrecognized visibility falls back to private, never to public.
     const privacyStatus = PRIVACY_STATUSES.has(request.privacyStatus) ? request.privacyStatus : "private";
     return {
       snippet: {
@@ -388,8 +400,7 @@ class YouTubeConnector {
       },
       status: {
         privacyStatus,
-        // Required by YouTube; ProduDash does not guess on the user's behalf.
-        selfDeclaredMadeForKids: request.selfDeclaredMadeForKids === true
+        selfDeclaredMadeForKids: request.selfDeclaredMadeForKids
       }
     };
   }

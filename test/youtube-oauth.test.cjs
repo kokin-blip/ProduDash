@@ -364,6 +364,7 @@ test("publishing opens a resumable session then uploads the bytes", async () => 
     title: "Title",
     description: "Body",
     privacyStatus: "private",
+    selfDeclaredMadeForKids: false,
     media: { body: "bytes", contentLength: 5, contentType: "video/mp4" }
   });
 
@@ -392,6 +393,7 @@ test("privacy defaults to private and reports what YouTube actually applied", as
     accessToken: "at",
     title: "T",
     privacyStatus: "public",
+    selfDeclaredMadeForKids: false,
     media: { body: "b", contentLength: 1 }
   });
   assert.equal(result.requestedPrivacyStatus, "public");
@@ -401,16 +403,25 @@ test("privacy defaults to private and reports what YouTube actually applied", as
   const fallback = createConnector({
     responses: [uploadResponse({}, { headers: { location: "https://u/s" } }), uploadResponse({ id: "v" }, { status: 201 })]
   });
-  await fallback.connector.publish({ accessToken: "at", title: "T", privacyStatus: "everyone", media: { body: "b", contentLength: 1 } });
+  await fallback.connector.publish({
+    accessToken: "at",
+    title: "T",
+    privacyStatus: "everyone",
+    selfDeclaredMadeForKids: false,
+    media: { body: "b", contentLength: 1 }
+  });
   assert.equal(JSON.parse(fallback.requests[0].options.body).status.privacyStatus, "private");
   assert.equal(requests.length, 2);
 });
 
 test("a session that Google refuses to open is an upload failure", async () => {
   const { connector } = createConnector({ responses: [uploadResponse({}, { headers: {} })] });
-  await assert.rejects(() => connector.publish({ accessToken: "at", title: "T", media: { body: "b", contentLength: 1 } }), {
-    code: "YOUTUBE_NO_UPLOAD_SESSION"
-  });
+  await assert.rejects(
+    () => connector.publish({ accessToken: "at", title: "T", selfDeclaredMadeForKids: false, media: { body: "b", contentLength: 1 } }),
+    {
+      code: "YOUTUBE_NO_UPLOAD_SESSION"
+    }
+  );
 });
 
 test("publishing refuses unreadable media and missing authorization", async () => {
@@ -434,6 +445,7 @@ test("an aborted upload reports cancellation and keeps the session for resuming"
       connector.publish({
         accessToken: "at",
         title: "T",
+        selfDeclaredMadeForKids: false,
         media: { body: "b", contentLength: 1 },
         signal: controller.signal
       }),

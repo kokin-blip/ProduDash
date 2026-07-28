@@ -3,10 +3,11 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { AppError } = require("./errors.cjs");
 const { createInitialState } = require("./initial-state.cjs");
-const { CREATOR_PLATFORM_IDS } = require("./platforms/registry.cjs");
+const { CREATOR_PLATFORM_IDS, findPlatform } = require("./platforms/registry.cjs");
 const { normalizeAuthorizationRecord, validateAuthorizationRecord } = require("./platforms/authorization.cjs");
 const { STATUS_VALUES: POST_PLAN_STATUS_VALUES } = require("./publishing/post-status.cjs");
 const { normalizeReceipt, validateReceipt } = require("./publishing/receipt.cjs");
+const { seedPublishingOptions } = require("./validation.cjs");
 const { preserveFile, readJson, writeJsonAtomic } = require("./atomic-json.cjs");
 
 const { CURRENT_SCHEMA_VERSION, MINIMUM_SUPPORTED_SCHEMA_VERSION } = require("./schema-version.cjs");
@@ -102,13 +103,19 @@ function withDefaults(state) {
             ...plan,
             mediaJobId: typeof plan.mediaJobId === "string" ? plan.mediaJobId : null,
             contentHash: typeof plan.contentHash === "string" && /^[a-f0-9]{64}$/.test(plan.contentHash) ? plan.contentHash : null,
-            platformPackages: Array.isArray(plan.platformPackages)
+            platformPackages: (Array.isArray(plan.platformPackages)
               ? plan.platformPackages
               : platforms.map((platformId) => ({
                   platformId,
                   title: typeof plan.title === "string" ? plan.title : "",
                   caption: typeof plan.caption === "string" ? plan.caption : ""
-                })),
+                }))
+            ).map((item) => ({
+              ...item,
+              // Backfilled here as well as in the migration, because
+              // mergeCatalog-style defaults never reach nested packages.
+              options: item?.options === undefined ? seedPublishingOptions(item?.platformId) : item.options
+            })),
             schedule:
               plan.schedule && typeof plan.schedule === "object" && !Array.isArray(plan.schedule)
                 ? plan.schedule
@@ -247,7 +254,69 @@ function migrateState(input) {
         : []
     };
   }
+  if (state.schemaVersion === 9) {
+    // Seed per-destination publishing options. Options with no safe default
+    // stay null, so an existing plan is visibly incomplete rather than being
+    // given an invented audience declaration. Its approval snapshot keeps
+    // version 1 and is still verified against the v1 payload shape.
+    state = {
+      ...state,
+      schemaVersion: 10,
+      postQueue: Array.isArray(state.postQueue)
+        ? state.postQueue.map((plan) => ({
+            ...plan,
+            platformPackages: Array.isArray(plan?.platformPackages)
+              ? plan.platformPackages.map((item) => ({
+                  ...item,
+                  options: item?.options === undefined ? seedPublishingOptions(item?.platformId) : item.options
+                }))
+              : []
+          }))
+        : []
+    };
+  }
   return withDefaults(state);
+}
+
+// v1 predates per-destination publishing options; v2 includes them. Both must
+// keep validating, so the payload used to recompute a snapshot's hash is
+// reconstructed in the shape that snapshot was created with.
+const SUPPORTED_APPROVAL_VERSIONS = new Set([1, 2]);
+
+function approvalPayloadForVersion(plan, version) {
+  const platformPackages =
+    version === 1
+      ? // Key order matters: JSON.stringify feeds the hash.
+        plan.platformPackages.map((item) => ({ platformId: item.platformId, title: item.title, caption: item.caption }))
+      : plan.platformPackages;
+  return {
+    planId: plan.id,
+    title: plan.title,
+    caption: plan.caption,
+    platformPackages,
+    schedule: plan.schedule,
+    media: plan.mediaSnapshot
+  };
+}
+
+// Publishing options are registry-shaped. A platform that declares none must
+// carry null; one that declares some must carry exactly those keys, with a null
+// only where the registry allows a value to still be unchosen.
+function validatePublishingOptions(platformId, options) {
+  const definitions = findPlatform(platformId)?.publishingOptions;
+  if (!definitions) return options === null || options === undefined;
+  if (!options || typeof options !== "object" || Array.isArray(options)) return false;
+  const expected = Object.keys(definitions).sort();
+  if (JSON.stringify(Object.keys(options).sort()) !== JSON.stringify(expected)) return false;
+  for (const [key, definition] of Object.entries(definitions)) {
+    const value = options[key];
+    // Unchosen is allowed only while the plan is still a draft; approval
+    // enforces completeness separately.
+    if (value === null) continue;
+    if (definition.type === "boolean" && typeof value !== "boolean") return false;
+    if (definition.type === "enum" && !definition.values.includes(value)) return false;
+  }
+  return true;
 }
 
 function validateState(state) {
@@ -604,7 +673,8 @@ function validateState(state) {
         item.title.length < 1 ||
         item.title.length > 120 ||
         typeof item.caption !== "string" ||
-        item.caption.length > 2200
+        item.caption.length > 2200 ||
+        !validatePublishingOptions(item.platformId, item.options)
       ) {
         throw new AppError("INVALID_STATE", "The saved platform publishing packages are invalid.");
       }
@@ -644,18 +714,16 @@ function validateState(state) {
       throw new AppError("INVALID_STATE", "The saved publishing media snapshot is invalid.");
     }
     if (plan.approvalSnapshot !== null) {
-      const expectedPayload = {
-        planId: plan.id,
-        title: plan.title,
-        caption: plan.caption,
-        platformPackages: plan.platformPackages,
-        schedule: plan.schedule,
-        media: plan.mediaSnapshot
-      };
+      // Snapshots are versioned because the payload shape grew. A v1 snapshot
+      // predates per-destination publishing options, so its hash must be
+      // recomputed from the v1 shape -- otherwise every already-approved plan
+      // would fail INVALID_STATE and the app would refuse to boot.
+      const version = plan.approvalSnapshot?.version;
+      const expectedPayload = approvalPayloadForVersion(plan, version);
       const expectedHash = crypto.createHash("sha256").update(JSON.stringify(expectedPayload)).digest("hex");
       if (
         !plan.approvalSnapshot ||
-        plan.approvalSnapshot.version !== 1 ||
+        !SUPPORTED_APPROVAL_VERSIONS.has(version) ||
         plan.approvalSnapshot.hash !== expectedHash ||
         !["manual_export", "official_api"].includes(plan.approvalSnapshot.mode) ||
         typeof plan.approvalSnapshot.approvedAt !== "string" ||

@@ -191,6 +191,37 @@ const PLATFORMS = [
     ],
     scopes: ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"],
     capabilities: { hasLiveConnector: true, isPublishDestination: true, providesCreatorAnalytics: true },
+    // Choices YouTube requires per upload. `default: null` means there is no
+    // safe guess: the user must choose, and validation rejects an absent value
+    // rather than inventing one. These become part of the approved snapshot and
+    // therefore part of its hash.
+    publishingOptions: {
+      selfDeclaredMadeForKids: {
+        type: "boolean",
+        // A legal audience declaration. Guessing it on someone's behalf is not
+        // an option, so this deliberately has no default.
+        default: null,
+        label: "Made for kids",
+        help: "YouTube requires an audience declaration for every upload. ProduDash cannot choose this for you.",
+        choices: [
+          { value: true, label: "Yes, made for kids" },
+          { value: false, label: "No, not made for kids" }
+        ]
+      },
+      privacyStatus: {
+        type: "enum",
+        values: ["private", "unlisted", "public"],
+        // Private is the only default that cannot surprise anyone.
+        default: "private",
+        label: "Visibility",
+        help: "Uploads from a Google API project that has not passed a YouTube compliance audit are locked to private regardless of this choice.",
+        choices: [
+          { value: "private", label: "Private" },
+          { value: "unlisted", label: "Unlisted" },
+          { value: "public", label: "Public" }
+        ]
+      }
+    },
     creator: {
       order: 2,
       displayName: "YouTube Shorts",
@@ -235,6 +266,7 @@ function freezePlatform(definition) {
     pkceChallengeEncoding: null,
     publicIdentifierField: null,
     authRoutes: null,
+    publishingOptions: null,
     mediaConstraints: null,
     dataWindow: null,
     creator: null,
@@ -259,6 +291,20 @@ function freezePlatform(definition) {
                 ...route,
                 scopes: Object.freeze([...route.scopes]),
                 accountTypes: Object.freeze([...route.accountTypes])
+              })
+            ])
+          )
+        )
+      : null,
+    publishingOptions: definition.publishingOptions
+      ? Object.freeze(
+          Object.fromEntries(
+            Object.entries(definition.publishingOptions).map(([key, option]) => [
+              key,
+              Object.freeze({
+                ...option,
+                values: option.values ? Object.freeze([...option.values]) : null,
+                choices: Object.freeze(option.choices.map((choice) => Object.freeze({ ...choice })))
               })
             ])
           )
