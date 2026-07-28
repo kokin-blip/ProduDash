@@ -67,9 +67,37 @@ const PLATFORMS = [
     detail: "Use Meta's approved Instagram Messaging API after app review.",
     allowedUse: "Read and reply to eligible business conversations through official APIs.",
     compliance: "Respect user-initiated messaging windows, opt-ins, rate limits, page/account roles, and policy review.",
-    // The Instagram Login vs Facebook Login route is an open decision; scopes stay
-    // empty rather than inventing a permission set for the wrong route.
-    authType: "oauth2_meta_undecided",
+    authType: "oauth2_meta",
+    // Instagram supports two official authorization routes and ProduDash offers
+    // both. They are NOT interchangeable: different authorization endpoints,
+    // different API hosts, different scope vocabularies, different account
+    // prerequisites, and different ways of resolving the Instagram user id.
+    //
+    // The user picks one at connect time; the choice is persisted and every
+    // request derives its host, scopes, and id resolution from it. Blending them
+    // -- requesting instagram_basic against Instagram Login, or calling
+    // graph.facebook.com with a graph.instagram.com token -- is the documented
+    // failure mode, so top-level `scopes` stays empty and each route owns its own.
+    authRoutes: {
+      instagram_login: {
+        id: "instagram_login",
+        label: "Instagram Login",
+        summary: "Sign in with the Instagram professional account directly. No linked Facebook Page required.",
+        scopes: ["instagram_business_basic", "instagram_business_content_publish"],
+        requiresLinkedFacebookPage: false,
+        accountTypes: ["business", "creator"],
+        docsUrl: "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/"
+      },
+      facebook_login: {
+        id: "facebook_login",
+        label: "Facebook Login",
+        summary: "Sign in with Facebook. Requires the Instagram account to be linked to a Facebook Page.",
+        scopes: ["instagram_basic", "instagram_content_publish", "pages_show_list", "pages_read_engagement", "business_management"],
+        requiresLinkedFacebookPage: true,
+        accountTypes: ["business", "creator"],
+        docsUrl: "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/"
+      }
+    },
     credentialNote: "Meta/Instagram messaging still requires approved apps, scopes, and platform review.",
     credentialFields: [
       { key: "metaAppId", label: "Meta app ID", type: "text", placeholder: "123456789", sensitive: false },
@@ -101,7 +129,9 @@ const PLATFORMS = [
     detail: "Use Meta Messenger Platform and Page permissions after app review.",
     allowedUse: "Manage Page/Messenger conversations through approved scopes.",
     compliance: "No scraping, unsolicited messaging, spam, or browser automation.",
-    authType: "oauth2_meta_undecided",
+    // Facebook Page publishing has one route. Instagram's dual-route model does
+    // not apply here and must not be copied onto it.
+    authType: "oauth2_meta",
     credentialNote: "Facebook Page/Messenger access must come through approved Meta permissions.",
     credentialFields: [{ key: "pageAccessToken", label: "Page access token", type: "password", placeholder: "EAAB...", sensitive: true }],
     scopes: [],
@@ -204,6 +234,7 @@ function freezePlatform(definition) {
     creatorDisplayName: definition.creator?.displayName || definition.displayName,
     pkceChallengeEncoding: null,
     publicIdentifierField: null,
+    authRoutes: null,
     mediaConstraints: null,
     dataWindow: null,
     creator: null,
@@ -218,6 +249,20 @@ function freezePlatform(definition) {
           requirements: Object.freeze([...definition.creator.requirements]),
           metrics: Object.freeze([...definition.creator.metrics])
         })
+      : null,
+    authRoutes: definition.authRoutes
+      ? Object.freeze(
+          Object.fromEntries(
+            Object.entries(definition.authRoutes).map(([key, route]) => [
+              key,
+              Object.freeze({
+                ...route,
+                scopes: Object.freeze([...route.scopes]),
+                accountTypes: Object.freeze([...route.accountTypes])
+              })
+            ])
+          )
+        )
       : null,
     mediaConstraints: definition.mediaConstraints ? Object.freeze({ ...definition.mediaConstraints }) : null,
     dataWindow: definition.dataWindow ? Object.freeze({ ...definition.dataWindow }) : null

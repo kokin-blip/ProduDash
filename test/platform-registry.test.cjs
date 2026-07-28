@@ -71,6 +71,36 @@ test("only platforms with a real connector are marked live", () => {
   assert.equal(hasCapability("nope", "hasLiveConnector"), false);
 });
 
+test("instagram offers two authorization routes that never share assumptions", () => {
+  const instagram = getPlatform("instagram");
+  const routes = instagram.authRoutes;
+  assert.deepEqual(Object.keys(routes).sort(), ["facebook_login", "instagram_login"]);
+
+  // Top-level scopes stay empty: the route owns them, so nothing can request a
+  // permission set against the wrong endpoint.
+  assert.deepEqual(instagram.scopes, []);
+
+  // The two vocabularies must not overlap at all. An overlap would be the first
+  // sign the routes are being blended.
+  const instagramScopes = new Set(routes.instagram_login.scopes);
+  const facebookScopes = new Set(routes.facebook_login.scopes);
+  assert.ok(instagramScopes.size > 0 && facebookScopes.size > 0);
+  for (const scope of instagramScopes) {
+    assert.equal(facebookScopes.has(scope), false, `${scope} must not appear in both routes`);
+  }
+
+  // The account prerequisite is the practical difference the UI must surface.
+  assert.equal(routes.instagram_login.requiresLinkedFacebookPage, false);
+  assert.equal(routes.facebook_login.requiresLinkedFacebookPage, true);
+  for (const route of Object.values(routes)) {
+    assert.ok(route.docsUrl.startsWith("https://"));
+    assert.ok(route.summary);
+  }
+
+  // Facebook Page publishing is single-route and must not inherit this model.
+  assert.equal(getPlatform("facebook").authRoutes, null);
+});
+
 test("stripe stays planned until a connector exists", () => {
   assert.equal(getPlatform("stripe").defaultStatus, "planned");
   for (const platform of listPlatforms()) {
