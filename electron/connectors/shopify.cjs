@@ -1,5 +1,6 @@
-const { AppError } = require("../errors.cjs");
+const { AppError, CONNECTOR_ERROR_CATEGORIES, ConnectorError, connectorError } = require("../errors.cjs");
 const { boundedString, normalizeShopifyDomain } = require("../validation.cjs");
+const { getPlatform } = require("../platforms/registry.cjs");
 
 const SHOP_QUERY = `
   query ProduDashShop {
@@ -271,4 +272,98 @@ function aggregateWeeklyRevenue(orders) {
     .map(([week, revenue]) => ({ week, revenue, profit: null }));
 }
 
-module.exports = { ORDERS_QUERY, PRODUCTS_QUERY, SHOP_QUERY, ShopifyClient, aggregateWeeklyRevenue, normalizeBusiness };
+// ShopifyClient predates the connector contract and raises plain AppErrors. Map
+// its stable codes onto the shared taxonomy rather than rewriting the client, so
+// existing behavior and error codes are untouched while callers still learn the
+// category and whether a retry is worth attempting.
+const SHOPIFY_ERROR_CATEGORIES = Object.freeze({
+  SHOPIFY_AUTH_FAILED: CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION,
+  SHOPIFY_RATE_LIMITED: CONNECTOR_ERROR_CATEGORIES.RATE_LIMIT,
+  SHOPIFY_TIMEOUT: CONNECTOR_ERROR_CATEGORIES.NETWORK,
+  SHOPIFY_NETWORK_ERROR: CONNECTOR_ERROR_CATEGORIES.NETWORK,
+  SHOPIFY_GRAPHQL_ERROR: CONNECTOR_ERROR_CATEGORIES.VALIDATION,
+  SHOPIFY_INVALID_RESPONSE: CONNECTOR_ERROR_CATEGORIES.PROCESSING,
+  SHOPIFY_API_ERROR: CONNECTOR_ERROR_CATEGORIES.PROCESSING,
+  INVALID_SHOPIFY_DOMAIN: CONNECTOR_ERROR_CATEGORIES.VALIDATION,
+  INVALID_INPUT: CONNECTOR_ERROR_CATEGORIES.VALIDATION
+});
+
+function asShopifyConnectorError(error) {
+  if (error instanceof ConnectorError) return error;
+  const code = error instanceof AppError ? error.code : "SHOPIFY_API_ERROR";
+  const category = SHOPIFY_ERROR_CATEGORIES[code] || CONNECTOR_ERROR_CATEGORIES.PROCESSING;
+  const message = error instanceof AppError ? error.message : "Shopify could not complete the requested synchronization.";
+  return new ConnectorError(code, message, { category, platformId: "shopify", cause: error });
+}
+
+class ShopifyConnector {
+  constructor(options = {}) {
+    const platform = getPlatform("shopify");
+    this.id = platform.id;
+    // Shopify uses a merchant-created custom app token: there is no interactive
+    // authorization to run and no provider-side revocation ProduDash can call.
+    this.capabilities = [];
+    this.platform = platform;
+    this.client = options.client || new ShopifyClient(options);
+  }
+
+  getAuthorizationInstructions() {
+    return {
+      platformId: this.id,
+      authType: this.platform.authType,
+      summary: "Create a Shopify custom app for the store and paste its Admin API access token.",
+      steps: [
+        "In Shopify Admin, create or select a custom app for the store.",
+        `Grant the minimum required Admin API scopes: ${this.platform.scopes.join(", ")}.`,
+        "Install the app and copy its Admin API access token.",
+        "Enter the canonical name.myshopify.com domain and the token, then choose Save and validate."
+      ],
+      scopes: [...this.platform.scopes],
+      reviewRequirement: this.platform.reviewRequirement,
+      docsUrl: this.platform.docsUrl
+    };
+  }
+
+  validateConfiguration(credentials = {}) {
+    const missing = this.platform.credentialFields.filter((field) => !credentials[field.key]).map((field) => field.key);
+    if (missing.length) {
+      throw connectorError(
+        CONNECTOR_ERROR_CATEGORIES.VALIDATION,
+        "CONNECTOR_NOT_CONFIGURED",
+        "Add the required Shopify credentials before connecting.",
+        { platformId: this.id }
+      );
+    }
+    // Surfaces a malformed domain before any network request is attempted.
+    normalizeShopifyDomain(credentials.storeDomain);
+    return { valid: true, missing: [] };
+  }
+
+  async testConnection(credentials = {}) {
+    try {
+      this.validateConfiguration(credentials);
+      const snapshot = await this.client.sync(credentials);
+      return {
+        status: snapshot.status,
+        error: snapshot.error,
+        syncedAt: snapshot.syncedAt,
+        business: snapshot.business,
+        auditDetail: `Synchronized ${snapshot.business.name} through the official Shopify Admin API.`
+      };
+    } catch (error) {
+      throw asShopifyConnectorError(error);
+    }
+  }
+}
+
+module.exports = {
+  ORDERS_QUERY,
+  PRODUCTS_QUERY,
+  SHOP_QUERY,
+  SHOPIFY_ERROR_CATEGORIES,
+  ShopifyClient,
+  ShopifyConnector,
+  aggregateWeeklyRevenue,
+  asShopifyConnectorError,
+  normalizeBusiness
+};

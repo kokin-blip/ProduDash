@@ -176,7 +176,11 @@ if (hasSingleInstanceLock) {
         }
       });
       store.notices.push(...advisorHistory.getNotices());
-      const connections = new ConnectionService({ store, shopify: connectors.shopify, providerService: providers });
+      const connections = new ConnectionService({
+        store,
+        connectorRegistry: connectors.connectorRegistry,
+        providerService: providers
+      });
       protocol.handle("produdash-media", createMediaProtocolHandler(mediaLibrary, brandAssets, mediaJobs));
       registerIpc({ store, connections, providers, mediaLibrary, projects, templates, brandAssets, mediaJobs, advisor, appUrl, shell });
       await mediaJobs.initialize();

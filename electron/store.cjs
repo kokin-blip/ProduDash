@@ -6,6 +6,7 @@ const { AppError } = require("./errors.cjs");
 const { clone, loadRecoverableState } = require("./state-schema.cjs");
 const { writeJsonAtomic } = require("./atomic-json.cjs");
 const { buildAnalyticsReport } = require("./analytics-report.cjs");
+const { getPlatform } = require("./platforms/registry.cjs");
 const {
   boundedString,
   normalizeShopifyDomain,
@@ -453,12 +454,13 @@ class ProduDashStore {
       setting.configuredFields = [];
       setting.status = "missing";
       setting.updatedAt = new Date().toISOString();
+      const platform = getPlatform(integrationId);
       const integration = integrationById(this.state, integrationId);
-      integration.status = integration.id === "stripe" ? "planned" : "disconnected";
+      integration.status = platform.defaultStatus;
       integration.lastSync = "Not connected";
       integration.error = null;
-      if (integrationId === "shopify") {
-        for (const business of this.state.businesses.filter((item) => item.source === "shopify"))
+      if (platform.capabilities.ownsBusinessRecords) {
+        for (const business of this.state.businesses.filter((item) => item.source === integrationId))
           business.connectionStatus = "disconnected";
       }
       this.audit("credentials", `Removed secure credentials for ${setting.name}; imported snapshots were retained.`);
@@ -523,17 +525,30 @@ class ProduDashStore {
     });
   }
 
-  async applyShopifySync(snapshot) {
+  // Applies a connection result that carried a business snapshot. Only platforms
+  // declaring ownsBusinessRecords produce one; everything else goes through
+  // setIntegrationResult instead.
+  async applyConnectorSnapshot(integrationId, snapshot) {
+    const platform = getPlatform(integrationId);
+    if (!platform.capabilities.ownsBusinessRecords) {
+      throw new AppError("INTEGRATION_UNAVAILABLE", `${platform.displayName} does not import business records.`);
+    }
     return this.enqueueMutation(async () => {
-      const integration = integrationById(this.state, "shopify");
-      const existing = this.state.businesses.find((business) => business.shopifyShopId === snapshot.business.shopifyShopId);
+      const integration = integrationById(this.state, integrationId);
+      // Business ids are derived deterministically from the provider's own
+      // account id, so matching on id is equivalent to matching the raw
+      // provider key while staying platform-neutral.
+      const existing = this.state.businesses.find((business) => business.source === integrationId && business.id === snapshot.business.id);
       if (existing) Object.assign(existing, snapshot.business);
       else this.state.businesses.unshift(snapshot.business);
       integration.status = snapshot.status;
       integration.lastSync = snapshot.syncedAt;
       integration.error = snapshot.error || null;
       this.state.selectedBusinessId = snapshot.business.id;
-      this.audit("shopify_sync", `Synchronized ${snapshot.business.name} through the official Shopify Admin API.`);
+      this.audit(
+        `${integrationId}_sync`,
+        snapshot.auditDetail || `Synchronized ${snapshot.business.name} through the official ${platform.displayName} API.`
+      );
       this.persist();
       return this.getAppState();
     });

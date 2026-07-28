@@ -1,6 +1,8 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { ConnectionService } = require("../electron/connections.cjs");
+const { createConnectorRegistry } = require("../electron/connectors.cjs");
+const { ShopifyConnector } = require("../electron/connectors/shopify.cjs");
 const { ProviderRegistry } = require("../electron/ai/provider-registry.cjs");
 const { ProviderService } = require("../electron/ai/provider-service.cjs");
 const { createHarness } = require("./helpers.cjs");
@@ -57,7 +59,10 @@ test("Shopify refresh creates and then updates one business record", async (t) =
       };
     }
   };
-  const service = new ConnectionService({ store: harness.store, shopify, providerService: {} });
+  // Drive the real connector with an injected client so the contract and result
+  // normalization are exercised rather than bypassed.
+  const connectorRegistry = createConnectorRegistry({ shopifyConnector: new ShopifyConnector({ client: shopify }) });
+  const service = new ConnectionService({ store: harness.store, connectorRegistry, providerService: {} });
   await service.refreshIntegration("shopify");
   const state = await service.refreshIntegration("shopify");
   assert.equal(state.businesses.length, 1);

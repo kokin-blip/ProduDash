@@ -9,6 +9,7 @@ const { rebaseTranscript } = require("./projects/render-plan.cjs");
 const { assertPortableDocument, normalizeTemplateSettings } = require("./projects/template-store.cjs");
 const { scanLocalVoiceCompatibility } = require("./ai/local-voice-compatibility.cjs");
 const { analyticsReportCsv } = require("./analytics-report.cjs");
+const { hasCapability } = require("./platforms/registry.cjs");
 
 function createTrustedSender(appUrl) {
   return (event) => {
@@ -149,7 +150,7 @@ function createHandlers({
     "produdash:saveIntegrationCredentials": async (_event, payload) => {
       const state = await store.saveIntegrationCredentials(payload?.integrationId, payload?.values);
       const setting = state.credentialSettings.find((item) => item.id === payload?.integrationId);
-      if (setting?.status === "stored" && payload.integrationId === "shopify") {
+      if (setting?.status === "stored" && hasCapability(payload?.integrationId, "autoVerifyOnSave")) {
         return connections.refreshIntegration(payload.integrationId);
       }
       return state;
