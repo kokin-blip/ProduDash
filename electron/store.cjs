@@ -7,6 +7,8 @@ const { clone, loadRecoverableState } = require("./state-schema.cjs");
 const { writeJsonAtomic } = require("./atomic-json.cjs");
 const { buildAnalyticsReport } = require("./analytics-report.cjs");
 const { getPlatform } = require("./platforms/registry.cjs");
+const { DISPATCHABLE_STATUSES, POST_PLAN_STATUSES, assertTransition } = require("./publishing/post-status.cjs");
+const { isAlreadyPublished, normalizeReceipt } = require("./publishing/receipt.cjs");
 const { TOKEN_VAULT_KEYS, createAuthorizationRecord, normalizeAuthorizationRecord } = require("./platforms/authorization.cjs");
 const {
   boundedString,
@@ -849,6 +851,7 @@ class ProduDashStore {
         },
         approvalSnapshot: null,
         exportReceipt: null,
+        publicationReceipts: [],
         canceledAt: null,
         status: "needs_approval",
         policyGate: "Human approval is required before manual export or any future official API publishing path.",
@@ -934,6 +937,73 @@ class ProduDashStore {
         snapshotHash: plan.approvalSnapshot?.hash || null
       };
       this.audit("publisher", `Marked approved post plan export-ready: ${plan.title}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  requirePostPlan(planId) {
+    const plan = this.state.postQueue.find((item) => item.id === planId);
+    if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
+    return plan;
+  }
+
+  // Moves an approved plan into dispatch. Retrying a failed dispatch is allowed
+  // and safe: the idempotency keys in the approval snapshot are what prevent a
+  // second upload of the same approved content.
+  async beginPostPlanDispatch(planId) {
+    requireId(planId, "Post plan");
+    return this.enqueueMutation(async () => {
+      const plan = this.requirePostPlan(planId);
+      if (!DISPATCHABLE_STATUSES.has(plan.status)) {
+        throw new AppError("INVALID_TRANSITION", "Approve this plan for official API publishing first.");
+      }
+      if (!plan.approvalSnapshot) throw new AppError("INVALID_TRANSITION", "This plan has no approval snapshot.");
+      assertTransition(plan.status, POST_PLAN_STATUSES.DISPATCHING);
+      plan.status = POST_PLAN_STATUSES.DISPATCHING;
+      this.audit("publisher", `Started official API publishing for ${plan.title}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  // Receipts are keyed by idempotency key, so re-recording an attempt updates
+  // the existing receipt rather than accumulating duplicates.
+  async recordPublicationReceipt(planId, receipt) {
+    requireId(planId, "Post plan");
+    const normalized = normalizeReceipt(receipt);
+    if (!normalized || normalized.planId !== planId) {
+      throw new AppError("INVALID_INPUT", "The publication receipt is invalid.");
+    }
+    return this.enqueueMutation(async () => {
+      const plan = this.requirePostPlan(planId);
+      const index = plan.publicationReceipts.findIndex((item) => item.idempotencyKey === normalized.idempotencyKey);
+      if (index >= 0) plan.publicationReceipts[index] = normalized;
+      else plan.publicationReceipts.push(normalized);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  // A plan is published only when every approved destination produced a
+  // publication; anything else is a truthful dispatch failure.
+  async completePostPlanDispatch(planId) {
+    requireId(planId, "Post plan");
+    return this.enqueueMutation(async () => {
+      const plan = this.requirePostPlan(planId);
+      if (plan.status !== POST_PLAN_STATUSES.DISPATCHING) return this.getAppState();
+      const expected = plan.approvalSnapshot?.destinations || [];
+      const published = expected.every((destination) =>
+        plan.publicationReceipts.some((receipt) => receipt.idempotencyKey === destination.idempotencyKey && isAlreadyPublished(receipt))
+      );
+      const target = published ? POST_PLAN_STATUSES.PUBLISHED : POST_PLAN_STATUSES.DISPATCH_FAILED;
+      assertTransition(plan.status, target);
+      plan.status = target;
+      if (published) plan.publishedAt = new Date().toISOString();
+      this.audit(
+        "publisher",
+        published ? `Published ${plan.title} to every approved destination.` : `Official API publishing did not complete for ${plan.title}.`
+      );
       this.persist();
       return this.getAppState();
     });

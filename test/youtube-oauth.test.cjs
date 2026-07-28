@@ -341,6 +341,149 @@ test("disconnect revokes at Google and tolerates an already-invalid token", asyn
   assert.deepEqual(await nothing.connector.disconnect({}), { revoked: false, reason: "no_token" });
 });
 
+// --- Upload ----------------------------------------------------------------
+
+function uploadResponse(body, { status = 200, headers = {} } = {}) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
+    json: async () => body
+  };
+}
+
+test("publishing opens a resumable session then uploads the bytes", async () => {
+  const { connector, requests } = createConnector({
+    responses: [
+      uploadResponse({}, { headers: { location: "https://upload.example/session-1" } }),
+      uploadResponse({ id: "vid-1", status: { privacyStatus: "private", uploadStatus: "uploaded" } }, { status: 201 })
+    ]
+  });
+  const result = await connector.publish({
+    accessToken: "at",
+    title: "Title",
+    description: "Body",
+    privacyStatus: "private",
+    media: { body: "bytes", contentLength: 5, contentType: "video/mp4" }
+  });
+
+  const initiate = new URL(requests[0].url);
+  assert.equal(initiate.searchParams.get("uploadType"), "resumable");
+  assert.equal(initiate.searchParams.get("part"), "snippet,status");
+  assert.equal(requests[0].options.headers["X-Upload-Content-Length"], "5");
+  assert.equal(requests[0].options.headers["X-Upload-Content-Type"], "video/mp4");
+  assert.deepEqual(JSON.parse(requests[0].options.body).snippet, { title: "Title", description: "Body" });
+
+  // Bytes go to the session URI from the Location header, not the API endpoint.
+  assert.equal(requests[1].url, "https://upload.example/session-1");
+  assert.equal(requests[1].options.method, "PUT");
+  assert.equal(result.publicationId, "vid-1");
+});
+
+test("privacy defaults to private and reports what YouTube actually applied", async () => {
+  const { connector, requests } = createConnector({
+    responses: [
+      uploadResponse({}, { headers: { location: "https://upload.example/s" } }),
+      // An unaudited project has its uploads forced to private regardless.
+      uploadResponse({ id: "vid-2", status: { privacyStatus: "private" } }, { status: 201 })
+    ]
+  });
+  const result = await connector.publish({
+    accessToken: "at",
+    title: "T",
+    privacyStatus: "public",
+    media: { body: "b", contentLength: 1 }
+  });
+  assert.equal(result.requestedPrivacyStatus, "public");
+  assert.equal(result.privacyStatus, "private");
+
+  // An unrecognized privacy value falls back to private, never to public.
+  const fallback = createConnector({
+    responses: [uploadResponse({}, { headers: { location: "https://u/s" } }), uploadResponse({ id: "v" }, { status: 201 })]
+  });
+  await fallback.connector.publish({ accessToken: "at", title: "T", privacyStatus: "everyone", media: { body: "b", contentLength: 1 } });
+  assert.equal(JSON.parse(fallback.requests[0].options.body).status.privacyStatus, "private");
+  assert.equal(requests.length, 2);
+});
+
+test("a session that Google refuses to open is an upload failure", async () => {
+  const { connector } = createConnector({ responses: [uploadResponse({}, { headers: {} })] });
+  await assert.rejects(() => connector.publish({ accessToken: "at", title: "T", media: { body: "b", contentLength: 1 } }), {
+    code: "YOUTUBE_NO_UPLOAD_SESSION"
+  });
+});
+
+test("publishing refuses unreadable media and missing authorization", async () => {
+  const { connector } = createConnector();
+  await assert.rejects(() => connector.publish({ title: "T", media: { body: "b", contentLength: 1 } }), {
+    code: "YOUTUBE_NOT_AUTHORIZED"
+  });
+  await assert.rejects(() => connector.publish({ accessToken: "at", title: "T", media: { body: null, contentLength: 0 } }), {
+    code: "YOUTUBE_MEDIA_UNREADABLE"
+  });
+});
+
+test("an aborted upload reports cancellation and keeps the session for resuming", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const { connector } = createConnector({
+    responses: [uploadResponse({}, { headers: { location: "https://upload.example/resume-me" } })]
+  });
+  await assert.rejects(
+    () =>
+      connector.publish({
+        accessToken: "at",
+        title: "T",
+        media: { body: "b", contentLength: 1 },
+        signal: controller.signal
+      }),
+    (error) => {
+      assert.equal(error.code, "YOUTUBE_UPLOAD_CANCELED");
+      assert.equal(error.category, "upload");
+      return true;
+    }
+  );
+});
+
+test("an interrupted upload resumes from the byte count Google reports", async () => {
+  const { connector } = createConnector({
+    responses: [uploadResponse({}, { status: 308, headers: { range: "bytes=0-999" } })]
+  });
+  const probe = await connector.probeUploadOffset("https://upload.example/s", "at", 5000);
+  assert.deepEqual(probe, { completed: false, offset: 1000 });
+
+  const finished = createConnector({ responses: [uploadResponse({ id: "vid-9" }, { status: 200 })] });
+  const done = await finished.connector.probeUploadOffset("https://upload.example/s", "at", 5000);
+  assert.equal(done.completed, true);
+});
+
+test("publication status never claims public until YouTube says so", async () => {
+  const processing = createConnector({
+    responses: [
+      uploadResponse({
+        items: [{ status: { uploadStatus: "uploaded", privacyStatus: "private" }, processingDetails: { processingStatus: "processing" } }]
+      })
+    ]
+  });
+  const pending = await processing.connector.getPublishingStatus({ accessToken: "at", publicationId: "v1" });
+  assert.equal(pending.complete, false);
+  assert.equal(pending.failed, false);
+  assert.equal(pending.privacyStatus, "private");
+
+  const done = createConnector({
+    responses: [uploadResponse({ items: [{ status: { uploadStatus: "processed", privacyStatus: "public" } }] })]
+  });
+  assert.equal((await done.connector.getPublishingStatus({ accessToken: "at", publicationId: "v1" })).complete, true);
+
+  const rejected = createConnector({ responses: [uploadResponse({ items: [{ status: { uploadStatus: "rejected" } }] })] });
+  assert.equal((await rejected.connector.getPublishingStatus({ accessToken: "at", publicationId: "v1" })).failed, true);
+
+  const gone = createConnector({ responses: [uploadResponse({ items: [] })] });
+  await assert.rejects(() => gone.connector.getPublishingStatus({ accessToken: "at", publicationId: "v1" }), {
+    code: "YOUTUBE_VIDEO_NOT_FOUND"
+  });
+});
+
 test("setup instructions state the audit limitation up front", () => {
   const { connector } = createConnector();
   const instructions = connector.getAuthorizationInstructions();

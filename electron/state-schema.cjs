@@ -5,6 +5,8 @@ const { AppError } = require("./errors.cjs");
 const { createInitialState } = require("./initial-state.cjs");
 const { CREATOR_PLATFORM_IDS } = require("./platforms/registry.cjs");
 const { normalizeAuthorizationRecord, validateAuthorizationRecord } = require("./platforms/authorization.cjs");
+const { STATUS_VALUES: POST_PLAN_STATUS_VALUES } = require("./publishing/post-status.cjs");
+const { normalizeReceipt, validateReceipt } = require("./publishing/receipt.cjs");
 const { preserveFile, readJson, writeJsonAtomic } = require("./atomic-json.cjs");
 
 const { CURRENT_SCHEMA_VERSION, MINIMUM_SUPPORTED_SCHEMA_VERSION } = require("./schema-version.cjs");
@@ -118,6 +120,9 @@ function withDefaults(state) {
             mediaSnapshot: plan.mediaSnapshot && typeof plan.mediaSnapshot === "object" ? plan.mediaSnapshot : null,
             approvalSnapshot: plan.approvalSnapshot && typeof plan.approvalSnapshot === "object" ? plan.approvalSnapshot : null,
             exportReceipt: plan.exportReceipt && typeof plan.exportReceipt === "object" ? plan.exportReceipt : null,
+            publicationReceipts: Array.isArray(plan.publicationReceipts)
+              ? plan.publicationReceipts.map(normalizeReceipt).filter(Boolean)
+              : [],
             canceledAt: typeof plan.canceledAt === "string" ? plan.canceledAt : null
           };
         })
@@ -222,6 +227,22 @@ function migrateState(input) {
         ? state.integrations.map((integration) => ({
             ...integration,
             authorization: normalizeAuthorizationRecord(integration?.authorization)
+          }))
+        : []
+    };
+  }
+  if (state.schemaVersion === 8) {
+    // Give every post plan a publication receipt list. Defaults first, so an
+    // existing list survives.
+    state = {
+      ...state,
+      schemaVersion: 9,
+      postQueue: Array.isArray(state.postQueue)
+        ? state.postQueue.map((plan) => ({
+            ...plan,
+            publicationReceipts: Array.isArray(plan?.publicationReceipts)
+              ? plan.publicationReceipts.map(normalizeReceipt).filter(Boolean)
+              : []
           }))
         : []
     };
@@ -544,7 +565,7 @@ function validateState(state) {
     }
   }
   const postPlanIds = new Set();
-  const postStatuses = new Set(["needs_approval", "approved_for_manual_export", "approved_for_official_api", "export_ready", "canceled"]);
+  const postStatuses = POST_PLAN_STATUS_VALUES;
   for (const plan of state.postQueue) {
     if (
       typeof plan.id !== "string" ||
@@ -656,6 +677,14 @@ function validateState(state) {
         (plan.exportReceipt.snapshotHash !== null && !/^[a-f0-9]{64}$/.test(plan.exportReceipt.snapshotHash)))
     ) {
       throw new AppError("INVALID_STATE", "The saved publishing export receipt is invalid.");
+    }
+    // Publication receipts must stay free of tokens, secrets, and absolute
+    // paths, and must belong to this plan.
+    if (
+      !Array.isArray(plan.publicationReceipts) ||
+      plan.publicationReceipts.some((receipt) => !validateReceipt(receipt) || receipt.planId !== plan.id)
+    ) {
+      throw new AppError("INVALID_STATE", "The saved publication receipts are invalid.");
     }
   }
   if (

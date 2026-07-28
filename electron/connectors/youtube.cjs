@@ -21,6 +21,16 @@ const AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const REVOCATION_ENDPOINT = "https://oauth2.googleapis.com/revoke";
 const CHANNELS_ENDPOINT = "https://www.googleapis.com/youtube/v3/channels";
+const UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/youtube/v3/videos";
+const VIDEOS_ENDPOINT = "https://www.googleapis.com/youtube/v3/videos";
+
+// Google's resumable protocol answers a zero-length probe PUT with 308 and a
+// Range header describing what it already has.
+const RESUME_INCOMPLETE = 308;
+
+// ProduDash never publishes publicly on the user's behalf without them saying
+// so; private is the only default that cannot surprise anyone.
+const PRIVACY_STATUSES = Object.freeze(new Set(["private", "unlisted", "public"]));
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 // Refresh slightly early so a request cannot start with a token that expires
@@ -67,7 +77,13 @@ class YouTubeConnector {
     const platform = getPlatform("youtube");
     this.id = platform.id;
     this.platform = platform;
-    this.capabilities = [CONNECTOR_CAPABILITIES.AUTHORIZE, CONNECTOR_CAPABILITIES.REFRESH, CONNECTOR_CAPABILITIES.DISCONNECT];
+    this.capabilities = [
+      CONNECTOR_CAPABILITIES.AUTHORIZE,
+      CONNECTOR_CAPABILITIES.REFRESH,
+      CONNECTOR_CAPABILITIES.PUBLISH,
+      CONNECTOR_CAPABILITIES.PUBLISHING_STATUS,
+      CONNECTOR_CAPABILITIES.DISCONNECT
+    ];
     this.transport = options.transport || fetch;
     this.timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
     // Injected so tests never open a browser and never bind a socket.
@@ -314,6 +330,167 @@ class YouTubeConnector {
         ...(grantedScopes ? { grantedScopes } : {}),
         selectedAccount: channel
       }
+    };
+  }
+
+  // Opens a resumable session and returns its upload URI. Documented at
+  // https://developers.google.com/youtube/v3/guides/using_resumable_upload_protocol
+  async createUploadSession({ accessToken, metadata, contentLength, contentType }) {
+    const url = new URL(UPLOAD_ENDPOINT);
+    url.searchParams.set("uploadType", "resumable");
+    url.searchParams.set("part", "snippet,status");
+    const response = await this.transport(url.toString(), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Length": String(contentLength),
+        "X-Upload-Content-Type": contentType
+      },
+      body: JSON.stringify(metadata)
+    });
+    if (!response.ok) throw safeGoogleError(response.status, { duringUpload: true });
+    const uploadUri = response.headers?.get?.("location");
+    if (!uploadUri) {
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.UPLOAD, "YOUTUBE_NO_UPLOAD_SESSION", "YouTube did not open an upload session.", {
+        platformId: this.id
+      });
+    }
+    return uploadUri;
+  }
+
+  // Asks Google how many bytes it already holds, so an interrupted upload
+  // resumes instead of restarting.
+  async probeUploadOffset(uploadUri, accessToken, contentLength) {
+    const response = await this.transport(uploadUri, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Range": `bytes */${contentLength}`,
+        "Content-Length": "0"
+      }
+    });
+    if (response.status === RESUME_INCOMPLETE) {
+      const range = response.headers?.get?.("range");
+      const match = /bytes=0-(\d+)$/.exec(range || "");
+      return { completed: false, offset: match ? Number(match[1]) + 1 : 0 };
+    }
+    if (response.ok) return { completed: true, body: await response.json() };
+    throw safeGoogleError(response.status, { duringUpload: true });
+  }
+
+  buildVideoMetadata(request) {
+    const privacyStatus = PRIVACY_STATUSES.has(request.privacyStatus) ? request.privacyStatus : "private";
+    return {
+      snippet: {
+        title: boundedString(request.title, { label: "Video title", min: 1, max: 100 }),
+        description: boundedString(request.description || "", { label: "Video description", max: 5000 })
+      },
+      status: {
+        privacyStatus,
+        // Required by YouTube; ProduDash does not guess on the user's behalf.
+        selfDeclaredMadeForKids: request.selfDeclaredMadeForKids === true
+      }
+    };
+  }
+
+  // Uploads one rendered video. The caller supplies the bytes; this connector
+  // never resolves a filesystem path itself.
+  async publish(request = {}) {
+    const accessToken = request.accessToken;
+    if (!accessToken) {
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION, "YOUTUBE_NOT_AUTHORIZED", "Authorize YouTube before publishing.", {
+        platformId: this.id
+      });
+    }
+    const { body, contentLength, contentType = "video/*" } = request.media || {};
+    if (!body || !Number.isFinite(contentLength) || contentLength <= 0) {
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.VALIDATION, "YOUTUBE_MEDIA_UNREADABLE", "The rendered video could not be read.", {
+        platformId: this.id
+      });
+    }
+
+    const metadata = this.buildVideoMetadata(request);
+    const uploadUri = request.uploadUri || (await this.createUploadSession({ accessToken, metadata, contentLength, contentType }));
+    // Surfaced so a caller can resume rather than restart after a crash.
+    const session = { uploadUri };
+
+    if (request.signal?.aborted) {
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.UPLOAD, "YOUTUBE_UPLOAD_CANCELED", "The upload was canceled.", {
+        platformId: this.id,
+        session
+      });
+    }
+
+    let response;
+    try {
+      response = await this.transport(uploadUri, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": contentType,
+          "Content-Length": String(contentLength)
+        },
+        body,
+        signal: request.signal
+      });
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw connectorError(CONNECTOR_ERROR_CATEGORIES.UPLOAD, "YOUTUBE_UPLOAD_CANCELED", "The upload was canceled.", {
+          platformId: this.id,
+          session
+        });
+      }
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.NETWORK, "YOUTUBE_UPLOAD_INTERRUPTED", "The upload was interrupted.", {
+        platformId: this.id,
+        session,
+        cause: error
+      });
+    }
+    if (!response.ok) throw safeGoogleError(response.status, { duringUpload: true });
+
+    const video = await response.json();
+    if (!video?.id) {
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.PROCESSING, "YOUTUBE_NO_VIDEO_ID", "YouTube did not return a video id.", {
+        platformId: this.id
+      });
+    }
+    return {
+      publicationId: String(video.id),
+      // Report what YouTube actually set, which is not necessarily what was
+      // requested: an unaudited project has its uploads forced to private.
+      privacyStatus: video.status?.privacyStatus || null,
+      uploadStatus: video.status?.uploadStatus || null,
+      requestedPrivacyStatus: metadata.status.privacyStatus
+    };
+  }
+
+  // Coarse status only. Never claims a video is public until YouTube says so.
+  async getPublishingStatus({ accessToken, publicationId } = {}) {
+    if (!accessToken || !publicationId) {
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.VALIDATION, "YOUTUBE_STATUS_UNAVAILABLE", "A video id is required.", {
+        platformId: this.id
+      });
+    }
+    const url = new URL(VIDEOS_ENDPOINT);
+    url.searchParams.set("part", "status,processingDetails");
+    url.searchParams.set("id", publicationId);
+    const body = await this.request(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+    const video = Array.isArray(body.items) ? body.items[0] : null;
+    if (!video) {
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.PROCESSING, "YOUTUBE_VIDEO_NOT_FOUND", "YouTube no longer reports that video.", {
+        platformId: this.id
+      });
+    }
+    const uploadStatus = video.status?.uploadStatus || null;
+    return {
+      publicationId,
+      uploadStatus,
+      privacyStatus: video.status?.privacyStatus || null,
+      processingStatus: video.processingDetails?.processingStatus || null,
+      // "processed" is the only value that means YouTube finished with it.
+      complete: uploadStatus === "processed",
+      failed: uploadStatus === "failed" || uploadStatus === "rejected"
     };
   }
 

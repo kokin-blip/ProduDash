@@ -11,7 +11,7 @@
 //
 // Migration steps deliberately keep their own literal target versions -- a
 // migration is pinned to the shape it produces and must not follow this value.
-const CURRENT_SCHEMA_VERSION = 8;
+const CURRENT_SCHEMA_VERSION = 9;
 
 // The oldest schema ProduDash can migrate forward. Anything below this is
 // refused rather than guessed at.

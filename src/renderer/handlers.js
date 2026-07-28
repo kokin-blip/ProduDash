@@ -986,6 +986,24 @@ async function handleClick(event) {
     return;
   }
 
+  const dispatchPostButton = event.target.closest("[data-dispatch-post]");
+  if (dispatchPostButton) {
+    // Publishing sends media to a real account, so it needs its own explicit
+    // confirmation even though the plan was already approved.
+    if (
+      !window.confirm("Publish this approved plan to every connected destination? This uploads the rendered video to your own account.")
+    ) {
+      return;
+    }
+    await runAction(
+      `dispatch-post-${dispatchPostButton.dataset.dispatchPost}`,
+      dispatchPostButton,
+      () => api.dispatchPostPlan(dispatchPostButton.dataset.dispatchPost),
+      { celebrate: true }
+    );
+    return;
+  }
+
   const cancelPostButton = event.target.closest("[data-cancel-post]");
   if (cancelPostButton) {
     if (!window.confirm("Cancel this local post plan? Rendered media and exported files will not be deleted.")) return;

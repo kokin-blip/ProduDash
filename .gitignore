@@ -10,3 +10,7 @@ assets/advisor/**/.sprite-forge-cache/
 .env
 .env.*
 !.env.example
+
+# Owner-supplied credentials for the opt-in live connector acceptance scripts.
+# These are never committed and never packaged.
+scripts/acceptance/*.local.json

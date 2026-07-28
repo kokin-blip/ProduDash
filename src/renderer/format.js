@@ -48,7 +48,9 @@ export function levelClass(value) {
 
 export function statusTone(value) {
   const normalized = String(value || "").toLowerCase();
-  if (["connected", "complete", "completed", "enabled", "export_ready", "approved", "available", "current"].includes(normalized))
+  if (
+    ["connected", "complete", "completed", "enabled", "export_ready", "approved", "available", "current", "published"].includes(normalized)
+  )
     return "success";
   if (
     [
@@ -64,12 +66,15 @@ export function statusTone(value) {
       "processing",
       "awaiting_review",
       "canceling",
+      "dispatching",
+      "uploading",
       "aging",
       "stale"
     ].includes(normalized)
   )
     return "warning";
-  if (["error", "failed", "critical", "blocked", "corrupt", "permission_denied", "interrupted"].includes(normalized)) return "danger";
+  if (["error", "failed", "critical", "blocked", "corrupt", "permission_denied", "interrupted", "dispatch_failed"].includes(normalized))
+    return "danger";
   if (
     ["disconnected", "missing", "offline", "unsupported", "planned", "waiting_for_connection", "unknown", "canceled"].includes(normalized)
   )

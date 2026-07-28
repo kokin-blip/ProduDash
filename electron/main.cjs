@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, Menu, protocol, safeStorage, session, shell,
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { createConnectors } = require("./connectors.cjs");
+const { PublishingDispatchService } = require("./publishing/dispatch-service.cjs");
 const { ConnectionService } = require("./connections.cjs");
 const { CredentialVault, createSafeStorageAdapter } = require("./credential-vault.cjs");
 const { AppError } = require("./errors.cjs");
@@ -182,8 +183,28 @@ if (hasSingleInstanceLock) {
         connectorRegistry: connectors.connectorRegistry,
         providerService: providers
       });
+      const publishing = new PublishingDispatchService({
+        store,
+        connectorRegistry: connectors.connectorRegistry,
+        connections,
+        mediaJobs
+      });
       protocol.handle("produdash-media", createMediaProtocolHandler(mediaLibrary, brandAssets, mediaJobs));
-      registerIpc({ store, connections, providers, mediaLibrary, projects, templates, brandAssets, mediaJobs, advisor, appUrl, shell });
+      registerIpc({
+        store,
+        connections,
+        connectorRegistry: connectors.connectorRegistry,
+        publishing,
+        providers,
+        mediaLibrary,
+        projects,
+        templates,
+        brandAssets,
+        mediaJobs,
+        advisor,
+        appUrl,
+        shell
+      });
       await mediaJobs.initialize();
       Menu.setApplicationMenu(null);
       createWindow();

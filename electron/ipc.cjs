@@ -32,6 +32,8 @@ function createTrustedSender(appUrl) {
 function createHandlers({
   store,
   connections,
+  connectorRegistry,
+  publishing,
   providers,
   mediaLibrary,
   projects,
@@ -417,7 +419,22 @@ function createHandlers({
     "produdash:approvePostPlan": async (_event, payload) => store.approvePostPlan(payload?.planId, payload?.mode),
     "produdash:exportPostPackage": async (event, payload) => exportPostPackage(event, payload?.planId),
     "produdash:exportAnalyticsReport": async (event, payload) => exportAnalyticsReport(event, payload?.businessId, payload?.rangeDays),
-    "produdash:cancelPostPlan": async (_event, payload) => store.cancelPostPlan(payload?.planId)
+    "produdash:cancelPostPlan": async (_event, payload) => store.cancelPostPlan(payload?.planId),
+    "produdash:dispatchPostPlan": async (_event, payload) => {
+      if (!publishing) throw new AppError("PUBLISHING_UNSUPPORTED", "Official API publishing is unavailable.");
+      return publishing.dispatch(payload?.planId);
+    },
+    "produdash:refreshPublicationStatus": async (_event, payload) => {
+      if (!publishing) throw new AppError("PUBLISHING_UNSUPPORTED", "Official API publishing is unavailable.");
+      return publishing.refreshPublicationStatus(payload?.planId, payload?.platformId);
+    },
+    "produdash:authorizeIntegration": async (_event, payload) => connections.authorizeIntegration(payload?.integrationId),
+    "produdash:disconnectIntegration": async (_event, payload) => connections.disconnectIntegration(payload?.integrationId),
+    "produdash:getAuthorizationInstructions": async (_event, payload) => {
+      const connector = connectorRegistry?.find(payload?.integrationId);
+      if (!connector) throw new AppError("INTEGRATION_UNAVAILABLE", "That integration has no connector yet.");
+      return connector.getAuthorizationInstructions();
+    }
   };
 
   return Object.fromEntries(
@@ -436,7 +453,21 @@ function createHandlers({
   );
 }
 
-function registerIpc({ store, connections, providers, mediaLibrary, projects, templates, brandAssets, mediaJobs, advisor, appUrl, shell }) {
+function registerIpc({
+  store,
+  connections,
+  connectorRegistry,
+  publishing,
+  providers,
+  mediaLibrary,
+  projects,
+  templates,
+  brandAssets,
+  mediaJobs,
+  advisor,
+  appUrl,
+  shell
+}) {
   const folderDialogOptions = {
     title: "Add folders to Clip Library",
     properties: ["openDirectory", "multiSelections"],
@@ -758,6 +789,8 @@ function registerIpc({ store, connections, providers, mediaLibrary, projects, te
   const handlers = createHandlers({
     store,
     connections,
+    connectorRegistry,
+    publishing,
     providers,
     mediaLibrary,
     projects,

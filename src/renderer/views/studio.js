@@ -692,11 +692,44 @@ function renderClipJob(job) {
   `;
 }
 
+// Shows what actually happened per destination. Never claims a publication the
+// provider did not confirm, and never renders anything but a safe error code.
+function renderPublicationReceipts(receipts) {
+  if (!receipts.length) return "";
+  return `
+    <div class="publication-receipts">
+      <strong>Publication record</strong>
+      ${receipts
+        .map((receipt) => {
+          const outcome =
+            receipt.status === "published" && receipt.providerPublicationId
+              ? `Published · ${escapeHtml(receipt.providerPublicationId)}`
+              : receipt.status === "failed"
+                ? `Failed · ${escapeHtml(receipt.errorCode || "UNKNOWN")}${receipt.retryable ? " · retry available" : " · not retryable"}`
+                : escapeHtml(statusLabel(receipt.status));
+          const attempts = asArray(receipt.attempts);
+          const last = attempts[attempts.length - 1];
+          return `<div class="publication-receipt">
+            <span>${escapeHtml(platformName(receipt.platformId))}</span>
+            <span>${outcome}</span>
+            <small>${escapeHtml(
+              `${attempts.length} attempt${attempts.length === 1 ? "" : "s"}${last?.endedAt ? ` · last ${formatDate(last.endedAt)}` : ""}`
+            )}</small>
+          </div>`;
+        })
+        .join("")}
+    </div>`;
+}
+
 function renderPostPlan(plan) {
   const platforms = asArray(plan.platforms);
   const officialReady = platforms.length > 0 && platforms.every((platform) => integrationReady(platform));
-  const canCancel = ["needs_approval", "approved_for_manual_export", "approved_for_official_api"].includes(plan.status);
+  // Mirrors electron/publishing/post-status.cjs. A dispatch in flight cannot be
+  // canceled locally, and published plans are terminal.
+  const canCancel = ["needs_approval", "approved_for_manual_export", "approved_for_official_api", "dispatch_failed"].includes(plan.status);
   const editable = plan.status === "needs_approval";
+  const canDispatch = ["approved_for_official_api", "dispatch_failed"].includes(plan.status) && Boolean(plan.approvalSnapshot);
+  const receipts = asArray(plan.publicationReceipts);
   const packages = platforms.map(
     (platformId) =>
       asArray(plan.platformPackages).find((item) => item.platformId === platformId) || {
@@ -765,6 +798,18 @@ function renderPostPlan(plan) {
             : ""
         }
         ${
+          canDispatch
+            ? `<button class="primary-button small" type="button" data-dispatch-post="${escapeHtml(plan.id)}" data-pending-label="Publishing…">${
+                plan.status === "dispatch_failed" ? "Retry publishing" : "Publish to approved destinations"
+              }</button>`
+            : ""
+        }
+        ${
+          plan.status === "dispatching"
+            ? `<span class="compact-note">Publishing in progress. Do not close ProduDash until it finishes.</span>`
+            : ""
+        }
+        ${
           canCancel
             ? `<button class="text-button danger-text" type="button" data-cancel-post="${escapeHtml(
                 plan.id
@@ -772,6 +817,7 @@ function renderPostPlan(plan) {
             : ""
         }
       </div>
+      ${renderPublicationReceipts(receipts)}
     </div>
   `;
 }
