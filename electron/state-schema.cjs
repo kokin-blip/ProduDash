@@ -3,6 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { AppError } = require("./errors.cjs");
 const { createInitialState } = require("./initial-state.cjs");
+const { CREATOR_PLATFORM_IDS } = require("./platforms/registry.cjs");
 const { preserveFile, readJson, writeJsonAtomic } = require("./atomic-json.cjs");
 
 const CURRENT_SCHEMA_VERSION = 7;
@@ -526,7 +527,7 @@ function validateState(state) {
       typeof plan.caption !== "string" ||
       plan.caption.length > 2200 ||
       !Array.isArray(plan.platforms) ||
-      plan.platforms.some((platformId) => !["tiktok", "instagram", "youtube"].includes(platformId)) ||
+      plan.platforms.some((platformId) => !CREATOR_PLATFORM_IDS.has(platformId)) ||
       !postStatuses.has(plan.status) ||
       (plan.contentHash !== null && !/^[a-f0-9]{64}$/.test(plan.contentHash)) ||
       (plan.mediaJobId !== null && (typeof plan.mediaJobId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(plan.mediaJobId))) ||

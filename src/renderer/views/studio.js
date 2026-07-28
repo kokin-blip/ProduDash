@@ -483,9 +483,9 @@ function thumbnailChoiceLabel(thumbnail) {
 
 function renderThumbnailPlatformPreview(job, thumbnail) {
   if (!thumbnail) return "";
-  const platformIds = asArray(job.settings?.platforms).filter((id) => ["tiktok", "instagram", "youtube"].includes(id));
-  if (!platformIds.length) return "";
   const names = new Map(asArray(ui.appState.creatorPlatforms).map((platform) => [platform.id, platform.name]));
+  const platformIds = asArray(job.settings?.platforms).filter((id) => names.has(id));
+  if (!platformIds.length) return "";
   return `
     <div class="thumbnail-platform-review">
       <div><strong>Platform framing check</strong><span>Approximate edge-clearance preview only—not an official publishing preview.</span></div>

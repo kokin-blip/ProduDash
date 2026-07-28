@@ -1,7 +1,6 @@
 const { AppError } = require("./errors.cjs");
+const { CREATOR_PLATFORM_IDS, INTEGRATION_IDS } = require("./platforms/registry.cjs");
 
-const CREATOR_PLATFORM_IDS = new Set(["tiktok", "instagram", "youtube"]);
-const INTEGRATION_IDS = new Set(["shopify", "instagram", "facebook", "tiktok", "youtube", "stripe"]);
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 const CAPTION_MODES = new Set(["off", "srt", "srt_burned"]);
 const ASPECT_TREATMENTS = new Set(["original", "fit_pad", "center_crop"]);

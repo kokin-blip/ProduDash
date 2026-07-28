@@ -3,6 +3,7 @@ const { boundedInteger, boundedString, normalizePlatforms, requireId } = require
 const { EXPORT_RESOURCE_TYPES } = require("../collaboration/records.cjs");
 const { OPERATION_DEFINITIONS } = require("./api-contract.cjs");
 const { WEBHOOK_EVENT_TYPES, normalizeWebhookUrl } = require("./webhook-contract.cjs");
+const { creatorPlatformIdList } = require("../platforms/registry.cjs");
 
 const HASH_PATTERN = /^sha256:[a-f0-9]{64}$/;
 const HASH_SCHEMA_PATTERN = "^sha256:[a-f0-9]{64}$";
@@ -40,11 +41,12 @@ function strictObject(properties, required = Object.keys(properties), additions 
 }
 
 function platformListSchema() {
+  const platformIds = creatorPlatformIdList();
   return {
     type: "array",
-    maxItems: 3,
+    maxItems: platformIds.length,
     uniqueItems: true,
-    items: { type: "string", enum: ["tiktok", "instagram", "youtube"] }
+    items: { type: "string", enum: platformIds }
   };
 }
 

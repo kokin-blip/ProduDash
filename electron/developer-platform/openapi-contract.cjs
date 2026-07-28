@@ -3,6 +3,7 @@ const { AppError } = require("../errors.cjs");
 const { API_VERSION, OPERATION_DEFINITIONS } = require("./api-contract.cjs");
 const { REQUEST_SCHEMA_BY_OPERATION, mutationRequestSchemas } = require("./request-contract.cjs");
 const { API_ERROR_DEFINITIONS } = require("./runtime-contract.cjs");
+const { creatorPlatformIdList } = require("../platforms/registry.cjs");
 
 const OPENAPI_VERSION = "3.1.2";
 const JSON_SCHEMA_DIALECT = "https://spec.openapis.org/oas/3.1/dialect/base";
@@ -68,7 +69,8 @@ function strictObject(properties, required = Object.keys(properties)) {
 }
 
 function resourceSchemas() {
-  const platform = { type: "string", enum: ["tiktok", "instagram", "youtube"] };
+  const platformIds = creatorPlatformIdList();
+  const platform = { type: "string", enum: platformIds };
   return {
     ProjectSummary: strictObject({
       projectId: idSchema(),
@@ -80,7 +82,7 @@ function resourceSchemas() {
       sourceStatus: { type: "string", enum: ["available", "missing", "offline", "corrupt", "unsupported"] },
       favorite: { type: "boolean" },
       tags: { type: "array", maxItems: 20, uniqueItems: true, items: { type: "string", minLength: 1, maxLength: 40 } },
-      platforms: { type: "array", maxItems: 3, uniqueItems: true, items: platform },
+      platforms: { type: "array", maxItems: platformIds.length, uniqueItems: true, items: platform },
       revision: { type: "integer", minimum: 1 },
       savedRevision: { type: "integer", minimum: 1 },
       createdAt: timestampSchema(),
@@ -118,7 +120,7 @@ function resourceSchemas() {
       organizationId: idSchema(),
       projectId: idSchema(),
       title: { type: "string", minLength: 1, maxLength: 120 },
-      platforms: { type: "array", maxItems: 3, uniqueItems: true, items: platform },
+      platforms: { type: "array", maxItems: platformIds.length, uniqueItems: true, items: platform },
       status: {
         type: "string",
         enum: ["needs_approval", "approved_for_manual_export", "approved_for_official_api", "export_ready", "canceled"]
