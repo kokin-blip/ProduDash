@@ -4,10 +4,11 @@ const {
   buildCredentialSettingsCatalog,
   buildIntegrationCatalog
 } = require("./platforms/registry.cjs");
+const { CURRENT_SCHEMA_VERSION } = require("./schema-version.cjs");
 
 function createInitialState() {
   return {
-    schemaVersion: 7,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     selectedBusinessId: null,
     selectedConversationId: null,
     integrations: buildIntegrationCatalog(),

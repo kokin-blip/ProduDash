@@ -84,6 +84,18 @@ function normalizeShopifyDomain(value) {
   return parsed.hostname;
 }
 
+// Per-platform normalization for non-sensitive credential values. Keyed here
+// rather than branched on at each call site, so the generic credential path in
+// store.cjs stays free of provider-specific logic.
+const PUBLIC_VALUE_NORMALIZERS = Object.freeze({
+  shopify: Object.freeze({ storeDomain: normalizeShopifyDomain })
+});
+
+function normalizePublicCredentialValue(platformId, fieldKey, value) {
+  const normalizer = PUBLIC_VALUE_NORMALIZERS[platformId]?.[fieldKey];
+  return normalizer ? normalizer(value) : value;
+}
+
 function validateClipPayload(payload) {
   return {
     title: boundedString(payload?.title, { label: "Clip title", min: 1, max: 120, fallback: "Untitled clip job" }),
@@ -312,6 +324,7 @@ module.exports = {
   boundedString,
   boundedInteger,
   normalizePlatforms,
+  normalizePublicCredentialValue,
   normalizeShopifyDomain,
   normalizeTimeZone,
   requireId,

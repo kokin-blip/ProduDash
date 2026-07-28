@@ -7,9 +7,10 @@ const { clone, loadRecoverableState } = require("./state-schema.cjs");
 const { writeJsonAtomic } = require("./atomic-json.cjs");
 const { buildAnalyticsReport } = require("./analytics-report.cjs");
 const { getPlatform } = require("./platforms/registry.cjs");
+const { TOKEN_VAULT_KEYS, createAuthorizationRecord, normalizeAuthorizationRecord } = require("./platforms/authorization.cjs");
 const {
   boundedString,
-  normalizeShopifyDomain,
+  normalizePublicCredentialValue,
   requireId,
   requireKnownIntegration,
   validateClipPayload,
@@ -164,10 +165,7 @@ class ProduDashStore {
         for (const field of setting.fields.filter((item) => !item.sensitive)) {
           if (!publicValues[field.key] && typeof vaultValues[field.key] === "string" && vaultValues[field.key]) {
             try {
-              publicValues[field.key] =
-                setting.id === "shopify" && field.key === "storeDomain"
-                  ? normalizeShopifyDomain(vaultValues[field.key])
-                  : vaultValues[field.key];
+              publicValues[field.key] = normalizePublicCredentialValue(setting.id, field.key, vaultValues[field.key]);
               publicMetadataMoved = true;
             } catch {
               continue;
@@ -188,6 +186,15 @@ class ProduDashStore {
         });
       }
       this.state.credentialSettings = settings;
+      // Token presence is derived from the vault, never stored twice. The
+      // record says only whether a token exists, not what it is.
+      for (const integration of this.state.integrations) {
+        const secretKeys = new Set(this.credentialVault.keys(integration.id));
+        const authorization = normalizeAuthorizationRecord(integration.authorization);
+        authorization.hasAccessToken = secretKeys.has(TOKEN_VAULT_KEYS.ACCESS);
+        authorization.hasRefreshToken = secretKeys.has(TOKEN_VAULT_KEYS.REFRESH);
+        integration.authorization = authorization;
+      }
       for (const profile of this.state.aiProviders) {
         const keys = this.credentialVault.keys(profile.id);
         profile.credentialStatus = keys.length ? "stored" : "missing";
@@ -200,7 +207,9 @@ class ProduDashStore {
 
   async saveIntegrationCredentials(integrationId, values) {
     requireKnownIntegration(integrationId);
-    if (integrationId !== "shopify") {
+    // Accepting credentials for a platform with no connector behind it would
+    // leave the user with secrets on disk that nothing can ever verify.
+    if (!getPlatform(integrationId).capabilities.hasLiveConnector) {
       throw new AppError("INTEGRATION_UNAVAILABLE", "This provider connector is planned and does not accept credentials yet.");
     }
     if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
@@ -217,13 +226,8 @@ class ProduDashStore {
         const submitted = values[field.key];
         if (submitted === undefined || submitted === "") continue;
         const value = boundedString(submitted, { label: field.label, min: 1, max: field.sensitive ? 4096 : 253 });
-        if (integrationId === "shopify" && field.key === "storeDomain") {
-          publicValues[field.key] = normalizeShopifyDomain(value);
-        } else if (field.sensitive) {
-          secrets[field.key] = value;
-        } else {
-          publicValues[field.key] = value;
-        }
+        if (field.sensitive) secrets[field.key] = value;
+        else publicValues[field.key] = normalizePublicCredentialValue(integrationId, field.key, value);
       }
 
       if (Object.keys(secrets).length) await this.credentialVault.save(integrationId, secrets);
@@ -459,6 +463,9 @@ class ProduDashStore {
       integration.status = platform.defaultStatus;
       integration.lastSync = "Not connected";
       integration.error = null;
+      // Removing credentials removes the tokens too, so nothing about the old
+      // authorization remains true.
+      integration.authorization = createAuthorizationRecord();
       if (platform.capabilities.ownsBusinessRecords) {
         for (const business of this.state.businesses.filter((item) => item.source === integrationId))
           business.connectionStatus = "disconnected";
@@ -519,7 +526,70 @@ class ProduDashStore {
       integration.lastSync = result.lastSync || new Date().toISOString();
       integration.error = result.error || null;
       if (result.detail) integration.detail = result.detail;
+      integration.authorization = this.stampVerification(integration, result.status);
       this.audit("connection", result.auditDetail || `${integration.name} connection updated to ${result.status}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  // Records when a provider request last actually succeeded. Only a real
+  // connected or degraded result counts -- an error must not refresh it.
+  stampVerification(integration, status) {
+    const authorization = normalizeAuthorizationRecord(integration.authorization);
+    if (status === "connected" || status === "degraded") authorization.lastVerifiedAt = new Date().toISOString();
+    return authorization;
+  }
+
+  // Persists tokens to the vault and the matching public metadata to state.
+  // Storing an authorization is deliberately NOT the same as verifying a
+  // connection: the integration status is untouched here and only moves after
+  // a real provider request succeeds.
+  async saveIntegrationAuthorization(integrationId, { accessToken, refreshToken, ...metadata } = {}) {
+    requireKnownIntegration(integrationId);
+    if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
+    if (!getPlatform(integrationId).capabilities.hasLiveConnector) {
+      throw new AppError("INTEGRATION_UNAVAILABLE", "This provider connector is planned and cannot be authorized yet.");
+    }
+    const secrets = {};
+    if (accessToken) secrets[TOKEN_VAULT_KEYS.ACCESS] = boundedString(accessToken, { label: "Access token", min: 1, max: 4096 });
+    if (refreshToken) secrets[TOKEN_VAULT_KEYS.REFRESH] = boundedString(refreshToken, { label: "Refresh token", min: 1, max: 4096 });
+    if (Object.keys(secrets).length) await this.credentialVault.save(integrationId, secrets);
+
+    return this.enqueueMutation(async () => {
+      const integration = integrationById(this.state, integrationId);
+      const secretKeys = new Set(this.credentialVault.keys(integrationId));
+      const authorization = normalizeAuthorizationRecord({
+        ...normalizeAuthorizationRecord(integration.authorization),
+        ...metadata
+      });
+      authorization.hasAccessToken = secretKeys.has(TOKEN_VAULT_KEYS.ACCESS);
+      authorization.hasRefreshToken = secretKeys.has(TOKEN_VAULT_KEYS.REFRESH);
+      integration.authorization = authorization;
+      this.audit("authorization", `Stored authorization metadata for ${integration.name}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  // Clears the tokens and the authorization record without discarding the
+  // user's own application configuration, so they can reauthorize without
+  // re-entering their client id and secret.
+  async clearIntegrationAuthorization(integrationId) {
+    requireKnownIntegration(integrationId);
+    if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
+    const remaining = { ...this.credentialVault.get(integrationId) };
+    delete remaining[TOKEN_VAULT_KEYS.ACCESS];
+    delete remaining[TOKEN_VAULT_KEYS.REFRESH];
+    await this.credentialVault.replace(integrationId, remaining);
+    return this.enqueueMutation(async () => {
+      const platform = getPlatform(integrationId);
+      const integration = integrationById(this.state, integrationId);
+      integration.authorization = createAuthorizationRecord();
+      integration.status = platform.defaultStatus;
+      integration.lastSync = "Not connected";
+      integration.error = null;
+      this.audit("authorization", `Removed stored authorization for ${integration.name}.`);
       this.persist();
       return this.getAppState();
     });
@@ -544,6 +614,7 @@ class ProduDashStore {
       integration.status = snapshot.status;
       integration.lastSync = snapshot.syncedAt;
       integration.error = snapshot.error || null;
+      integration.authorization = this.stampVerification(integration, snapshot.status);
       this.state.selectedBusinessId = snapshot.business.id;
       this.audit(
         `${integrationId}_sync`,

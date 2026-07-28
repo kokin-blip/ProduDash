@@ -1,4 +1,5 @@
 const { AppError } = require("../errors.cjs");
+const { createAuthorizationRecord } = require("./authorization.cjs");
 
 // One definition per platform. Everything that used to be a hard-coded list of
 // platform ids, a `=== "shopify"` branch, or one of the four parallel catalogs in
@@ -272,7 +273,8 @@ function buildIntegrationCatalog() {
     detail: platform.detail,
     lastSync: NOT_CONNECTED,
     allowedUse: platform.allowedUse,
-    compliance: platform.compliance
+    compliance: platform.compliance,
+    authorization: createAuthorizationRecord()
   }));
 }
 

@@ -7,12 +7,13 @@ const { ProduDashStore } = require("../electron/store.cjs");
 const { createDirectory, createHarness, fakeEncryption } = require("./helpers.cjs");
 const { CredentialVault } = require("../electron/credential-vault.cjs");
 const { migrateState } = require("../electron/state-schema.cjs");
+const { CURRENT_SCHEMA_VERSION } = require("../electron/schema-version.cjs");
 
-test("starts with validated schema 6 provider-neutral state", async (t) => {
+test("starts with validated current-schema provider-neutral state", async (t) => {
   const harness = await createHarness();
   t.after(harness.cleanup);
   const state = harness.store.getAppState();
-  assert.equal(state.schemaVersion, 7);
+  assert.equal(state.schemaVersion, CURRENT_SCHEMA_VERSION);
   assert.deepEqual(state.businesses, []);
   assert.equal(state.integrations.find((item) => item.id === "shopify").status, "disconnected");
   assert.equal(state.aiProviders[0].providerType, "gemini");
@@ -60,7 +61,7 @@ test("schema 5 name and media-job migration is idempotent", () => {
   legacy.advisorSettings.displayName = "Advisor";
   const migrated = migrateState(legacy);
   const repeated = migrateState(migrated);
-  assert.equal(migrated.schemaVersion, 7);
+  assert.equal(migrated.schemaVersion, CURRENT_SCHEMA_VERSION);
   assert.equal(repeated.advisorSettings.displayName, "Juanito");
   assert.deepEqual(repeated, migrated);
 });
@@ -102,7 +103,7 @@ test("schema 5 media jobs migrate to compatible clip-generation jobs without cha
     completedAt: null
   });
   const migrated = migrateState(legacy);
-  assert.equal(migrated.schemaVersion, 7);
+  assert.equal(migrated.schemaVersion, CURRENT_SCHEMA_VERSION);
   assert.deepEqual(
     {
       jobType: migrated.mediaJobs[0].jobType,
@@ -167,7 +168,7 @@ test("missing primary state is restored from the valid backup", async (t) => {
   assert.ok(recovered.getAppState().systemNotices.some((notice) => notice.code === "STATE_RECOVERED"));
 });
 
-test("schema 2 state migrates sequentially to schema 6 without losing valid data", async (t) => {
+test("schema 2 state migrates sequentially to the current schema without losing valid data", async (t) => {
   const directory = createDirectory();
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const state = createInitialState();
@@ -176,7 +177,7 @@ test("schema 2 state migrates sequentially to schema 6 without losing valid data
   fs.writeFileSync(path.join(directory, "produdash-state.json"), JSON.stringify(state));
   const store = new ProduDashStore(directory, { credentialVault: new CredentialVault(directory, fakeEncryption()) });
   await store.initialize();
-  assert.equal(store.getAppState().schemaVersion, 7);
+  assert.equal(store.getAppState().schemaVersion, CURRENT_SCHEMA_VERSION);
   assert.equal(store.getAppState().clipperJobs[0].id, "clip-existing");
   assert.equal(store.getAppState().clipperJobs[0].status, "legacy_plan");
 });
@@ -204,7 +205,7 @@ test("schema 3 Gemini state migrates to an idempotent provider profile and legac
   const store = new ProduDashStore(directory, { credentialVault: new CredentialVault(directory, fakeEncryption()) });
   await store.initialize();
   const migrated = store.getAppState();
-  assert.equal(migrated.schemaVersion, 7);
+  assert.equal(migrated.schemaVersion, CURRENT_SCHEMA_VERSION);
   assert.equal(
     migrated.integrations.some((item) => item.id === "gemini"),
     false

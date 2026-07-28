@@ -4,9 +4,10 @@ const crypto = require("node:crypto");
 const { AppError } = require("./errors.cjs");
 const { createInitialState } = require("./initial-state.cjs");
 const { CREATOR_PLATFORM_IDS } = require("./platforms/registry.cjs");
+const { normalizeAuthorizationRecord, validateAuthorizationRecord } = require("./platforms/authorization.cjs");
 const { preserveFile, readJson, writeJsonAtomic } = require("./atomic-json.cjs");
 
-const CURRENT_SCHEMA_VERSION = 7;
+const { CURRENT_SCHEMA_VERSION, MINIMUM_SUPPORTED_SCHEMA_VERSION } = require("./schema-version.cjs");
 
 function clone(value) {
   return structuredClone(value);
@@ -39,7 +40,13 @@ function withDefaults(state) {
     ...initial,
     ...state,
     schemaVersion: CURRENT_SCHEMA_VERSION,
-    integrations: mergeCatalog(initial.integrations, state.integrations),
+    // mergeCatalog spreads the persisted entry over the initial one, so a record
+    // saved before the authorization field existed would keep no authorization
+    // at all. Backfill it here as well as in the migration.
+    integrations: mergeCatalog(initial.integrations, state.integrations).map((integration) => ({
+      ...integration,
+      authorization: normalizeAuthorizationRecord(integration.authorization)
+    })),
     credentialSettings: mergeCatalog(initial.credentialSettings, state.credentialSettings).map((setting) => ({
       ...setting,
       fields: initial.credentialSettings.find((item) => item.id === setting.id)?.fields || [],
@@ -126,7 +133,7 @@ function migrateState(input) {
   if (version > CURRENT_SCHEMA_VERSION) {
     throw new AppError("FUTURE_SCHEMA", "This ProduDash data was created by a newer app version. Update ProduDash before continuing.");
   }
-  if (version < 2 || !Number.isInteger(version)) {
+  if (version < MINIMUM_SUPPORTED_SCHEMA_VERSION || !Number.isInteger(version)) {
     throw new AppError("UNSUPPORTED_SCHEMA", "This legacy ProduDash state cannot be migrated automatically.");
   }
   let state = clone(input);
@@ -203,6 +210,22 @@ function migrateState(input) {
       voiceLikeness: { acceptance: null, voices: [] }
     };
   }
+  if (state.schemaVersion === 7) {
+    // Give every integration a public authorization record. Defaults come
+    // first so an existing record is preserved rather than reset -- unlike the
+    // v5->v6 and v6->v7 steps above, which are safe only because their version
+    // gates prevent re-entry.
+    state = {
+      ...state,
+      schemaVersion: 8,
+      integrations: Array.isArray(state.integrations)
+        ? state.integrations.map((integration) => ({
+            ...integration,
+            authorization: normalizeAuthorizationRecord(integration?.authorization)
+          }))
+        : []
+    };
+  }
   return withDefaults(state);
 }
 
@@ -228,6 +251,12 @@ function validateState(state) {
     if (state[collection].some((item) => !item || typeof item !== "object" || Array.isArray(item))) {
       throw new AppError("INVALID_STATE", `The saved ${collection} collection is invalid.`);
     }
+  }
+  // Public authorization metadata must stay public: validateAuthorizationRecord
+  // rejects any string field whose name ends in "token", so an edited state file
+  // cannot park a real token in renderer-visible state.
+  if (state.integrations.some((integration) => !validateAuthorizationRecord(integration.authorization))) {
+    throw new AppError("INVALID_STATE", "The saved integration authorization data is invalid.");
   }
   if (!state.aiWorkloads || typeof state.aiWorkloads !== "object" || Array.isArray(state.aiWorkloads)) {
     throw new AppError("INVALID_STATE", "The saved AI workload assignments are invalid.");
