@@ -58,11 +58,6 @@ class PublishingDispatchService {
     }
     const state = this.store.getAppState();
     const integration = state.integrations.find((item) => item.id === destination.platformId);
-    const credentials = this.connections.credentialsFor(destination.platformId);
-    if (!credentials.oauthAccessToken) {
-      throw new AppError("INTEGRATION_NOT_READY", `Authorize ${platform.displayName} before publishing.`);
-    }
-
     const pack = this.packageFor(plan, destination.platformId);
     const { filePath, contentLength } = this.resolveMediaFile(plan);
     const body = fs.createReadStream(filePath);
@@ -71,16 +66,21 @@ class PublishingDispatchService {
     // the stat above and the upload, the publish call surfaces that properly.
     body.on("error", () => {});
     try {
-      const result = await connector.publish({
-        accessToken: credentials.oauthAccessToken,
-        title: pack.title,
-        description: pack.caption,
-        // Every per-destination choice comes from the immutable approved
-        // snapshot, never from current draft state or a default chosen here.
-        // The connector reports back what the provider actually applied.
-        ...(pack.options || {}),
-        media: { body, contentLength, contentType: "video/*" }
-      });
+      // A short-lived access token can expire between approval and upload, so
+      // it is acquired through the one refresh-aware path rather than read
+      // straight from storage.
+      const result = await this.connections.withFreshAuthorization(destination.platformId, (accessToken) =>
+        connector.publish({
+          accessToken,
+          title: pack.title,
+          description: pack.caption,
+          // Every per-destination choice comes from the immutable approved
+          // snapshot, never from current draft state or a default chosen here.
+          // The connector reports back what the provider actually applied.
+          ...(pack.options || {}),
+          media: { body, contentLength, contentType: "video/*" }
+        })
+      );
       return { result, accountId: integration?.authorization?.selectedAccount?.id || null };
     } catch (error) {
       // A connector that failed before consuming the body would otherwise leave
@@ -159,11 +159,11 @@ class PublishingDispatchService {
     if (!connector || !connectorSupports(connector, CONNECTOR_CAPABILITIES.PUBLISHING_STATUS)) {
       throw new AppError("PUBLISHING_UNSUPPORTED", "That destination cannot report publication status.");
     }
-    const credentials = this.connections.credentialsFor(platformId);
-    return connector.getPublishingStatus({
-      accessToken: credentials.oauthAccessToken,
-      publicationId: receipt.providerPublicationId
-    });
+    // Status checks are long-lived reads that often run well after the upload,
+    // so they need the same refresh-aware path.
+    return this.connections.withFreshAuthorization(platformId, (accessToken) =>
+      connector.getPublishingStatus({ accessToken, publicationId: receipt.providerPublicationId })
+    );
   }
 }
 

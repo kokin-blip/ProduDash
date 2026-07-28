@@ -248,41 +248,6 @@ test("testConnection refuses to run before an authorization exists", async () =>
   await assert.rejects(() => connector.testConnection({ clientId: "c" }), { code: "YOUTUBE_NOT_AUTHORIZED" });
 });
 
-test("an expired token is refreshed proactively", async () => {
-  const now = () => Date.parse("2026-07-27T12:00:00.000Z");
-  const { connector, requests } = createConnector({
-    now,
-    responses: [
-      jsonResponse({ access_token: "fresh", expires_in: 3600, scope: "a" }),
-      jsonResponse({ items: [{ id: "UC-1", snippet: { title: "Chan" } }] })
-    ]
-  });
-  const result = await connector.testConnection({
-    clientId: "c",
-    oauthAccessToken: "stale",
-    oauthRefreshToken: "rt",
-    tokenExpiresAt: "2026-07-27T11:59:00.000Z"
-  });
-  assert.equal(requests[0].url, TOKEN_ENDPOINT);
-  assert.equal(new URLSearchParams(requests[0].options.body).get("grant_type"), "refresh_token");
-  // The channel request uses the refreshed token, not the stale one.
-  assert.equal(requests[1].options.headers.Authorization, "Bearer fresh");
-  assert.equal(result.authorizationUpdate.accessToken, "fresh");
-});
-
-test("a rejected token is refreshed reactively, exactly once", async () => {
-  const { connector, requests } = createConnector({
-    responses: [
-      jsonResponse({}, 401),
-      jsonResponse({ access_token: "fresh", expires_in: 3600 }),
-      jsonResponse({ items: [{ id: "UC-1", snippet: { title: "Chan" } }] })
-    ]
-  });
-  const result = await connector.testConnection({ clientId: "c", oauthAccessToken: "stale", oauthRefreshToken: "rt" });
-  assert.equal(requests.length, 3);
-  assert.equal(result.status, "connected");
-});
-
 test("a rejected token with no refresh token fails without a retry loop", async () => {
   const { connector, requests } = createConnector({ responses: [jsonResponse({}, 401)] });
   await assert.rejects(() => connector.testConnection({ clientId: "c", oauthAccessToken: "stale" }), { code: "YOUTUBE_AUTH_FAILED" });

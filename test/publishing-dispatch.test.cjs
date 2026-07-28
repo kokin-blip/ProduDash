@@ -96,7 +96,12 @@ async function approvedPlan(t, { onPublish } = {}) {
   const service = new PublishingDispatchService({
     store: harness.store,
     connectorRegistry: new ConnectorRegistry([connector]),
-    connections: { credentialsFor: (id) => harness.store.getIntegrationCredentials(id) },
+    connections: {
+      credentialsFor: (id) => harness.store.getIntegrationCredentials(id),
+      // Token freshness is covered by the connection-service tests; here the
+      // token is simply handed through.
+      withFreshAuthorization: (_id, operation) => operation("ya29.token")
+    },
     mediaJobs: { getPrivatePaths: () => ({ sourcePath: "/src", outputPath, tempPath: "/tmp" }) }
   });
   return { harness, service, planId, calls, outputPath };

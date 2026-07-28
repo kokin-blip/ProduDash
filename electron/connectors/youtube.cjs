@@ -33,9 +33,6 @@ const RESUME_INCOMPLETE = 308;
 const PRIVACY_STATUSES = Object.freeze(new Set(["private", "unlisted", "public"]));
 
 const DEFAULT_TIMEOUT_MS = 15_000;
-// Refresh slightly early so a request cannot start with a token that expires
-// mid-flight.
-const EXPIRY_SKEW_MS = 60_000;
 
 function safeGoogleError(status, { duringUpload = false } = {}) {
   if (status === 401) {
@@ -294,42 +291,17 @@ class YouTubeConnector {
         { platformId: this.id }
       );
     }
-    let accessToken = credentials.oauthAccessToken;
-    let refreshed = null;
-    // Refresh proactively when the stored token is at or near expiry, and
-    // reactively if Google rejects it anyway.
-    const expiresAt = credentials.tokenExpiresAt ? Date.parse(credentials.tokenExpiresAt) : NaN;
-    if (Number.isFinite(expiresAt) && expiresAt - EXPIRY_SKEW_MS <= this.now() && credentials.oauthRefreshToken) {
-      refreshed = await this.refreshAuthorization(credentials);
-      accessToken = refreshed.accessToken;
-    }
-
-    let channel;
-    try {
-      channel = await this.fetchChannel(accessToken);
-    } catch (error) {
-      const canRetry = error instanceof ConnectorError && error.code === "YOUTUBE_AUTH_FAILED" && credentials.oauthRefreshToken;
-      if (!canRetry || refreshed) throw error;
-      refreshed = await this.refreshAuthorization(credentials);
-      accessToken = refreshed.accessToken;
-      channel = await this.fetchChannel(accessToken);
-    }
-
-    const grantedScopes = refreshed?.grantedScopes?.length ? refreshed.grantedScopes : undefined;
+    // Token freshness is the connection service's job. Handing that to a single
+    // refresh-aware path is what keeps publishing, status polling, and this
+    // check from each implementing their own -- and from racing each other for
+    // the same refresh token.
+    const channel = await this.fetchChannel(credentials.oauthAccessToken);
     return {
       status: "connected",
       error: null,
       syncedAt: new Date(this.now()).toISOString(),
       auditDetail: `Verified the YouTube channel ${channel.name || channel.id} through the official Data API.`,
-      // Secrets here are handed to the vault by the store; they never reach
-      // renderer-visible state.
-      authorizationUpdate: {
-        ...(refreshed?.accessToken ? { accessToken: refreshed.accessToken } : {}),
-        ...(refreshed?.refreshToken ? { refreshToken: refreshed.refreshToken } : {}),
-        ...(refreshed?.tokenExpiresAt ? { tokenExpiresAt: refreshed.tokenExpiresAt } : {}),
-        ...(grantedScopes ? { grantedScopes } : {}),
-        selectedAccount: channel
-      }
+      authorizationUpdate: { selectedAccount: channel }
     };
   }
 
