@@ -7,6 +7,7 @@ const { clone, loadRecoverableState } = require("./state-schema.cjs");
 const { writeJsonAtomic } = require("./atomic-json.cjs");
 const { buildAnalyticsReport } = require("./analytics-report.cjs");
 const { getPlatform } = require("./platforms/registry.cjs");
+const { buildPlatformCatalog } = require("./platforms/catalog.cjs");
 const { DISPATCHABLE_STATUSES, POST_PLAN_STATUSES, assertTransition } = require("./publishing/post-status.cjs");
 const { isAlreadyPublished, normalizeReceipt } = require("./publishing/receipt.cjs");
 const { TOKEN_VAULT_KEYS, createAuthorizationRecord, normalizeAuthorizationRecord } = require("./platforms/authorization.cjs");
@@ -120,7 +121,8 @@ class ProduDashStore {
   }
 
   getAppState() {
-    return { ...clone(this.state), systemNotices: clone(this.notices) };
+    const state = clone(this.state);
+    return { ...state, systemNotices: clone(this.notices), platformCatalog: buildPlatformCatalog(state) };
   }
 
   getBusiness(businessId) {

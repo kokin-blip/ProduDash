@@ -599,8 +599,8 @@ function renderPublishing() {
   const completed = posts.filter((plan) => plan.status === "export_ready").length;
   return `
     <div class="inline-message neutral">
-      <strong>Local publishing outbox</strong>
-      <span>ProduDash can prepare, approve, plan, and export safe post packages. It does not connect accounts or publish in this phase.</span>
+      <strong>Publishing outbox</strong>
+      <span>ProduDash can publish through connected, implemented platform APIs after explicit approval. Platforms without a connector remain export-only.</span>
     </div>
     <section class="studio-grid single-workflow">
       <article class="panel">

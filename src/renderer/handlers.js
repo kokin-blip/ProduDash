@@ -1022,10 +1022,44 @@ async function handleClick(event) {
     return;
   }
 
+  const authorizeIntegrationButton = event.target.closest("[data-authorize-integration]");
+  if (authorizeIntegrationButton) {
+    const integrationId = authorizeIntegrationButton.dataset.authorizeIntegration;
+    // Authorization opens the system browser and then waits for the callback,
+    // so it can take as long as the person takes. runAction already blocks a
+    // second click on the same key while it is in flight.
+    await runAction(`authorize-${integrationId}`, authorizeIntegrationButton, () => api.authorizeIntegration(integrationId), {
+      refreshOnError: true
+    });
+    return;
+  }
+
+  const disconnectIntegrationButton = event.target.closest("[data-disconnect-integration]");
+  if (disconnectIntegrationButton) {
+    const integrationId = disconnectIntegrationButton.dataset.disconnectIntegration;
+    if (
+      !window.confirm(
+        "Disconnect this authorization? ProduDash revokes its access at the provider. Your saved application configuration is kept so you can reauthorize."
+      )
+    ) {
+      return;
+    }
+    await runAction(`disconnect-${integrationId}`, disconnectIntegrationButton, () => api.disconnectIntegration(integrationId), {
+      refreshOnError: true
+    });
+    return;
+  }
+
   const removeCredentialsButton = event.target.closest("[data-remove-credentials]");
   if (removeCredentialsButton) {
     const integrationId = removeCredentialsButton.dataset.removeCredentials;
-    if (!window.confirm("Remove these credentials? Imported snapshots will remain but will be marked disconnected.")) return;
+    if (
+      !window.confirm(
+        "Remove all configuration and authorization for this platform? Imported snapshots remain but will be marked disconnected."
+      )
+    ) {
+      return;
+    }
     await runAction(`remove-${integrationId}`, removeCredentialsButton, () => api.removeIntegrationCredentials(integrationId));
     return;
   }

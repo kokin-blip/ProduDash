@@ -56,7 +56,8 @@ function emptyAppState() {
     clipperJobs: [],
     postQueue: [],
     auditLog: [],
-    systemNotices: []
+    systemNotices: [],
+    platformCatalog: []
   };
 }
 
@@ -97,7 +98,8 @@ export function normalizeAppState(value) {
     clipperJobs: asArray(state.clipperJobs),
     postQueue: asArray(state.postQueue),
     auditLog: asArray(state.auditLog),
-    systemNotices: asArray(state.systemNotices)
+    systemNotices: asArray(state.systemNotices),
+    platformCatalog: asArray(state.platformCatalog)
   };
 }
 
@@ -215,6 +217,24 @@ export function setAdvisorHistory(value) {
         ? history.status
         : { ready: false, providerId: null, modelId: null, consentedCategories: [] }
   };
+}
+
+// Derived in the main process by electron/platforms/catalog.cjs. The renderer
+// never re-derives connection state, so it cannot drift from deriveConnectionState.
+export function platformEntry(integrationId) {
+  return asArray(ui.appState.platformCatalog).find((item) => item.id === integrationId) || null;
+}
+
+export function livePlatforms() {
+  return asArray(ui.appState.platformCatalog).filter((item) => item.hasLiveConnector);
+}
+
+export function plannedPlatforms() {
+  return asArray(ui.appState.platformCatalog).filter((item) => !item.hasLiveConnector);
+}
+
+export function platformAction(integrationId, actionId) {
+  return platformEntry(integrationId)?.actions?.find((item) => item.id === actionId) || null;
 }
 
 export function credentialStored(integrationId) {

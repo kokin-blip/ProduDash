@@ -138,7 +138,7 @@ function renderSetupStep({
 
 export function renderCompliancePanel(title = "Security and workflow boundaries") {
   return `
-    <details class="disclosure">
+    <details class="disclosure compliance-panel">
       <summary>
         <span>
           <strong>${escapeHtml(title)}</strong>

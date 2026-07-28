@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const { buildPlatformCatalog } = require("../electron/platforms/catalog.cjs");
 const { JSDOM } = require("jsdom");
 const { pathToFileURL } = require("node:url");
 
@@ -53,7 +54,7 @@ async function setupRenderer() {
 }
 
 function baseState(overrides = {}) {
-  return {
+  const state = {
     schemaVersion: 7,
     businesses: [],
     conversations: [],
@@ -92,6 +93,9 @@ function baseState(overrides = {}) {
     systemNotices: [],
     ...overrides
   };
+  // Derived with the same main-process code the real app uses, so renderer
+  // tests cannot drift from deriveConnectionState.
+  return { ...state, platformCatalog: buildPlatformCatalog(state) };
 }
 
 function partialBusiness(overrides = {}) {
@@ -606,7 +610,13 @@ test("Studio creates deterministic local jobs while preserving legacy plans as n
   renderer.renderApp();
   assert.ok(document.querySelector("[data-post-form]"));
   assert.equal(document.querySelector('[name="mediaJobId"] option:last-child').value, "mediajob-ready");
-  assert.match(document.querySelector("#viewRoot").textContent, /does not connect accounts or publish/i);
+  // Capability-aware copy: publishing is real for connected platforms, and
+  // export-only for those without a connector. It must not claim either that
+  // ProduDash never publishes or that every platform works.
+  const publishingIntro = document.querySelector("#viewRoot").textContent;
+  assert.match(publishingIntro, /publish through connected, implemented platform APIs after explicit approval/i);
+  assert.match(publishingIntro, /without a connector remain export-only/i);
+  assert.doesNotMatch(publishingIntro, /does not connect accounts or publish/i);
 });
 
 test("Publishing renders immutable local export packages, schedule context, and cancellation without fake live state", async () => {
