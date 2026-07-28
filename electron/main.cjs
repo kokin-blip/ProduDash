@@ -105,7 +105,8 @@ if (hasSingleInstanceLock) {
           throw error;
         }
       }
-      const connectors = createConnectors();
+      // Authorization opens in the user's real browser, never an embedded view.
+      const connectors = createConnectors({ openExternal: (url) => shell.openExternal(url) });
       const providerRegistry = new ProviderRegistry([
         new GeminiProviderAdapter({ connector: connectors.gemini }),
         new OpenAIProviderAdapter(),

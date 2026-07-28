@@ -1,0 +1,349 @@
+const { AppError, CONNECTOR_ERROR_CATEGORIES, ConnectorError, connectorError } = require("../errors.cjs");
+const { boundedString } = require("../validation.cjs");
+const { getPlatform } = require("../platforms/registry.cjs");
+const { CONNECTOR_CAPABILITIES } = require("./contract.cjs");
+const { CHALLENGE_ENCODINGS, createPkcePair, createState } = require("../oauth/pkce.cjs");
+const { createLoopbackListener } = require("../oauth/loopback-server.cjs");
+
+// YouTube Data API v3 connector using Google's installed-application OAuth flow.
+//
+// Official documentation:
+//   OAuth for native apps (loopback IP redirect, PKCE):
+//     https://developers.google.com/identity/protocols/oauth2/native-app
+//   Channel identity:
+//     https://developers.google.com/youtube/v3/docs/channels/list
+//
+// The user supplies their own Google Cloud OAuth client. ProduDash ships no
+// client id and no client secret. Per Google's native-app documentation
+// client_secret is optional for desktop clients, so it is sent only when the
+// user provided one.
+const AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
+const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+const REVOCATION_ENDPOINT = "https://oauth2.googleapis.com/revoke";
+const CHANNELS_ENDPOINT = "https://www.googleapis.com/youtube/v3/channels";
+
+const DEFAULT_TIMEOUT_MS = 15_000;
+// Refresh slightly early so a request cannot start with a token that expires
+// mid-flight.
+const EXPIRY_SKEW_MS = 60_000;
+
+function safeGoogleError(status, { duringUpload = false } = {}) {
+  if (status === 401) {
+    return connectorError(
+      CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION,
+      "YOUTUBE_AUTH_FAILED",
+      "Google rejected the stored authorization. Reauthorize YouTube.",
+      { platformId: "youtube" }
+    );
+  }
+  if (status === 403) {
+    return connectorError(
+      CONNECTOR_ERROR_CATEGORIES.AUTHORIZATION,
+      "YOUTUBE_FORBIDDEN",
+      "The authorized Google account lacks the required YouTube permission or quota.",
+      { platformId: "youtube" }
+    );
+  }
+  if (status === 429) {
+    return connectorError(CONNECTOR_ERROR_CATEGORIES.RATE_LIMIT, "YOUTUBE_RATE_LIMITED", "YouTube is rate limiting this project.", {
+      platformId: "youtube"
+    });
+  }
+  if (status >= 500) {
+    return connectorError(
+      duringUpload ? CONNECTOR_ERROR_CATEGORIES.UPLOAD : CONNECTOR_ERROR_CATEGORIES.PROCESSING,
+      "YOUTUBE_SERVER_ERROR",
+      "YouTube could not complete the request.",
+      { platformId: "youtube" }
+    );
+  }
+  return connectorError(CONNECTOR_ERROR_CATEGORIES.VALIDATION, "YOUTUBE_REQUEST_REJECTED", "YouTube rejected the request.", {
+    platformId: "youtube"
+  });
+}
+
+class YouTubeConnector {
+  constructor(options = {}) {
+    const platform = getPlatform("youtube");
+    this.id = platform.id;
+    this.platform = platform;
+    this.capabilities = [CONNECTOR_CAPABILITIES.AUTHORIZE, CONNECTOR_CAPABILITIES.REFRESH, CONNECTOR_CAPABILITIES.DISCONNECT];
+    this.transport = options.transport || fetch;
+    this.timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+    // Injected so tests never open a browser and never bind a socket.
+    this.openExternal = options.openExternal || null;
+    this.createListener = options.createListener || createLoopbackListener;
+    this.now = options.now || (() => Date.now());
+  }
+
+  getAuthorizationInstructions() {
+    return {
+      platformId: this.id,
+      authType: this.platform.authType,
+      summary: "Create your own Google Cloud OAuth client of type Desktop app, then authorize your YouTube channel.",
+      steps: [
+        "In Google Cloud Console, create a project and enable the YouTube Data API v3.",
+        "Configure the OAuth consent screen and add your Google account as a test user.",
+        "Create an OAuth client ID of type Desktop app.",
+        "Paste the client ID here. A client secret is optional for desktop clients.",
+        "Choose Connect to authorize in your browser."
+      ],
+      scopes: [...this.platform.scopes],
+      reviewRequirement: this.platform.reviewRequirement,
+      docsUrl: this.platform.docsUrl,
+      // Stated up front rather than discovered after a confusing upload.
+      limitations: [
+        "ProduDash never supplies its own Google credentials. Quota and audit status belong to your Google Cloud project.",
+        "Uploads from a project that has not passed a YouTube API compliance audit are locked to private viewing."
+      ]
+    };
+  }
+
+  validateConfiguration(credentials = {}) {
+    const missing = [];
+    if (!credentials.clientId) missing.push("clientId");
+    if (missing.length) {
+      throw connectorError(
+        CONNECTOR_ERROR_CATEGORIES.VALIDATION,
+        "CONNECTOR_NOT_CONFIGURED",
+        "Add your Google OAuth client ID before connecting YouTube.",
+        { platformId: this.id }
+      );
+    }
+    return { valid: true, missing: [] };
+  }
+
+  async request(url, options = {}) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await this.transport(url, { ...options, signal: controller.signal });
+      if (!response.ok) throw safeGoogleError(response.status, options);
+      return await response.json();
+    } catch (error) {
+      if (error instanceof ConnectorError) throw error;
+      if (error?.name === "AbortError") {
+        throw connectorError(CONNECTOR_ERROR_CATEGORIES.NETWORK, "YOUTUBE_TIMEOUT", "YouTube did not respond in time.", {
+          platformId: this.id
+        });
+      }
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.NETWORK, "YOUTUBE_NETWORK_ERROR", "ProduDash could not reach YouTube.", {
+        platformId: this.id,
+        cause: error
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async exchangeToken(body) {
+    return this.request(TOKEN_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(body).toString()
+    });
+  }
+
+  buildAuthorizationUrl({ clientId, redirectUri, state, codeChallenge, codeChallengeMethod }) {
+    const url = new URL(AUTHORIZATION_ENDPOINT);
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("scope", this.platform.scopes.join(" "));
+    url.searchParams.set("code_challenge", codeChallenge);
+    url.searchParams.set("code_challenge_method", codeChallengeMethod);
+    url.searchParams.set("state", state);
+    // Required to receive a refresh token; without it ProduDash would silently
+    // lose access when the access token expires.
+    url.searchParams.set("access_type", "offline");
+    url.searchParams.set("prompt", "consent");
+    return url.toString();
+  }
+
+  expiresAt(expiresInSeconds) {
+    const seconds = Number(expiresInSeconds);
+    if (!Number.isFinite(seconds) || seconds <= 0) return null;
+    return new Date(this.now() + seconds * 1000).toISOString();
+  }
+
+  // Opens the system browser -- never an embedded login view, which would let
+  // ProduDash observe the user's Google password.
+  async authorize(credentials = {}) {
+    this.validateConfiguration(credentials);
+    if (typeof this.openExternal !== "function") {
+      throw new AppError("OAUTH_BROWSER_UNAVAILABLE", "ProduDash could not open a browser for authorization.");
+    }
+    const state = createState();
+    const { codeVerifier, codeChallenge, codeChallengeMethod } = createPkcePair(
+      this.platform.pkceChallengeEncoding || CHALLENGE_ENCODINGS.BASE64URL
+    );
+    const listener = await this.createListener({ expectedState: state });
+    try {
+      const authorizationUrl = this.buildAuthorizationUrl({
+        clientId: credentials.clientId,
+        redirectUri: listener.redirectUri,
+        state,
+        codeChallenge,
+        codeChallengeMethod
+      });
+      const waiting = listener.waitForCallback();
+      await this.openExternal(authorizationUrl);
+      const { code } = await waiting;
+
+      const body = {
+        client_id: credentials.clientId,
+        code,
+        code_verifier: codeVerifier,
+        grant_type: "authorization_code",
+        redirect_uri: listener.redirectUri
+      };
+      // Optional for desktop clients per Google's native-app documentation.
+      if (credentials.clientSecret) body.client_secret = credentials.clientSecret;
+      const token = await this.exchangeToken(body);
+      if (!token.access_token) {
+        throw connectorError(CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION, "YOUTUBE_NO_ACCESS_TOKEN", "Google returned no access token.", {
+          platformId: this.id
+        });
+      }
+      return {
+        accessToken: token.access_token,
+        refreshToken: token.refresh_token || null,
+        tokenExpiresAt: this.expiresAt(token.expires_in),
+        // Record what Google actually granted, not what ProduDash asked for.
+        grantedScopes: typeof token.scope === "string" ? token.scope.split(" ").filter(Boolean) : []
+      };
+    } finally {
+      listener.close();
+    }
+  }
+
+  async refreshAuthorization(credentials = {}) {
+    this.validateConfiguration(credentials);
+    if (!credentials.oauthRefreshToken) {
+      throw connectorError(
+        CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION,
+        "YOUTUBE_NO_REFRESH_TOKEN",
+        "No refresh token is stored. Reauthorize YouTube.",
+        { platformId: this.id }
+      );
+    }
+    const body = {
+      client_id: credentials.clientId,
+      grant_type: "refresh_token",
+      refresh_token: credentials.oauthRefreshToken
+    };
+    if (credentials.clientSecret) body.client_secret = credentials.clientSecret;
+    const token = await this.exchangeToken(body);
+    if (!token.access_token) {
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION, "YOUTUBE_NO_ACCESS_TOKEN", "Google returned no access token.", {
+        platformId: this.id
+      });
+    }
+    return {
+      accessToken: token.access_token,
+      // A refresh response usually omits the refresh token; keep the stored one.
+      refreshToken: token.refresh_token || null,
+      tokenExpiresAt: this.expiresAt(token.expires_in),
+      grantedScopes: typeof token.scope === "string" ? token.scope.split(" ").filter(Boolean) : []
+    };
+  }
+
+  // Returns the channel the stored authorization actually controls. The
+  // connector reports connected only after this succeeds -- holding a token is
+  // not the same as having a usable channel.
+  async fetchChannel(accessToken) {
+    const url = new URL(CHANNELS_ENDPOINT);
+    url.searchParams.set("part", "snippet");
+    url.searchParams.set("mine", "true");
+    const body = await this.request(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+    const channel = Array.isArray(body.items) ? body.items[0] : null;
+    if (!channel?.id) {
+      throw connectorError(
+        CONNECTOR_ERROR_CATEGORIES.AUTHORIZATION,
+        "YOUTUBE_NO_CHANNEL",
+        "The authorized Google account has no YouTube channel.",
+        { platformId: this.id }
+      );
+    }
+    return { id: String(channel.id), name: boundedString(channel.snippet?.title || "", { label: "Channel", max: 200 }) };
+  }
+
+  async testConnection(credentials = {}) {
+    this.validateConfiguration(credentials);
+    if (!credentials.oauthAccessToken) {
+      throw connectorError(
+        CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION,
+        "YOUTUBE_NOT_AUTHORIZED",
+        "Authorize YouTube before testing the connection.",
+        { platformId: this.id }
+      );
+    }
+    let accessToken = credentials.oauthAccessToken;
+    let refreshed = null;
+    // Refresh proactively when the stored token is at or near expiry, and
+    // reactively if Google rejects it anyway.
+    const expiresAt = credentials.tokenExpiresAt ? Date.parse(credentials.tokenExpiresAt) : NaN;
+    if (Number.isFinite(expiresAt) && expiresAt - EXPIRY_SKEW_MS <= this.now() && credentials.oauthRefreshToken) {
+      refreshed = await this.refreshAuthorization(credentials);
+      accessToken = refreshed.accessToken;
+    }
+
+    let channel;
+    try {
+      channel = await this.fetchChannel(accessToken);
+    } catch (error) {
+      const canRetry = error instanceof ConnectorError && error.code === "YOUTUBE_AUTH_FAILED" && credentials.oauthRefreshToken;
+      if (!canRetry || refreshed) throw error;
+      refreshed = await this.refreshAuthorization(credentials);
+      accessToken = refreshed.accessToken;
+      channel = await this.fetchChannel(accessToken);
+    }
+
+    const grantedScopes = refreshed?.grantedScopes?.length ? refreshed.grantedScopes : undefined;
+    return {
+      status: "connected",
+      error: null,
+      syncedAt: new Date(this.now()).toISOString(),
+      auditDetail: `Verified the YouTube channel ${channel.name || channel.id} through the official Data API.`,
+      // Secrets here are handed to the vault by the store; they never reach
+      // renderer-visible state.
+      authorizationUpdate: {
+        ...(refreshed?.accessToken ? { accessToken: refreshed.accessToken } : {}),
+        ...(refreshed?.refreshToken ? { refreshToken: refreshed.refreshToken } : {}),
+        ...(refreshed?.tokenExpiresAt ? { tokenExpiresAt: refreshed.tokenExpiresAt } : {}),
+        ...(grantedScopes ? { grantedScopes } : {}),
+        selectedAccount: channel
+      }
+    };
+  }
+
+  // Revokes at Google before ProduDash forgets the token locally, so access is
+  // actually withdrawn rather than merely hidden.
+  async disconnect(credentials = {}) {
+    const token = credentials.oauthRefreshToken || credentials.oauthAccessToken;
+    if (!token) return { revoked: false, reason: "no_token" };
+    try {
+      await this.request(REVOCATION_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token }).toString()
+      });
+      return { revoked: true };
+    } catch (error) {
+      // An already-invalid token is not a failure to disconnect.
+      if (error instanceof ConnectorError && error.category === CONNECTOR_ERROR_CATEGORIES.VALIDATION) {
+        return { revoked: false, reason: "already_invalid" };
+      }
+      throw error;
+    }
+  }
+}
+
+module.exports = {
+  AUTHORIZATION_ENDPOINT,
+  CHANNELS_ENDPOINT,
+  REVOCATION_ENDPOINT,
+  TOKEN_ENDPOINT,
+  YouTubeConnector,
+  safeGoogleError
+};

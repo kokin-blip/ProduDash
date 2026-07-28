@@ -58,13 +58,16 @@ test("every platform declares the fields the rest of the app reads", () => {
   }
 });
 
-test("shopify is the only platform with a live connector today", () => {
+test("only platforms with a real connector are marked live", () => {
   assert.deepEqual(
     platformsWhere("hasLiveConnector").map((platform) => platform.id),
-    ["shopify"]
+    ["shopify", "youtube"]
   );
   assert.equal(hasCapability("shopify", "ownsBusinessRecords"), true);
-  assert.equal(hasCapability("youtube", "hasLiveConnector"), false);
+  // Still declared but not implemented.
+  assert.equal(hasCapability("tiktok", "hasLiveConnector"), false);
+  assert.equal(hasCapability("instagram", "hasLiveConnector"), false);
+  assert.equal(hasCapability("stripe", "hasLiveConnector"), false);
   assert.equal(hasCapability("nope", "hasLiveConnector"), false);
 });
 
@@ -91,9 +94,9 @@ test("definitions are frozen so callers cannot mutate shared state", () => {
   // Sloppy-mode assignment fails silently rather than throwing, so assert the
   // value survives rather than asserting a TypeError.
   youtube.displayName = "changed";
-  youtube.capabilities.hasLiveConnector = true;
+  youtube.capabilities.isPublishDestination = false;
   assert.equal(getPlatform("youtube").displayName, "YouTube");
-  assert.equal(getPlatform("youtube").capabilities.hasLiveConnector, false);
+  assert.equal(getPlatform("youtube").capabilities.isPublishDestination, true);
 
   // Array mutation throws even in sloppy mode.
   assert.throws(() => youtube.scopes.push("extra"), TypeError);

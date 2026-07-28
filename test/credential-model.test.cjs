@@ -114,7 +114,7 @@ function connectionState(platformId, { setting = {}, integration = {} } = {}) {
 
 test("connection state distinguishes every reason a platform is not usable", () => {
   // No connector at all.
-  assert.equal(connectionState("youtube", { setting: { status: "stored" } }), CONNECTION_STATES.UNAVAILABLE);
+  assert.equal(connectionState("tiktok", { setting: { status: "stored" } }), CONNECTION_STATES.UNAVAILABLE);
   // Live connector, nothing entered.
   assert.equal(connectionState("shopify", { setting: { status: "missing" } }), CONNECTION_STATES.REQUIRES_CONFIGURATION);
   // Stored but never verified is NOT connected.
@@ -180,10 +180,10 @@ test("a platform awaiting provider review says so instead of claiming connected"
 test("credentials cannot be stored for a platform with no connector", async (t) => {
   const harness = await createHarness();
   t.after(harness.cleanup);
-  await assert.rejects(() => harness.store.saveIntegrationCredentials("youtube", { clientId: "x", clientSecret: "y" }), {
+  await assert.rejects(() => harness.store.saveIntegrationCredentials("tiktok", { clientKey: "x", clientSecret: "y" }), {
     code: "INTEGRATION_UNAVAILABLE"
   });
-  await assert.rejects(() => harness.store.saveIntegrationAuthorization("youtube", { accessToken: "ya29.x" }), {
+  await assert.rejects(() => harness.store.saveIntegrationAuthorization("tiktok", { accessToken: "ya29.x" }), {
     code: "INTEGRATION_UNAVAILABLE"
   });
 });

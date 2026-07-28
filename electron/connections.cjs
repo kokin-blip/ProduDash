@@ -1,5 +1,5 @@
 const { AppError, asAppError } = require("./errors.cjs");
-const { normalizeConnectionResult } = require("./connectors/contract.cjs");
+const { CONNECTOR_CAPABILITIES, connectorSupports, normalizeConnectionResult } = require("./connectors/contract.cjs");
 const { findPlatform } = require("./platforms/registry.cjs");
 
 class ConnectionService {
@@ -21,11 +21,26 @@ class ConnectionService {
     return { platform, connector };
   }
 
+  // Connectors need the user's own app configuration, the stored tokens, and
+  // the public token expiry -- which lives on the authorization record rather
+  // than in the credential vault.
+  credentialsFor(integrationId) {
+    const credentials = this.store.getIntegrationCredentials(integrationId);
+    const integration = this.store.getAppState().integrations.find((item) => item.id === integrationId);
+    return { ...credentials, tokenExpiresAt: integration?.authorization?.tokenExpiresAt || null };
+  }
+
   async refreshIntegration(integrationId) {
     const { connector } = this.resolveConnector(integrationId);
-    const credentials = this.store.getIntegrationCredentials(integrationId);
+    const credentials = this.credentialsFor(integrationId);
     try {
-      const result = normalizeConnectionResult(await connector.testConnection(credentials), integrationId);
+      const raw = await connector.testConnection(credentials);
+      // Persist refreshed tokens and account metadata before recording the
+      // connection result, so the verification timestamp is stamped last.
+      if (raw?.authorizationUpdate) {
+        await this.store.saveIntegrationAuthorization(integrationId, raw.authorizationUpdate);
+      }
+      const result = normalizeConnectionResult(raw, integrationId);
       // Only platforms that own business records return a snapshot to apply.
       return result.business
         ? this.store.applyConnectorSnapshot(integrationId, result)
@@ -39,6 +54,29 @@ class ConnectionService {
       });
       throw safe;
     }
+  }
+
+  // Runs an interactive authorization, then immediately verifies it. Storing
+  // tokens is not a connection: the integration only becomes connected after
+  // the follow-up provider request actually succeeds.
+  async authorizeIntegration(integrationId) {
+    const { connector } = this.resolveConnector(integrationId);
+    if (!connectorSupports(connector, CONNECTOR_CAPABILITIES.AUTHORIZE)) {
+      throw new AppError("AUTHORIZATION_UNSUPPORTED", "This integration does not use an authorization flow.");
+    }
+    const result = await connector.authorize(this.credentialsFor(integrationId));
+    await this.store.saveIntegrationAuthorization(integrationId, result);
+    return this.refreshIntegration(integrationId);
+  }
+
+  // Revokes at the provider first where supported, then clears locally. A
+  // provider-side failure must not leave ProduDash claiming access is gone.
+  async disconnectIntegration(integrationId) {
+    const { connector } = this.resolveConnector(integrationId);
+    if (connectorSupports(connector, CONNECTOR_CAPABILITIES.DISCONNECT)) {
+      await connector.disconnect(this.credentialsFor(integrationId));
+    }
+    return this.store.clearIntegrationAuthorization(integrationId);
   }
 
   // Refreshes every integration that is both configured and actually connectable.

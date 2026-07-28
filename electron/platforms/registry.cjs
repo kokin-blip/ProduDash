@@ -160,7 +160,7 @@ const PLATFORMS = [
       { key: "clientSecret", label: "OAuth client secret", type: "password", placeholder: "Google OAuth client secret", sensitive: true }
     ],
     scopes: ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"],
-    capabilities: { isPublishDestination: true, providesCreatorAnalytics: true },
+    capabilities: { hasLiveConnector: true, isPublishDestination: true, providesCreatorAnalytics: true },
     creator: {
       order: 2,
       displayName: "YouTube Shorts",
