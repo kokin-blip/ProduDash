@@ -463,3 +463,70 @@ test("a cancel that arrives while a job is starting is not discarded", async (co
   await waitFor(() => !["queued", "processing", "canceling"].includes(harness.store.getMediaJob(jobId).status));
   assert.equal(harness.store.getMediaJob(jobId).status, "canceled", "the job the user cancelled must not finish anyway");
 });
+
+test("retrying a render whose analysis artifacts are unreadable goes back to analysis", async (context) => {
+  // Rendering reuses validated artifacts from the job's temp folder. Once
+  // candidates were approved, retry always re-queued the render -- so a
+  // truncated metadata.json failed the same read on every attempt, forever,
+  // while telling the user to "Retry analysis before rendering".
+  const harness = await createHarness();
+  context.after(harness.cleanup);
+  const sourcePath = path.join(harness.directory, "source.mp4");
+  const outputParent = path.join(harness.directory, "outputs");
+  fs.writeFileSync(sourcePath, "fixture");
+  fs.mkdirSync(outputParent);
+  const runner = createFakeRunner();
+  const jobs = new MediaJobService({
+    store: harness.store,
+    mediaLibrary: {
+      getClipSummary: (id) => ({ id, name: "Source.mp4", status: "available" }),
+      resolveClipPath: () => sourcePath,
+      startClipAccess: () => null,
+      addFiles: async () => ({})
+    },
+    credentialVault: harness.vault,
+    runner,
+    onEvent: () => {}
+  });
+  await jobs.initialize();
+  const selection = jobs.rememberOutputSelection({ path: outputParent });
+  const created = await jobs.create({
+    sourceMediaId: "media-source",
+    outputSelectionId: selection.id,
+    title: "Corrupt artifacts",
+    goal: "",
+    maxClips: 1,
+    targetDuration: 8,
+    captionMode: "off",
+    captionText: "",
+    aspectTreatment: "fit_pad",
+    targetAspect: "vertical",
+    platforms: ["tiktok"]
+  });
+  const jobId = created.mediaJobs[0].id;
+  await waitFor(() => runner.starts.length === 1);
+  runner.starts[0].completion.resolve({
+    type: "awaiting_review",
+    metadata: { duration: 30 },
+    candidates: [{ id: "candidate-1", title: "Clip 1", start: 0, end: 8, duration: 8, confidence: 0.8, scores: {}, rationale: "Local" }],
+    warnings: []
+  });
+  await waitFor(() => harness.store.getMediaJob(jobId).status === "awaiting_review");
+  await jobs.approveCandidates(jobId, ["candidate-1"]);
+  await waitFor(() => runner.starts.length === 2);
+
+  // The render fails on an unreadable durable artifact.
+  runner.starts[1].completion.resolve({
+    type: "error",
+    error: { code: "DURABLE_ARTIFACT_MISSING", message: "Validated analysis artifacts are unreadable." },
+    retryable: true
+  });
+  await waitFor(() => harness.store.getMediaJob(jobId).status === "failed");
+
+  // The temp folder holds nothing readable, so a retry must redo analysis
+  // rather than queue the same failing render again.
+  const state = await jobs.retry(jobId);
+  const retried = state.mediaJobs.find((item) => item.id === jobId);
+  assert.equal(retried.status, "queued", "a render with no usable analysis has to start from analysis");
+  assert.deepEqual(retried.selectedCandidateIds, [], "selections against regenerated candidates would refer to nothing");
+});

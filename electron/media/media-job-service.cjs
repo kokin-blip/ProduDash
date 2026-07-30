@@ -694,6 +694,23 @@ class MediaJobService {
     );
   }
 
+  // Rendering reuses the validated analysis artifacts in the job's temp folder.
+  // Once candidates were approved, retry always went back to rendering -- so if
+  // those artifacts were gone or truncated, every retry failed on the same read,
+  // forever. The error even said "Retry analysis before rendering", which no
+  // path could do. Checking here is what makes that instruction true.
+  hasReadableAnalysisArtifacts(jobId) {
+    try {
+      const { tempPath } = this.getPrivatePaths(jobId);
+      for (const name of ["metadata.json", "analysis.json"]) {
+        JSON.parse(fs.readFileSync(path.join(tempPath, name), "utf8"));
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async retry(jobId) {
     const job = this.store.getMediaJob(jobId);
     if (!RETRYABLE_STATUSES.has(job.status)) {
@@ -702,10 +719,19 @@ class MediaJobService {
     if (!job.retryable && job.status !== "canceled") {
       throw new AppError("MEDIA_JOB_NOT_RETRYABLE", "This media job cannot be retried with its current source and settings.");
     }
-    const nextStatus = job.selectedCandidateIds.length ? "render_queued" : "queued";
+    const resumable = job.selectedCandidateIds.length && this.hasReadableAnalysisArtifacts(jobId);
     const state = await this.store.updateMediaJobSummary(
       jobId,
-      { status: nextStatus, stage: "queued", error: null, retryable: false, thumbnailSelections: [] },
+      {
+        status: resumable ? "render_queued" : "queued",
+        stage: "queued",
+        error: null,
+        retryable: false,
+        thumbnailSelections: [],
+        // Analysis regenerates candidates, so selections made against the old
+        // ones would refer to nothing.
+        ...(resumable ? {} : { selectedCandidateIds: [] })
+      },
       `Retried media job: ${job.title}.`
     );
     this.schedule();
@@ -922,10 +948,17 @@ class MediaJobService {
           if (message.stage === lastStage && bucket === lastBucket) return;
           lastStage = message.stage;
           lastBucket = bucket;
-          void this.store.updateMediaJobSummary(job.id, {
-            stage: message.stage,
-            progress: message.progress
-          });
+          // Deliberately not awaited -- progress must not throttle the worker --
+          // but a rejection still needs an owner. updateMediaJobSummary throws
+          // MEDIA_JOB_NOT_FOUND if the job was cleared mid-run, and an unhandled
+          // rejection there takes down the whole main process. Losing one
+          // progress tick for a job that no longer exists costs nothing.
+          this.store
+            .updateMediaJobSummary(job.id, {
+              stage: message.stage,
+              progress: message.progress
+            })
+            .catch(() => {});
         }
       );
       const finished = new Promise((resolve) => {
