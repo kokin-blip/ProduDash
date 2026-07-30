@@ -397,3 +397,69 @@ test("project preparation and approved rendering reuse the queue and keep an imm
   assert.equal(renderStart.job.candidates[0].edit.segments.length, 2);
   assert.notEqual(projects.get(edited.id).renderPlanHash, queuedHash);
 });
+
+test("a cancel that arrives while a job is starting is not discarded", async (context) => {
+  // schedule() commits to a job, but this.active is not assigned until after two
+  // awaits. A cancel arriving in that window found no active job, wrote
+  // "canceled", and start() then carried on regardless -- rendering the clips
+  // and finishing as "completed". The user's cancel vanished and files were
+  // written to their output folder anyway.
+  const harness = await createHarness();
+  context.after(harness.cleanup);
+  const sourcePath = path.join(harness.directory, "source.mp4");
+  const outputParent = path.join(harness.directory, "outputs");
+  fs.writeFileSync(sourcePath, "fixture");
+  fs.mkdirSync(outputParent);
+  const runner = createFakeRunner();
+  const jobs = new MediaJobService({
+    store: harness.store,
+    mediaLibrary: {
+      getClipSummary: (id) => ({ id, name: "Source.mp4", status: "available" }),
+      resolveClipPath: () => sourcePath,
+      startClipAccess: () => null,
+      addFiles: async () => ({})
+    },
+    credentialVault: harness.vault,
+    runner,
+    onEvent: () => {}
+  });
+  await jobs.initialize();
+
+  // Fire the cancel from inside the "processing" write, which is the exact
+  // moment the job is claimed but not yet cancellable through its handle.
+  const realUpdate = harness.store.updateMediaJobSummary.bind(harness.store);
+  let fired = false;
+  harness.store.updateMediaJobSummary = async (id, patch, audit) => {
+    if (patch.status === "processing" && !fired) {
+      fired = true;
+      await jobs.cancel(id);
+    }
+    return realUpdate(id, patch, audit);
+  };
+
+  const selection = jobs.rememberOutputSelection({ path: outputParent });
+  const created = await jobs.create({
+    sourceMediaId: "media-source",
+    outputSelectionId: selection.id,
+    title: "Cancelled while starting",
+    goal: "",
+    maxClips: 1,
+    targetDuration: 8,
+    captionMode: "off",
+    captionText: "",
+    aspectTreatment: "fit_pad",
+    targetAspect: "vertical",
+    platforms: ["tiktok"]
+  });
+  const jobId = created.mediaJobs[0].id;
+
+  await waitFor(() => runner.starts.length === 1);
+  assert.ok(fired, "the cancel has to land inside the starting window for this to mean anything");
+  // If the cancel was dropped, the run proceeds to a normal finish.
+  if (!runner.starts[0].canceled) {
+    runner.starts[0].completion.resolve({ type: "awaiting_review", metadata: { duration: 30 }, candidates: [], warnings: [] });
+  }
+
+  await waitFor(() => !["queued", "processing", "canceling"].includes(harness.store.getMediaJob(jobId).status));
+  assert.equal(harness.store.getMediaJob(jobId).status, "canceled", "the job the user cancelled must not finish anyway");
+});

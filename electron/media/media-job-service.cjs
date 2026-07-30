@@ -166,6 +166,12 @@ class MediaJobService {
     this.onEvent = onEvent;
     this.outputSelections = new Map();
     this.active = null;
+    // The job schedule() has committed to but start() has not finished wiring
+    // up. `active` cannot cover this: it needs the runner handle, which does not
+    // exist until two awaits later, and a cancel arriving in between was
+    // silently dropped while the render carried on to completion.
+    this.claimed = null;
+    this.cancelRequested = new Set();
     this.scheduling = false;
     this.clearing = false;
   }
@@ -666,13 +672,16 @@ class MediaJobService {
     const job = this.store.getMediaJob(jobId);
     if (job.status === "canceled") return this.store.getAppState();
     if (job.status === "completed") throw new AppError("MEDIA_JOB_TRANSITION_INVALID", "A completed media job cannot be canceled.");
-    if (this.active?.jobId === jobId) {
+    if (this.active?.jobId === jobId || this.claimed === jobId) {
       const state = await this.store.updateMediaJobSummary(jobId, {
         status: "canceling",
         stage: "canceling",
         error: null
       });
-      this.active.handle.cancel();
+      // Recorded as well as acted on: a job that is claimed but still starting
+      // has no handle yet, and start() applies this the moment it has one.
+      this.cancelRequested.add(jobId);
+      this.active?.handle?.cancel();
       return state;
     }
     if (!["queued", "render_queued", "awaiting_review", "failed", "interrupted"].includes(job.status)) {
@@ -844,16 +853,20 @@ class MediaJobService {
   }
 
   schedule() {
-    if (this.scheduling || this.active || this.clearing) return;
+    if (this.scheduling || this.active || this.claimed || this.clearing) return;
     this.scheduling = true;
     Promise.resolve()
       .then(async () => {
-        if (this.active || this.clearing) return;
+        if (this.active || this.claimed || this.clearing) return;
         const state = this.store.getAppState();
         const next = state.mediaJobs
           .filter((job) => job.status === "queued" || job.status === "render_queued")
           .sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt))[0];
-        if (next) await this.start(next);
+        if (!next) return;
+        // Claimed here, with no await in between, so a cancel can never arrive
+        // while this job looks unclaimed to cancel().
+        this.claimed = next.id;
+        await this.start(next);
       })
       .finally(() => {
         this.scheduling = false;
@@ -919,6 +932,10 @@ class MediaJobService {
         resolveFinished = resolve;
       });
       this.active = { jobId: job.id, handle, finished };
+      // A cancel that arrived while this job was starting had no handle to act
+      // on. Applying it here is what stops the run continuing to completion
+      // after the user has already cancelled it.
+      if (this.cancelRequested.has(job.id)) handle.cancel();
       let result;
       try {
         result = await handle.result;
@@ -952,6 +969,8 @@ class MediaJobService {
       if (typeof stopOutputAccess === "function") stopOutputAccess();
       if (typeof stopSourceAccess === "function") stopSourceAccess();
       if (resolveFinished) resolveFinished();
+      this.cancelRequested.delete(job.id);
+      this.claimed = null;
       this.active = null;
     }
   }
