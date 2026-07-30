@@ -165,17 +165,38 @@ class PublishingDispatchService {
     return this.store.getAppState();
   }
 
+  // Opens the file for a single upload attempt.
+  //
+  // A body must never be shared between attempts. withFreshAuthorization
+  // re-invokes its operation once when the provider rejects the token, and a
+  // stream that has already been read is at EOF: the retry would declare the
+  // full Content-Length and then send nothing. Every attempt therefore opens
+  // its own stream, and all of them are closed when the call is over.
+  openBody(streams, filePath, start = 0) {
+    // createReadStream opens lazily, and a stream with no error listener turns
+    // a failed open into an uncaught exception. If the file disappears between
+    // the stat above and the upload, the publish call surfaces that properly.
+    const body = fs.createReadStream(filePath, start > 0 ? { start } : undefined);
+    body.on("error", () => {});
+    streams.push(body);
+    return body;
+  }
+
   // Single-call upload for connectors that do not expose a resumable session.
   async sendWholeFile({ connector, destination, filePath, contentLength, metadata }) {
-    const body = fs.createReadStream(filePath);
-    body.on("error", () => {});
+    const streams = [];
     try {
       return await this.connections.withFreshAuthorization(destination.platformId, (accessToken) =>
-        connector.publish({ accessToken, ...metadata, media: { body, contentLength, contentType: "video/*" } })
+        connector.publish({
+          accessToken,
+          ...metadata,
+          media: { body: this.openBody(streams, filePath), contentLength, contentType: "video/*" }
+        })
       );
-    } catch (error) {
-      body.destroy();
-      throw error;
+    } finally {
+      // A connector that failed before consuming a body, and any body abandoned
+      // by a retry, would otherwise hold the handle open until GC.
+      for (const stream of streams) stream.destroy();
     }
   }
 
@@ -201,19 +222,15 @@ class PublishingDispatchService {
   }
 
   async sendBytes({ connector, destination, session, filePath, metadata, offset }) {
-    // Streaming from the offset means a resumed upload re-sends only what the
-    // provider is missing, and never loads the file into memory.
-    const body = fs.createReadStream(filePath, offset > 0 ? { start: offset } : undefined);
-    // createReadStream opens lazily, and a stream with no error listener turns
-    // a failed open into an uncaught exception. If the file disappears between
-    // the stat above and the upload, the publish call surfaces that properly.
-    body.on("error", () => {});
+    const streams = [];
     try {
+      // Streaming from the offset means a resumed upload re-sends only what the
+      // provider is missing, and never loads the file into memory.
       const result = await this.connections.withFreshAuthorization(destination.platformId, (accessToken) =>
         connector.sendUpload({
           accessToken,
           uploadUri: session.uploadUri,
-          body,
+          body: this.openBody(streams, filePath, offset),
           contentLength: session.contentLength,
           contentType: "video/*",
           offset,
@@ -226,12 +243,10 @@ class PublishingDispatchService {
       // what lets the next dispatch reconcile instead of uploading again, so it
       // survives until dispatch() has the id safely on disk.
       return result;
-    } catch (error) {
-      // A connector that failed before consuming the body would otherwise leave
-      // the file handle open until GC. The session record is deliberately kept
-      // so the next attempt can reconcile rather than restart.
-      body.destroy();
-      throw error;
+    } finally {
+      // The session record is deliberately kept on failure so the next attempt
+      // can reconcile rather than restart; only the file handles are released.
+      for (const stream of streams) stream.destroy();
     }
   }
 

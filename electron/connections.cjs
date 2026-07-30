@@ -97,6 +97,12 @@ class ConnectionService {
   // Runs an operation with a fresh token, retrying once if the provider rejects
   // it anyway. Bounded to a single retry so a persistently rejected token
   // cannot become a refresh loop.
+  //
+  // `operation` may therefore run twice, so it must build whatever it consumes
+  // rather than close over it. A request body is the trap: a stream created
+  // outside the callback is at EOF by the time the retry runs, which sends an
+  // empty body under the original Content-Length. See openBody() in
+  // publishing/dispatch-service.cjs for the shape that is safe here.
   async withFreshAuthorization(integrationId, operation) {
     const first = await this.getFreshAuthorization(integrationId);
     try {

@@ -22,7 +22,7 @@ const VIDEO_BYTES = "0123456789abcdef";
 // A resumable-upload connector whose provider-side state the test controls.
 function resumableConnector({ providerHas = 0, sessionDead = false, onSend, onBegin } = {}) {
   const calls = { begin: 0, probe: 0, send: 0 };
-  const state = { bytesHeld: providerHas, videoId: null, sessionDead };
+  const state = { bytesHeld: providerHas, videoId: null, sessionDead, received: [] };
   return {
     calls,
     state,
@@ -50,7 +50,12 @@ function resumableConnector({ providerHas = 0, sessionDead = false, onSend, onBe
       },
       sendUpload: async ({ body, offset }) => {
         calls.send += 1;
-        body?.destroy?.();
+        // Reads the body the way a real transport does, so a stream that has
+        // already been consumed shows up as the empty string rather than
+        // silently passing.
+        const chunks = [];
+        for await (const chunk of body) chunks.push(chunk);
+        state.received.push(Buffer.concat(chunks).toString());
         if (onSend) await onSend(calls.send, offset, state);
         state.videoId = state.videoId || `video-${calls.send}`;
         return { publicationId: state.videoId, privacyStatus: "private" };
@@ -232,6 +237,34 @@ test("an unusable session is not silently replaced", async (t) => {
   // claim otherwise.
   assert.equal(receipt.retryable, false);
   assert.equal(harness.store.getAppState().postQueue[0].status, POST_PLAN_STATUSES.DISPATCH_FAILED);
+});
+
+test("an authorization retry mid-upload sends a fresh stream, not a drained one", async (t) => {
+  // A token can be revoked or expire while bytes are moving.
+  // withFreshAuthorization answers that by re-invoking the operation once --
+  // so anything the operation closes over has to survive being used twice.
+  const { service, planId, state, calls } = await scenario(t, {
+    onSend: async (attempt) => {
+      if (attempt === 1) throw connectorError(CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION, "YOUTUBE_AUTH_FAILED", "Token rejected.");
+    }
+  });
+  // Mirrors ConnectionService.withFreshAuthorization: one bounded retry when
+  // the provider rejects the token.
+  service.connections.withFreshAuthorization = async (_id, operation) => {
+    try {
+      return await operation("ya29.token");
+    } catch (error) {
+      if (error?.category !== "authentication") throw error;
+      return operation("ya29.refreshed");
+    }
+  };
+
+  await service.dispatch(planId);
+  assert.equal(calls.send, 2, "the rejected attempt is retried once");
+  // A reused stream would already be at EOF, so the retry would declare the
+  // full Content-Length and then send nothing -- committing a truncated body
+  // that the next probe reads back as a legitimate partial offset.
+  assert.equal(state.received[1], VIDEO_BYTES, "the retry must send the whole file, not an exhausted stream");
 });
 
 test("an approval made before the provider required choices is refused, not guessed at", async (t) => {
