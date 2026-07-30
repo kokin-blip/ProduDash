@@ -73,14 +73,23 @@ class CredentialVault {
 
   async writeEncrypted(credentials) {
     const encrypted = await this.encryption.encrypt(JSON.stringify(credentials));
-    writeJsonAtomic(
-      this.filePath,
-      {
-        version: 1,
-        ciphertext: encrypted.toString("base64")
-      },
-      { mode: 0o600 }
-    );
+    const record = { version: 1, ciphertext: encrypted.toString("base64") };
+    // Written twice, deliberately. writeJsonAtomic copies the existing file to
+    // `.bak` before replacing it, so one write leaves the *previous* secrets
+    // sitting in the backup: revoking a grant or rotating a key would clean the
+    // vault while the old value stayed readable on disk. The second write makes
+    // the backup a copy of the new contents, which is what actually removes it.
+    //
+    // This lives here rather than at the call sites because it used to: remove()
+    // scrubbed, replace() scrubbed only when it emptied an entry, and save()
+    // never did -- so the disconnect path silently kept revoked tokens. One
+    // write path means that cannot drift apart again.
+    //
+    // The cost is a second write of a small file. Recovery is unaffected: a
+    // crash between the two writes leaves the previous contents in `.bak`, and
+    // after both it holds a valid copy of the current ones.
+    writeJsonAtomic(this.filePath, record, { mode: 0o600 });
+    writeJsonAtomic(this.filePath, record, { mode: 0o600 });
   }
 
   async migrateLegacy() {
@@ -122,18 +131,15 @@ class CredentialVault {
     if (Object.keys(values).length) this.cache[integrationId] = { ...values };
     else delete this.cache[integrationId];
     await this.writeEncrypted(this.cache);
-    if (!Object.keys(values).length) await this.writeEncrypted(this.cache);
   }
 
   async remove(integrationId) {
     delete this.cache[integrationId];
     await this.writeEncrypted(this.cache);
-    await this.writeEncrypted(this.cache);
   }
 
   async removeMany(integrationIds) {
     for (const integrationId of integrationIds) delete this.cache[integrationId];
-    await this.writeEncrypted(this.cache);
     await this.writeEncrypted(this.cache);
   }
 

@@ -82,7 +82,10 @@ test("missing encrypted vault is restored from its protected backup", async (t) 
   fs.unlinkSync(path.join(directory, "produdash-credentials.enc.json"));
   const recovered = new CredentialVault(directory, fakeEncryption());
   const notices = await recovered.initialize();
-  assert.equal(recovered.get("gemini").apiKey, "AIza-first-key");
+  // The backup holds the current credentials, not the previous generation.
+  // This assertion used to expect "AIza-first-key", which was the leak stated
+  // as a guarantee: it meant a rotated key stayed readable on disk forever.
+  assert.equal(recovered.get("gemini").apiKey, "AIza-second-key");
   assert.ok(notices.some((notice) => notice.code === "CREDENTIALS_RECOVERED"));
 });
 
@@ -125,4 +128,44 @@ test("planned integrations reject credentials until a real connector exists", as
     (error) => error.code === "INTEGRATION_UNAVAILABLE"
   );
   assert.equal(JSON.stringify(harness.vault.get("stripe")).includes("sk_live_not_saved"), false);
+});
+
+test("disconnecting an integration leaves no recoverable token in the backup", async (t) => {
+  const harness = await createHarness();
+  t.after(harness.cleanup);
+  await harness.store.saveIntegrationCredentials("youtube", { clientId: "client-1", clientSecret: "secret-1" });
+  await harness.store.saveIntegrationAuthorization("youtube", {
+    accessToken: "ya29.access-secret",
+    refreshToken: "1//refresh-secret",
+    selectedAccount: { id: "UC-channel", name: "Channel" }
+  });
+  await harness.store.clearIntegrationAuthorization("youtube");
+
+  // Checked through the backup rather than the live vault. writeJsonAtomic
+  // copies the current file into `.bak` before replacing it, so a revoked token
+  // can survive there while the vault itself looks correctly cleaned -- and the
+  // backup is what someone with disk access actually reads.
+  fs.unlinkSync(path.join(harness.directory, "produdash-credentials.enc.json"));
+  const recovered = new CredentialVault(harness.directory, fakeEncryption());
+  await recovered.initialize();
+  const values = recovered.get("youtube");
+  assert.equal(values.oauthAccessToken, undefined, "a disconnected access token must not be recoverable");
+  assert.equal(values.oauthRefreshToken, undefined, "a disconnected refresh token must not be recoverable");
+  // The user's own app configuration is not a revoked grant and stays put.
+  // (clientId is not sensitive, so it lives in app state rather than the vault.)
+  assert.equal(values.clientSecret, "secret-1");
+});
+
+test("rotating a secret leaves the previous value unrecoverable", async (t) => {
+  const directory = createDirectory();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const vault = new CredentialVault(directory, fakeEncryption());
+  await vault.initialize();
+  await vault.save("gemini", { apiKey: "AIza-compromised" });
+  await vault.save("gemini", { apiKey: "AIza-rotated" });
+
+  fs.unlinkSync(path.join(directory, "produdash-credentials.enc.json"));
+  const recovered = new CredentialVault(directory, fakeEncryption());
+  await recovered.initialize();
+  assert.equal(recovered.get("gemini").apiKey, "AIza-rotated");
 });
