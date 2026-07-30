@@ -150,12 +150,17 @@ class CredentialVault {
     const encryptedName = path.basename(this.filePath);
     const legacyName = path.basename(this.legacyPath);
     for (const entry of fs.readdirSync(directory)) {
-      if (
-        entry === encryptedName ||
-        entry === `${encryptedName}.bak` ||
-        entry.startsWith(`${encryptedName}.recovery-`) ||
-        entry === legacyName
-      ) {
+      // Every sidecar of the vault file, whatever the suffix -- `.bak`, a
+      // `.recovery-<stamp>` copy, and `.bak.recovery-<stamp>`, which recovery
+      // creates when the *backup* is the unreadable one.
+      //
+      // This used to enumerate exact suffixes and missed that last shape, so a
+      // vault that had ever been through recovery kept a copy of the user's
+      // credentials after they asked for everything to be deleted. Failing to
+      // decode is not the same as being damaged: a reinstalled OS or a changed
+      // keychain leaves the ciphertext intact and readable elsewhere. Matching
+      // the prefix means a new sidecar name cannot reintroduce this.
+      if (entry === legacyName || entry === encryptedName || entry.startsWith(`${encryptedName}.`)) {
         fs.unlinkSync(path.join(directory, entry));
       }
     }

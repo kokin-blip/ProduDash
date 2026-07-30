@@ -169,3 +169,32 @@ test("rotating a secret leaves the previous value unrecoverable", async (t) => {
   await recovered.initialize();
   assert.equal(recovered.get("gemini").apiKey, "AIza-rotated");
 });
+
+test("delete-all removes the vault copies a recovery leaves behind", async (t) => {
+  const directory = createDirectory();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const vault = new CredentialVault(directory, fakeEncryption());
+  await vault.initialize();
+  await vault.save("youtube", { oauthRefreshToken: "1//refresh-secret" });
+
+  // Drive the real recovery path. A vault can fail to decode without being
+  // damaged -- a reinstalled OS or a changed keychain leaves the ciphertext
+  // perfectly intact and simply unreadable here -- and recovery sets those
+  // copies aside rather than deleting them.
+  const filePath = path.join(directory, "produdash-credentials.enc.json");
+  fs.writeFileSync(filePath, JSON.stringify({ version: 1, ciphertext: "not-decryptable" }));
+  fs.writeFileSync(`${filePath}.bak`, JSON.stringify({ version: 1, ciphertext: "not-decryptable" }));
+  const broken = new CredentialVault(directory, fakeEncryption());
+  await assert.rejects(() => broken.initialize(), { code: "CREDENTIAL_VAULT_INVALID" });
+  assert.ok(
+    fs.readdirSync(directory).some((entry) => entry.includes(".recovery-")),
+    "the recovery path must have preserved something for this test to mean anything"
+  );
+
+  await vault.clearAll();
+  assert.deepEqual(
+    fs.readdirSync(directory).filter((entry) => entry.startsWith("produdash-credentials")),
+    [],
+    "deleting all local data must leave no copy of the credential vault behind"
+  );
+});
