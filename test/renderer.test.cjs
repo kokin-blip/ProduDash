@@ -703,6 +703,12 @@ test("Publishing offers a discard control only for an upload whose outcome is un
   const record = document.querySelector(".publication-receipts").textContent;
   assert.match(record, /not retryable/);
   assert.match(record, /Check YouTube Shorts before retrying/);
+
+  // Once discarded, the warning and the control must both go. Leaving them
+  // would make the action look like it did nothing and invite a second discard.
+  show({ errorCode: "UPLOAD_SESSION_DISCARDED", retryable: true });
+  assert.equal(document.querySelector("[data-discard-session]"), null);
+  assert.doesNotMatch(document.querySelector(".publication-receipts").textContent, /could not be accounted for/);
 });
 
 test("Publishing shows editable destination drafts and a truthful local schedule summary before approval", async () => {

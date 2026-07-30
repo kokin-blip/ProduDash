@@ -307,6 +307,10 @@ test("discarding an unresolved session is what unblocks a fresh upload", async (
   const discarded = afterDiscard.postQueue[0].publicationReceipts[0];
   assert.equal(discarded.hasResumableSession, false);
   assert.equal(discarded.retryable, true, "the block was the unknown outcome, and it has been resolved");
+  // The renderer keys its warning and its discard control off this code, so a
+  // record still saying UNRESOLVED would make the action look like a no-op.
+  assert.equal(discarded.errorCode, "UPLOAD_SESSION_DISCARDED");
+  assert.equal(discarded.status, RECEIPT_STATUSES.FAILED, "the attempt did fail, and the record keeps saying so");
 
   state.sessionDead = false;
   const republished = await service.dispatch(planId);

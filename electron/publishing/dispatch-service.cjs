@@ -142,6 +142,12 @@ class PublishingDispatchService {
       await this.store.recordPublicationReceipt(planId, {
         ...receipt,
         hasResumableSession: false,
+        // Still a failed attempt -- that is the truth and the record keeps it.
+        // But it is no longer *unresolved*, and the code has to say so: the
+        // renderer decides whether to warn and offer the discard control by
+        // reading this exact field, so leaving it would make the action appear
+        // to do nothing and invite the user to discard a second time.
+        errorCode: "UPLOAD_SESSION_DISCARDED",
         // The block was the unknown outcome, and the user has resolved it.
         retryable: true
       });
