@@ -234,6 +234,23 @@ test("an unusable session is not silently replaced", async (t) => {
   assert.equal(harness.store.getAppState().postQueue[0].status, POST_PLAN_STATUSES.DISPATCH_FAILED);
 });
 
+test("an approval made before the provider required choices is refused, not guessed at", async (t) => {
+  const { service, planId, calls, harness } = await scenario(t);
+  // A v1 approval snapshot: its payload predates per-destination options, so
+  // nobody was ever asked for an audience declaration. The snapshot is
+  // immutable, and inventing the answer would be ProduDash making a legal
+  // statement on the user's behalf.
+  delete harness.store.state.postQueue[0].approvalSnapshot.payload.platformPackages[0].options;
+
+  const state = await service.dispatch(planId);
+  assert.equal(calls.begin, 0, "nothing may be opened against an approval that never captured the choices");
+  assert.equal(calls.send, 0);
+  const receipt = state.postQueue[0].publicationReceipts[0];
+  assert.equal(receipt.errorCode, "APPROVAL_PREDATES_REQUIRED_OPTIONS");
+  // Retrying re-reads the same frozen snapshot, so it can only fail again.
+  assert.equal(receipt.retryable, false);
+});
+
 test("age alone never condemns a session -- the provider is asked", async (t) => {
   // The regression behind this: a session older than an arbitrary cutoff used
   // to be declared unusable without asking, forcing a restart of an upload the

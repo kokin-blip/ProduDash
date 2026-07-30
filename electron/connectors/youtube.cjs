@@ -468,7 +468,17 @@ class YouTubeConnector {
     const probe = await this.probeUploadOffset(uploadUri, accessToken, contentLength);
     if (probe.dead) return { unresolved: true };
     if (probe.completed) {
-      return { completed: true, offset: contentLength, result: this.describePublication(probe.body, this.buildVideoMetadata(request)) };
+      // The provider has already created this video, so recording its id is the
+      // only thing that matters here. Re-deriving the requested privacy status
+      // is a nicety, and a validation error in it must never be allowed to
+      // throw away a publication that genuinely exists.
+      let metadata = null;
+      try {
+        metadata = this.buildVideoMetadata(request);
+      } catch {
+        metadata = null;
+      }
+      return { completed: true, offset: contentLength, result: this.describePublication(probe.body, metadata) };
     }
     // Google can answer 308 with the full range while it is still committing.
     // Nothing is left to send, and forwarding this offset would be rejected as

@@ -711,6 +711,60 @@ test("Publishing offers a discard control only for an upload whose outcome is un
   assert.doesNotMatch(document.querySelector(".publication-receipts").textContent, /could not be accounted for/);
 });
 
+test("Publishing renders a control for every option the provider requires", async () => {
+  // Built from the real catalog rather than a hand-written fixture on purpose.
+  // A literal here would keep passing while buildPlatformEntry dropped the
+  // field, which is exactly how these controls came to be missing entirely:
+  // validation demanded answers no on-screen control could give, so no YouTube
+  // plan could be approved at all.
+  const catalog = buildPlatformCatalog({ credentialSettings: [], integrations: [] });
+  const youtube = catalog.find((entry) => entry.id === "youtube");
+  assert.ok(youtube.publishingOptions, "the catalog must carry the registry's publishing options");
+
+  const renderer = await setupRenderer();
+  renderer.setAppState(
+    baseState({
+      platformCatalog: catalog,
+      creatorPlatforms: [{ id: "youtube", name: "YouTube Shorts" }],
+      postQueue: [
+        {
+          id: "post-pending",
+          title: "Pending plan",
+          caption: "Shared copy",
+          platforms: ["youtube"],
+          platformPackages: [
+            {
+              platformId: "youtube",
+              title: "YouTube version",
+              caption: "YouTube copy",
+              options: { selfDeclaredMadeForKids: null, privacyStatus: "private" }
+            }
+          ],
+          status: "needs_approval",
+          schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+          mediaSnapshot: null,
+          approvalSnapshot: null,
+          exportReceipt: null
+        }
+      ]
+    })
+  );
+  renderer.ui.activeSection = "studio";
+  renderer.ui.studioTab = "publishing";
+  renderer.renderApp();
+
+  // Every option the registry declares needs a control, or approval is asking
+  // for something the person has no way to supply.
+  for (const key of Object.keys(youtube.publishingOptions)) {
+    assert.ok(document.querySelector(`select[name="option:${key}"]`), `no control rendered for ${key}`);
+  }
+  // The audience declaration has no safe default, so it must render unanswered
+  // and required rather than quietly preselecting a legal statement.
+  const audience = document.querySelector('select[name="option:selfDeclaredMadeForKids"]');
+  assert.equal(audience.hasAttribute("required"), true);
+  assert.equal(audience.querySelector("option[selected]").value, "");
+});
+
 test("Publishing shows editable destination drafts and a truthful local schedule summary before approval", async () => {
   const renderer = await setupRenderer();
   renderer.setAppState(

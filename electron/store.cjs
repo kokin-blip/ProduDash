@@ -911,6 +911,10 @@ class ProduDashStore {
       // Plan completeness is checked before connection readiness so someone
       // with an unfinished plan is told that first, rather than connecting an
       // account and only then discovering a second problem.
+      //
+      // Both modes, deliberately: the approved choices travel into the exported
+      // package too, so a manual upload carries the same recorded declaration
+      // as an API one.
       assertPublishingOptionsComplete(plan.platformPackages);
       if (mode === "official_api") {
         if (!plan.platforms.length) throw new AppError("INVALID_INPUT", "Select at least one publishing destination.");

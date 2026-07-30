@@ -9,7 +9,7 @@ const { UploadSessionStore, createUploadSession, isUsableSession } = require("./
 // An unresolved session is a local error, but unlike every other local error
 // the previous attempt did reach the provider. Retrying cannot be made safe
 // until a human has checked the destination, so the receipt must not offer it.
-const NEVER_RETRYABLE = Object.freeze(new Set(["UPLOAD_SESSION_UNRESOLVED"]));
+const NEVER_RETRYABLE = Object.freeze(new Set(["UPLOAD_SESSION_UNRESOLVED", "APPROVAL_PREDATES_REQUIRED_OPTIONS"]));
 
 // Dispatches an approved post plan to real connectors.
 //
@@ -68,6 +68,16 @@ class PublishingDispatchService {
     const state = this.store.getAppState();
     const integration = state.integrations.find((item) => item.id === destination.platformId);
     const pack = this.packageFor(plan, destination.platformId);
+    // An approval made before this platform declared per-destination options
+    // carries none: nobody was ever asked. Choosing an audience declaration on
+    // the user's behalf is not available to ProduDash, and the snapshot is
+    // immutable by design, so the only honest move is to ask for a new one.
+    if (platform.publishingOptions && !pack.options) {
+      throw new AppError(
+        "APPROVAL_PREDATES_REQUIRED_OPTIONS",
+        `${platform.displayName} requires publishing choices this approval never captured. Cancel this plan and create it again to choose them.`
+      );
+    }
     const { filePath, contentLength } = this.resolveMediaFile(plan);
     const accountId = integration?.authorization?.selectedAccount?.id || null;
     const metadata = { title: pack.title, description: pack.caption, ...(pack.options || {}) };

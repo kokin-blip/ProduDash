@@ -88,6 +88,22 @@ function buildPlatformEntry(state, platform) {
     tokenExpiresAt: authorization.tokenExpiresAt,
     selectedAccount: authorization.selectedAccount,
     lastVerifiedAt: authorization.lastVerifiedAt,
+    // Per-destination choices the provider requires. The renderer builds its
+    // required selects from these, so leaving them off the entry produced a
+    // plan that validation demanded answers for with no control to answer
+    // with -- approval was impossible rather than merely awkward.
+    publishingOptions: platform.publishingOptions
+      ? Object.fromEntries(
+          Object.entries(platform.publishingOptions).map(([key, option]) => [
+            key,
+            {
+              ...option,
+              values: option.values ? [...option.values] : null,
+              choices: option.choices.map((choice) => ({ ...choice }))
+            }
+          ])
+        )
+      : null,
     // Instagram declares two mutually exclusive routes; null everywhere else.
     authRoutes: platform.authRoutes
       ? Object.values(platform.authRoutes).map((route) => ({
