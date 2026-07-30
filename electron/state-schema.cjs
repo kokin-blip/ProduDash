@@ -3,7 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { AppError } = require("./errors.cjs");
 const { createInitialState } = require("./initial-state.cjs");
-const { CREATOR_PLATFORM_IDS, findPlatform } = require("./platforms/registry.cjs");
+const { CREATOR_PLATFORM_IDS } = require("./platforms/registry.cjs");
 const { normalizeAuthorizationRecord, validateAuthorizationRecord } = require("./platforms/authorization.cjs");
 const { STATUS_VALUES: POST_PLAN_STATUS_VALUES } = require("./publishing/post-status.cjs");
 const { normalizeReceipt, validateReceipt } = require("./publishing/receipt.cjs");
@@ -299,24 +299,30 @@ function approvalPayloadForVersion(plan, version) {
   };
 }
 
-// Publishing options are registry-shaped. A platform that declares none must
-// carry null; one that declares some must carry exactly those keys, with a null
-// only where the registry allows a value to still be unchosen.
+// Structure only, deliberately.
+//
+// This used to require a saved plan's option keys to exactly equal the live
+// registry's, and to reject any value outside the registry's current choices.
+// The registry is code; a saved plan is data the user already has, and it
+// outlives any particular set of definitions. So a purely additive release --
+// one new YouTube option, one retired enum value -- made every existing plan
+// fail validateState. That is not a contained failure: loadRecoverableState
+// preserves the file, tries the backup, fails there identically because it has
+// the same shape, and falls back to createInitialState(). The user opens an
+// empty app, having lost the visible history of every business, media job and
+// post plan to a change that only added a field.
+//
+// The option values are still checked where checking is safe: on write by
+// validatePostPlanDraft, at approval by assertPublishingOptionsComplete, and at
+// dispatch by the connector. Refusing there is recoverable. Refusing here is
+// not, so here only asks whether this is a plausible options record at all.
+//
+// Approved plans are the reason this is validation rather than normalization:
+// their platformPackages are hashed into the approval snapshot, so rewriting
+// them on load would break the hash and cause exactly the reset it prevents.
 function validatePublishingOptions(platformId, options) {
-  const definitions = findPlatform(platformId)?.publishingOptions;
-  if (!definitions) return options === null || options === undefined;
-  if (!options || typeof options !== "object" || Array.isArray(options)) return false;
-  const expected = Object.keys(definitions).sort();
-  if (JSON.stringify(Object.keys(options).sort()) !== JSON.stringify(expected)) return false;
-  for (const [key, definition] of Object.entries(definitions)) {
-    const value = options[key];
-    // Unchosen is allowed only while the plan is still a draft; approval
-    // enforces completeness separately.
-    if (value === null) continue;
-    if (definition.type === "boolean" && typeof value !== "boolean") return false;
-    if (definition.type === "enum" && !definition.values.includes(value)) return false;
-  }
-  return true;
+  if (options === null || options === undefined) return true;
+  return typeof options === "object" && !Array.isArray(options);
 }
 
 function validateState(state) {

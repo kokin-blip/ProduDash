@@ -209,3 +209,35 @@ test("a migrated legacy plan cannot be published until its declaration is made",
     (error) => ["PUBLISHING_OPTION_REQUIRED", "INVALID_TRANSITION"].includes(error.code)
   );
 });
+
+test("a plan whose options drifted from the registry still loads", async (t) => {
+  // The registry is code and a saved plan is data the user already has, so the
+  // two will disagree the first time a release adds or retires an option.
+  // Rejecting here is not a contained failure: validateState throwing sends
+  // loadRecoverableState through the backup -- which has the same shape and
+  // fails identically -- and on to createInitialState(), so the user opens an
+  // empty app because a field was added.
+  const drifted = migrateState(legacyStateWithApprovedPlan());
+  drifted.postQueue[0].platformPackages[0].options = {
+    // Retired since this plan was written.
+    legacyChoice: "gone",
+    // Still declared, but holding a value the registry no longer offers.
+    privacyStatus: "friends-only"
+    // selfDeclaredMadeForKids has been dropped entirely: newly declared, or
+    // written by a build that did not have it.
+  };
+  assert.doesNotThrow(() => validateState(drifted), "drifted options must not make existing state unloadable");
+
+  // Structure is still structure: this is not a plausible options record.
+  drifted.postQueue[0].platformPackages[0].options = ["not", "an", "object"];
+  assert.throws(() => validateState(drifted));
+
+  // And nothing has been loosened where refusing is safe -- approval still
+  // demands a declaration nobody has made.
+  const harness = await createHarness();
+  t.after(harness.cleanup);
+  harness.store.state = migrateState(legacyStateWithApprovedPlan());
+  harness.store.state.postQueue[0].status = "needs_approval";
+  harness.store.state.postQueue[0].platformPackages[0].options = { privacyStatus: "private" };
+  await assert.rejects(() => harness.store.approvePostPlan("post-legacy", "manual_export"), { code: "PUBLISHING_OPTION_REQUIRED" });
+});
