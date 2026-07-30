@@ -199,6 +199,22 @@ test("publishing packages snapshot completed media, reject bad schedules, and ca
   const auditCount = state.auditLog.length;
   state = await harness.store.cancelPostPlan(planId);
   assert.equal(state.auditLog.length, auditCount);
+  // The cancelable set is asked of post-status.cjs rather than re-derived here.
+  // A hand-copied list omitted dispatch_failed, so the Cancel button the
+  // renderer offers on a failed dispatch always threw -- and a plan that could
+  // not be retried could not be escaped either.
+  const failed = await harness.store.createPostPlan({
+    mediaJobId: "mediajob-publish",
+    title: "Failed dispatch",
+    caption: "Approved copy",
+    platforms: ["instagram"]
+  });
+  const failedId = failed.postQueue[1].id;
+  harness.store.state.postQueue[1].status = "dispatch_failed";
+  assert.equal((await harness.store.cancelPostPlan(failedId)).postQueue[1].status, "canceled");
+  // Terminal statuses must stay terminal; loosening the guard must not leak.
+  harness.store.state.postQueue[1].status = "published";
+  await assert.rejects(harness.store.cancelPostPlan(failedId), /no longer be canceled/);
   await assert.rejects(
     harness.store.createPostPlan({
       title: "Bad zone",

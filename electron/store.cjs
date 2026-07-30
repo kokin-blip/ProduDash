@@ -8,7 +8,7 @@ const { writeJsonAtomic } = require("./atomic-json.cjs");
 const { buildAnalyticsReport } = require("./analytics-report.cjs");
 const { getPlatform } = require("./platforms/registry.cjs");
 const { buildPlatformCatalog } = require("./platforms/catalog.cjs");
-const { DISPATCHABLE_STATUSES, POST_PLAN_STATUSES, assertTransition } = require("./publishing/post-status.cjs");
+const { DISPATCHABLE_STATUSES, POST_PLAN_STATUSES, assertTransition, canTransition } = require("./publishing/post-status.cjs");
 const { isAlreadyPublished, normalizeReceipt } = require("./publishing/receipt.cjs");
 const { TOKEN_VAULT_KEYS, createAuthorizationRecord, normalizeAuthorizationRecord } = require("./platforms/authorization.cjs");
 const {
@@ -1041,7 +1041,10 @@ class ProduDashStore {
       const plan = this.state.postQueue.find((item) => item.id === planId);
       if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
       if (plan.status === "canceled") return this.getAppState();
-      if (!["needs_approval", "approved_for_manual_export", "approved_for_official_api"].includes(plan.status)) {
+      // Asked of the state machine rather than re-derived here. A hand-copied
+      // list drifted from it before: it omitted dispatch_failed, so the Cancel
+      // button the renderer offers on a failed dispatch always threw.
+      if (!canTransition(plan.status, POST_PLAN_STATUSES.CANCELED)) {
         throw new AppError("INVALID_TRANSITION", "This post plan can no longer be canceled.");
       }
       plan.status = "canceled";
