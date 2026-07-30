@@ -81,7 +81,12 @@ function renderNav() {
   const footer = document.querySelector(".sidebar-footer");
   const connected = integrationReady("shopify") && workloadReady("inboxDrafting");
   footer.querySelector("strong").textContent = connected ? "Core apps connected" : "Connections required";
-  document.querySelector(".sidebar-footer span:last-child").textContent = "Official APIs only";
+  // The running build, so a tester holding an installer can say which one it is
+  // without inspecting the filename or a sidecar metadata file.
+  const version = ui.appState.appVersion;
+  document.querySelector(".sidebar-footer span:last-child").textContent = version
+    ? `Official APIs only · v${version}`
+    : "Official APIs only";
   footer.querySelector(".status-dot").classList.toggle("connected", connected);
 }
 

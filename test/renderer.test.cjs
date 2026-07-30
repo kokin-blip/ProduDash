@@ -1913,3 +1913,18 @@ test("Publishing says which destinations it cannot actually publish to", async (
   assert.doesNotMatch(youtube, /export only/, "YouTube has a connector and can be published to");
   assert.match(instagram, /export only/, "Instagram has none, and the checkbox has to say so");
 });
+
+test("the sidebar names the running build", async () => {
+  // Without this there is no in-app surface for the version at all: a tester
+  // holding an installer could not say which build they were running without
+  // inspecting the filename or a sidecar metadata file.
+  const renderer = await setupRenderer();
+  renderer.setAppState(baseState({ appVersion: "0.1.0-alpha.1" }));
+  renderer.renderApp();
+  assert.match(document.querySelector(".sidebar-footer span:last-child").textContent, /v0\.1\.0-alpha\.1/);
+
+  // A build that reports no version says nothing rather than "vundefined".
+  renderer.setAppState(baseState({ appVersion: null }));
+  renderer.renderApp();
+  assert.equal(document.querySelector(".sidebar-footer span:last-child").textContent, "Official APIs only");
+});

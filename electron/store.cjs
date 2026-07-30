@@ -110,6 +110,9 @@ class ProduDashStore {
     this.userDataPath = userDataPath;
     this.filePath = path.join(userDataPath, "produdash-state.json");
     this.credentialVault = options.credentialVault;
+    // Supplied by main.cjs from app.getVersion(). Derived, not persisted: it
+    // describes the running build, not the user's data.
+    this.appVersion = options.appVersion || null;
     const loaded = loadRecoverableState(this.filePath);
     this.state = loaded.state;
     this.notices = loaded.notices;
@@ -125,7 +128,7 @@ class ProduDashStore {
 
   getAppState() {
     const state = clone(this.state);
-    return { ...state, systemNotices: clone(this.notices), platformCatalog: buildPlatformCatalog(state) };
+    return { ...state, systemNotices: clone(this.notices), platformCatalog: buildPlatformCatalog(state), appVersion: this.appVersion };
   }
 
   // The public token expiry, read without cloning the store.

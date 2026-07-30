@@ -21,6 +21,12 @@ jobs:
       - run: npm run check:syntax
       - run: npm run lint
       - run: npm run format:check
+      # Part of `npm run validate` but previously in no CI job at all, so a
+      # broken packaging config only surfaced during a manual prerelease run.
+      - run: npm run check:package-config
+      # Scoped to production dependencies on purpose: the build toolchain
+      # carries advisories that cannot be resolved without downgrading
+      # electron-builder several major versions. See docs/release-readiness.md.
       - run: npm audit --omit=dev
 
   desktop:

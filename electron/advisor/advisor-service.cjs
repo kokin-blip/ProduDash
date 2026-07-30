@@ -184,6 +184,9 @@ class AdvisorService {
       const toolNames = [];
       let responseText = "";
       let usage = null;
+      // `<=` is deliberate. MAX_TOOL_ROUNDS counts rounds of tool execution, and
+      // one further provider call is what turns the last of them into an answer
+      // -- or discovers that the model still wants more, which is the limit.
       for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
         if (active.canceled) throw new AppError("ADVISOR_CANCELED", "Advisor request canceled.");
         const result = await invokeCapability(provider.adapter, provider.model, AI_CAPABILITIES.TOOL_CALLING, {

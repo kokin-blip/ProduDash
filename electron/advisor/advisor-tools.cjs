@@ -189,10 +189,14 @@ function assertPlainInput(value) {
   return value;
 }
 
-function businessFromContext(store, context) {
+// Takes an already-read state rather than reading its own. getAppState deep
+// clones every plan, media job and conversation, and this used to be one of
+// three such reads per tool call -- at five calls a round and five rounds, that
+// is dozens of full-workspace clones on the main thread for a single question.
+function businessFromContext(state, context) {
   if (!context.businessId) return null;
   const businessId = requireId(context.businessId, "Business");
-  const business = store.getAppState().businesses.find((item) => item.id === businessId);
+  const business = state.businesses.find((item) => item.id === businessId);
   if (!business) throw new AppError("BUSINESS_NOT_FOUND", "The selected business is unavailable.");
   return business;
 }
@@ -202,9 +206,9 @@ function safeNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function normalizeContext(value, store) {
+function normalizeContext(value, store, knownState = null) {
   const context = assertPlainInput(value);
-  const state = store.getAppState();
+  const state = knownState || store.getAppState();
   const view = VIEW_NAMES.has(context.view) ? context.view : "overview";
   const businessId = context.businessId ? requireId(context.businessId, "Business") : null;
   if (businessId && !state.businesses.some((business) => business.id === businessId)) {
@@ -245,9 +249,11 @@ function createAdvisorTools({ store, mediaLibrary, projects = null }) {
   async function execute(name, rawInput, rawContext) {
     if (!TOOL_NAMES.has(name)) throw new AppError("ADVISOR_TOOL_NOT_ALLOWED", "That Advisor tool is not allowed.");
     const input = assertPlainInput(rawInput);
-    const context = normalizeContext(rawContext, store);
+    // Read once and shared. These three lines used to take three independent
+    // deep clones of the whole workspace for every tool call.
     const state = store.getAppState();
-    const business = businessFromContext(store, context);
+    const context = normalizeContext(rawContext, store, state);
+    const business = businessFromContext(state, context);
 
     if (["get_current_project", "get_project_render_readiness", "get_project_job_failure"].includes(name)) {
       if (!projects || Object.keys(input).some((key) => key !== "projectId")) {

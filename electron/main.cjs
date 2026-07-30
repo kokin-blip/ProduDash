@@ -92,7 +92,7 @@ if (hasSingleInstanceLock) {
       session.defaultSession.setPermissionCheckHandler(() => false);
 
       const credentialVault = new CredentialVault(app.getPath("userData"), createSafeStorageAdapter(safeStorage));
-      const store = new ProduDashStore(app.getPath("userData"), { credentialVault });
+      const store = new ProduDashStore(app.getPath("userData"), { credentialVault, appVersion: app.getVersion() });
       try {
         await store.initialize();
       } catch (error) {

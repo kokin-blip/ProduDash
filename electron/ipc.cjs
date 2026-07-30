@@ -594,10 +594,21 @@ function registerIpc({
     if (result.canceled) return null;
     const selectedPath = result.filePaths[0];
     const stat = await fs.promises.stat(selectedPath);
-    if (!stat.isFile() || stat.size > 400_000_000) {
+    // A brand template is a small settings document. The old ceiling was 400 MB,
+    // which JSON.parse would turn into a multi-second freeze of the main process
+    // -- taking any in-flight render with it -- or an out-of-memory crash. The
+    // transcript importer nearby already caps at 2 MB.
+    if (!stat.isFile() || stat.size > 4_000_000) {
       throw new AppError("TEMPLATE_TOO_LARGE", "The selected brand template is too large.");
     }
-    const document = JSON.parse(await fs.promises.readFile(selectedPath, "utf8"));
+    let document;
+    try {
+      document = JSON.parse(await fs.promises.readFile(selectedPath, "utf8"));
+    } catch {
+      // Unguarded, a malformed file surfaced as a generic internal error that
+      // said nothing about which file or why.
+      throw new AppError("TEMPLATE_UNREADABLE", "The selected brand template is not valid JSON.");
+    }
     if (
       !document ||
       typeof document !== "object" ||
