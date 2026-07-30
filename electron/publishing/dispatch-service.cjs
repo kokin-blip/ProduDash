@@ -236,20 +236,43 @@ class PublishingDispatchService {
 
   async sendBytes({ connector, destination, session, filePath, metadata, offset }) {
     const streams = [];
+    let attempt = 0;
     try {
       // Streaming from the offset means a resumed upload re-sends only what the
       // provider is missing, and never loads the file into memory.
-      const result = await this.connections.withFreshAuthorization(destination.platformId, (accessToken) =>
-        connector.sendUpload({
+      const result = await this.connections.withFreshAuthorization(destination.platformId, async (accessToken) => {
+        attempt += 1;
+        let start = offset;
+        if (attempt > 1) {
+          // withFreshAuthorization re-invokes this once when the provider
+          // rejects the token -- and it can reject one *after* accepting bytes,
+          // so its cursor has moved. Replaying the range computed before that
+          // attempt is a bad Content-Range, which comes back as a validation
+          // error, and validation errors are not retryable: the destination
+          // would be recorded as permanently failed while its session was still
+          // perfectly resumable. Every other path here asks before sending, so
+          // this one does too.
+          const probe = await connector.probeUpload({
+            accessToken,
+            uploadUri: session.uploadUri,
+            contentLength: session.contentLength,
+            request: metadata
+          });
+          if (probe.unresolved) await this.refuseUnresolved(destination.idempotencyKey);
+          // The rejected attempt turned out to have delivered everything.
+          if (probe.completed) return probe.result;
+          start = probe.offset;
+        }
+        return connector.sendUpload({
           accessToken,
           uploadUri: session.uploadUri,
-          body: this.openBody(streams, filePath, offset),
+          body: this.openBody(streams, filePath, start),
           contentLength: session.contentLength,
           contentType: "video/*",
-          offset,
+          offset: start,
           request: metadata
-        })
-      );
+        });
+      });
       // Deliberately NOT cleared here. Between this line and the receipt being
       // written, the provider holds a video whose id ProduDash has not recorded
       // -- exactly the crash window this module exists to close. The session is

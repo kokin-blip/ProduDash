@@ -484,3 +484,35 @@ test("a crash between discarding and clearing cannot produce a duplicate", async
   assert.equal(calls.begin, 0, "no fresh session may be opened after a half-finished discard");
   assert.equal(calls.send, 0);
 });
+
+test("an authorization retry asks the provider where to resume", async (t) => {
+  // A token can be rejected *after* the provider has already accepted bytes, so
+  // its cursor has moved. Replaying the range computed before that attempt is a
+  // bad Content-Range, which the provider rejects as a validation error -- and
+  // validation errors are not retryable, so the destination would be written off
+  // as permanently failed while its session was still perfectly resumable.
+  const offsets = [];
+  const { service, planId, calls } = await scenario(t, {
+    onSend: async (attempt, offset, providerState) => {
+      offsets.push(offset);
+      if (attempt === 1) {
+        providerState.bytesHeld = 9;
+        throw connectorError(CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION, "YOUTUBE_AUTH_FAILED", "Token rejected.");
+      }
+    }
+  });
+  // Mirrors ConnectionService.withFreshAuthorization: one bounded retry when the
+  // provider rejects the token.
+  service.connections.withFreshAuthorization = async (_id, operation) => {
+    try {
+      return await operation("ya29.token");
+    } catch (error) {
+      if (error?.category !== "authentication") throw error;
+      return operation("ya29.refreshed");
+    }
+  };
+
+  await service.dispatch(planId);
+  assert.deepEqual(offsets, [0, 9], "the retry must resume where the provider actually is");
+  assert.equal(calls.probe, 1, "which means asking it, not reusing the offset from before the failure");
+});
