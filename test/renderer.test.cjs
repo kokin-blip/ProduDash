@@ -414,6 +414,38 @@ test("keyed setup status badges animate only when their real value changes", asy
   assert.equal(document.querySelector('[data-status-key="setup-shopify"]').classList.contains("status-changed"), false);
 });
 
+test("each connection state renders a badge tone that matches how bad it is", async () => {
+  const renderer = await setupRenderer();
+  const badgeToneFor = (youtube) => {
+    const state = {
+      integrations: [{ id: "youtube", name: "YouTube", status: "disconnected", lastSync: "Never", ...youtube }],
+      credentialSettings: [{ id: "youtube", name: "YouTube", status: "stored", fields: [] }]
+    };
+    renderer.setAppState(baseState({ ...state, platformCatalog: buildPlatformCatalog(state) }));
+    renderer.ui.activeSection = "integrations";
+    renderer.renderApp();
+    return document.querySelector('[data-status-key="integration-youtube"]').className;
+  };
+
+  const authorized = { hasAccessToken: true, hasRefreshToken: true, grantedScopes: [] };
+  // A healthy connection and a partly-failed one must not look the same.
+  assert.match(badgeToneFor({ status: "connected", authorization: authorized }), /success/);
+  assert.match(badgeToneFor({ status: "degraded", authorization: authorized }), /warning/);
+  // A failed refresh keeps its danger tone.
+  assert.match(badgeToneFor({ status: "error", authorization: authorized }), /danger/);
+  // A grant with nothing left to refresh from is genuinely broken, and saying
+  // so in neutral grey made it indistinguishable from a healthy connection.
+  assert.match(
+    badgeToneFor({
+      status: "connected",
+      authorization: { hasAccessToken: true, hasRefreshToken: false, tokenExpiresAt: "2020-01-01T00:00:00.000Z", grantedScopes: [] }
+    }),
+    /danger/
+  );
+  // Awaiting authorization is an expected next step, not a failure.
+  assert.match(badgeToneFor({ status: "disconnected", authorization: { hasAccessToken: false, grantedScopes: [] } }), /warning/);
+});
+
 test("integration forms expose busy state and planned providers never accept credentials", async () => {
   const renderer = await setupRenderer();
   renderer.setAppState(

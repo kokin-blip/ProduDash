@@ -90,17 +90,24 @@ function renderLocalVoiceOptions() {
 
 // What each connection state means for the person looking at it. Every state
 // deriveConnectionState can return is covered, so none renders as a bare slug.
+// Label, help text, and badge tone for each connection state. The tone lives
+// here rather than being inferred from the slug so that adding a state without
+// deciding how it should read is not possible: every state below is a distinct
+// situation, and rendering them all in the same neutral grey told users nothing.
 const CONNECTION_STATE_COPY = {
-  unavailable: ["Unavailable", "ProduDash has no connector for this platform yet."],
-  requires_configuration: ["Configuration required", "Enter your own provider application details to begin."],
-  credentials_stored_unverified: ["Stored, not verified", "Configuration is saved. Test the connection to verify it."],
-  authorization_required: ["Authorization required", "Configuration is saved. Authorize in your browser to continue."],
-  token_expired: ["Access expired", "The stored access token expired. Reauthorize to continue."],
-  missing_scope: ["Missing permission", "The authorization is missing a permission ProduDash needs."],
-  provider_approval_required: ["Provider review required", "Your provider application still needs review or an audit."],
-  connected: ["Connected", "Verified against the provider."],
-  disconnected: ["Disconnected", "Previously verified. Test the connection to reconnect."],
-  error: ["Needs attention", "The last connection attempt failed."]
+  unavailable: ["Unavailable", "ProduDash has no connector for this platform yet.", "neutral"],
+  requires_configuration: ["Configuration required", "Enter your own provider application details to begin.", "neutral"],
+  credentials_stored_unverified: ["Stored, not verified", "Configuration is saved. Test the connection to verify it.", "warning"],
+  authorization_required: ["Authorization required", "Configuration is saved. Authorize in your browser to continue.", "warning"],
+  // Only reached when there is no refresh token left, so this really does mean
+  // the grant is finished and a browser flow is the way back.
+  token_expired: ["Access expired", "The stored access token expired. Reauthorize to continue.", "danger"],
+  missing_scope: ["Missing permission", "The authorization is missing a permission ProduDash needs.", "danger"],
+  provider_approval_required: ["Provider review required", "Your provider application still needs review or an audit.", "warning"],
+  connected: ["Connected", "Verified against the provider.", "success"],
+  degraded: ["Partly connected", "Some provider data could not be refreshed. The details are below.", "warning"],
+  disconnected: ["Disconnected", "Previously verified. Test the connection to reconnect.", "neutral"],
+  error: ["Needs attention", "The last connection attempt failed.", "danger"]
 };
 
 function renderActionButton(entry, actionId, { pending, className = "ghost-button small", attribute, pendingLabel }) {
@@ -152,7 +159,7 @@ function renderConnection(entry) {
     isPending(`authorize-${entry.id}`) ||
     isPending(`disconnect-${entry.id}`) ||
     isPending(`remove-${entry.id}`);
-  const [stateLabel, stateHelp] = CONNECTION_STATE_COPY[entry.connectionState] || ["Unknown", ""];
+  const [stateLabel, stateHelp, stateTone] = CONNECTION_STATE_COPY[entry.connectionState] || ["Unknown", "", "neutral"];
 
   return `
     <form class="panel connection-section" data-credentials-form="${escapeHtml(entry.id)}" data-connection-state="${escapeHtml(
@@ -162,7 +169,7 @@ function renderConnection(entry) {
         <div>
           <div class="connection-title">
             <h2>${escapeHtml(setting.name)}</h2>
-            ${renderStatusBadge(entry.connectionState, stateLabel, `integration-${entry.id}`)}
+            ${renderStatusBadge(entry.connectionState, stateLabel, `integration-${entry.id}`, stateTone)}
           </div>
           <p>${escapeHtml(stateHelp)}</p>
           <p>${escapeHtml(entry.credentialNote || setting.note)}</p>

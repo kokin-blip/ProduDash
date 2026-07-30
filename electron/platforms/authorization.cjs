@@ -44,6 +44,10 @@ const CONNECTION_STATES = Object.freeze({
   PROVIDER_APPROVAL_REQUIRED: "provider_approval_required",
   ERROR: "error",
   CONNECTED: "connected",
+  // Reachable, but only partly. Kept distinct from CONNECTED because the two
+  // call for different reactions and the badge is the only place a user learns
+  // which one they have.
+  DEGRADED: "degraded",
   DISCONNECTED: "disconnected",
   CREDENTIALS_STORED_UNVERIFIED: "credentials_stored_unverified"
 });
@@ -137,7 +141,12 @@ function deriveConnectionState({ platform, integration, setting, now = Date.now(
   if (requiresAuthorizationFlow(platform) && !authorization.hasAccessToken) {
     return CONNECTION_STATES.AUTHORIZATION_REQUIRED;
   }
-  if (authorization.tokenExpiresAt && Date.parse(authorization.tokenExpiresAt) <= now) {
+  // An expired access token backed by a refresh token is the ordinary steady
+  // state, not a fault: ConnectionService renews it on the next call without
+  // the user present. Only a grant with nothing left to refresh from actually
+  // needs them to reauthorize, and saying so otherwise sends people through a
+  // browser flow roughly once an hour for no reason.
+  if (authorization.tokenExpiresAt && Date.parse(authorization.tokenExpiresAt) <= now && !authorization.hasRefreshToken) {
     return CONNECTION_STATES.TOKEN_EXPIRED;
   }
   // Only meaningful once an authorization actually granted something.
@@ -146,7 +155,11 @@ function deriveConnectionState({ platform, integration, setting, now = Date.now(
   }
   if (authorization.reviewStatus === "required") return CONNECTION_STATES.PROVIDER_APPROVAL_REQUIRED;
   if (integration?.status === "error") return CONNECTION_STATES.ERROR;
-  if (integration?.status === "connected" || integration?.status === "degraded") return CONNECTION_STATES.CONNECTED;
+  // Reported separately. Collapsing it into CONNECTED put a success badge
+  // directly above the error text describing the part that failed, and claimed
+  // "verified against the provider" for a sync that was not.
+  if (integration?.status === "degraded") return CONNECTION_STATES.DEGRADED;
+  if (integration?.status === "connected") return CONNECTION_STATES.CONNECTED;
   // Verified before, not verified now.
   if (authorization.lastVerifiedAt) return CONNECTION_STATES.DISCONNECTED;
   return CONNECTION_STATES.CREDENTIALS_STORED_UNVERIFIED;

@@ -71,6 +71,51 @@ test("YouTube walks through each connection state as configuration and authoriza
   assert.equal(entry.connectionState, CONNECTION_STATES.CONNECTED);
 });
 
+test("an expired access token with a refresh token is not reported as expired", () => {
+  // Refreshing happens without the user present, so an hour-old access token is
+  // the ordinary steady state. Calling it expired sent people through a browser
+  // reauthorization they did not need.
+  const entry = youtubeEntry({
+    setting: { status: "stored" },
+    youtube: {
+      status: "connected",
+      authorization: {
+        ...createAuthorizationRecord(),
+        hasAccessToken: true,
+        hasRefreshToken: true,
+        tokenExpiresAt: "2020-01-01T00:00:00.000Z"
+      }
+    }
+  });
+  assert.equal(entry.connectionState, CONNECTION_STATES.CONNECTED);
+
+  // With nothing left to refresh from, the grant really is finished.
+  const stranded = youtubeEntry({
+    setting: { status: "stored" },
+    youtube: {
+      status: "connected",
+      authorization: {
+        ...createAuthorizationRecord(),
+        hasAccessToken: true,
+        hasRefreshToken: false,
+        tokenExpiresAt: "2020-01-01T00:00:00.000Z"
+      }
+    }
+  });
+  assert.equal(stranded.connectionState, CONNECTION_STATES.TOKEN_EXPIRED);
+});
+
+test("a partly-failed refresh is reported as degraded, not as connected", () => {
+  // integrationReady already refuses a degraded integration, so reporting it as
+  // connected put a success badge on something the rest of the app treats as
+  // not ready -- directly above the error text explaining what failed.
+  const entry = youtubeEntry({
+    setting: { status: "stored" },
+    youtube: { status: "degraded", authorization: { ...createAuthorizationRecord(), hasAccessToken: true } }
+  });
+  assert.equal(entry.connectionState, CONNECTION_STATES.DEGRADED);
+});
+
 test("expired, missing-scope, and review states are distinguished", () => {
   const stored = { setting: { status: "stored" } };
   const expired = youtubeEntry({
