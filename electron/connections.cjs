@@ -1,4 +1,4 @@
-const { AppError, asAppError } = require("./errors.cjs");
+const { AppError, CONNECTOR_ERROR_CATEGORIES, asAppError } = require("./errors.cjs");
 const { CONNECTOR_CAPABILITIES, connectorSupports, normalizeConnectionResult } = require("./connectors/contract.cjs");
 const { findPlatform } = require("./platforms/registry.cjs");
 
@@ -73,15 +73,23 @@ class ConnectionService {
     try {
       result = await connector.refreshAuthorization(credentials);
     } catch (error) {
-      // A refresh that fails is not transient noise: the stored grant is no
-      // longer usable, so say so rather than leaving the UI looking connected.
-      await this.store
-        .setIntegrationResult(integrationId, {
-          status: "error",
-          error: `Reauthorize ${platform.displayName} to continue.`,
-          auditDetail: `${platform.displayName} authorization could not be refreshed.`
-        })
-        .catch(() => {});
+      // Only an outright rejection of the grant means the user has to
+      // reauthorize. A dropped connection, a 429, or a 5xx says nothing about
+      // whether the stored refresh token is still good -- and recording an error
+      // state for those left a healthy integration reading as broken, with the
+      // official-API approval hidden and publishing blocked, until the user
+      // happened to press Test connection. Nothing cleared it automatically.
+      const rejected =
+        error?.category === CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION || error?.category === CONNECTOR_ERROR_CATEGORIES.AUTHORIZATION;
+      if (rejected) {
+        await this.store
+          .setIntegrationResult(integrationId, {
+            status: "error",
+            error: `Reauthorize ${platform.displayName} to continue.`,
+            auditDetail: `${platform.displayName} authorization could not be refreshed.`
+          })
+          .catch(() => {});
+      }
       throw asAppError(error, "REAUTHORIZATION_REQUIRED", `Reauthorize ${platform.displayName} to continue.`);
     }
     await this.store.saveIntegrationAuthorization(integrationId, {
@@ -89,7 +97,14 @@ class ConnectionService {
       // Google usually omits the refresh token on a refresh; keeping the stored
       // one is what makes the grant survive beyond the first hour.
       ...(result.refreshToken ? { refreshToken: result.refreshToken } : {}),
-      ...(result.tokenExpiresAt ? { tokenExpiresAt: result.tokenExpiresAt } : {}),
+      // Always written, even when the provider gives no expiry. Skipping it left
+      // the previous -- already past -- timestamp in place, because
+      // saveIntegrationAuthorization merges rather than replaces. Every later
+      // call then read the token as expiring and refreshed again: one exchange
+      // per publish, probe and status poll, a storm the provider answers by
+      // revoking the grant. An unknown expiry is null, which means "use it until
+      // it is rejected", and the rejection path force-refreshes exactly once.
+      tokenExpiresAt: result.tokenExpiresAt || null,
       ...(result.grantedScopes?.length ? { grantedScopes: result.grantedScopes } : {})
     });
     return { accessToken: result.accessToken, refreshed: true };

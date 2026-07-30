@@ -230,3 +230,58 @@ test("testing a connection also runs through the fresh-token path", async (t) =>
   assert.equal(calls.refresh, 1, "an expired token must be refreshed before the check");
   assert.equal(calls.test, 1);
 });
+
+test("a refresh that returns no expiry does not leave the old one in place", async (t) => {
+  // Google can answer without expires_in. The stored expiry is already in the
+  // past, so keeping it means every later call believes the token is expiring
+  // and refreshes again -- a storm the provider eventually answers by revoking
+  // the grant.
+  const { connector, calls } = refreshableConnector({
+    onRefresh: async () => ({ accessToken: "fresh-1", refreshToken: null, tokenExpiresAt: null, grantedScopes: [] })
+  });
+  const { service, harness } = await serviceWith(t, { connector, tokenExpiresAt: new Date(NOW - 3_600_000).toISOString() });
+
+  const first = await service.getFreshAuthorization("youtube");
+  assert.equal(first.accessToken, "fresh-1");
+  assert.equal(calls.refresh, 1);
+
+  const stored = harness.store.getAppState().integrations.find((item) => item.id === "youtube");
+  assert.equal(stored.authorization.tokenExpiresAt, null, "an unknown expiry has to replace the stale one, not be skipped");
+
+  // With no expiry the token is used until the provider actually rejects it.
+  const second = await service.getFreshAuthorization("youtube");
+  assert.equal(second.refreshed, false);
+  assert.equal(calls.refresh, 1, "a second call must not refresh again");
+});
+
+test("a transient refresh failure does not demand reauthorization", async (t) => {
+  // A Wi-Fi blip or a 503 says nothing about whether the stored refresh token is
+  // still good. Persisting an error state for it left a healthy integration
+  // looking broken, with publishing approval blocked, until the user happened to
+  // press Test connection.
+  const { connector } = refreshableConnector({
+    onRefresh: async () => {
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.NETWORK, "YOUTUBE_NETWORK_ERROR", "The network request failed.");
+    }
+  });
+  const { service, harness } = await serviceWith(t, { connector, tokenExpiresAt: new Date(NOW - 1000).toISOString() });
+  await harness.store.setIntegrationResult("youtube", { status: "connected" });
+
+  await assert.rejects(() => service.getFreshAuthorization("youtube"), { code: "YOUTUBE_NETWORK_ERROR" });
+  const integration = harness.store.getAppState().integrations.find((item) => item.id === "youtube");
+  assert.equal(integration.status, "connected", "a retryable failure must leave the stored status alone");
+});
+
+test("a rejected grant is still recorded as needing reauthorization", async (t) => {
+  const { connector } = refreshableConnector({
+    onRefresh: async () => {
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION, "YOUTUBE_AUTH_FAILED", "The stored authorization was rejected.");
+    }
+  });
+  const { service, harness } = await serviceWith(t, { connector, tokenExpiresAt: new Date(NOW - 1000).toISOString() });
+  await harness.store.setIntegrationResult("youtube", { status: "connected" });
+
+  await assert.rejects(() => service.getFreshAuthorization("youtube"), { code: "YOUTUBE_AUTH_FAILED" });
+  const integration = harness.store.getAppState().integrations.find((item) => item.id === "youtube");
+  assert.equal(integration.status, "error", "the grant really is dead, so the UI must say so");
+});
