@@ -11,6 +11,10 @@ const CONNECTOR_CAPABILITIES = Object.freeze({
   REFRESH: "refreshAuthorization",
   // Publishes approved media to the platform.
   PUBLISH: "publish",
+  // Publishes in three separately callable steps so the caller can durably
+  // persist the provider's session handle before any bytes are sent, and
+  // reconcile an interrupted transfer instead of restarting it.
+  RESUMABLE_UPLOAD: "resumableUpload",
   // Reports the coarse state of something already published.
   PUBLISHING_STATUS: "publishingStatus",
   // Reads performance metrics.
@@ -27,6 +31,7 @@ const CAPABILITY_METHODS = Object.freeze({
   [CONNECTOR_CAPABILITIES.AUTHORIZE]: "authorize",
   [CONNECTOR_CAPABILITIES.REFRESH]: "refreshAuthorization",
   [CONNECTOR_CAPABILITIES.PUBLISH]: "publish",
+  [CONNECTOR_CAPABILITIES.RESUMABLE_UPLOAD]: ["beginUpload", "probeUpload", "sendUpload"],
   [CONNECTOR_CAPABILITIES.PUBLISHING_STATUS]: "getPublishingStatus",
   [CONNECTOR_CAPABILITIES.ANALYTICS]: "getAnalytics",
   [CONNECTOR_CAPABILITIES.DISCONNECT]: "disconnect"
@@ -36,6 +41,12 @@ const CAPABILITY_METHODS = Object.freeze({
 const REQUIRED_METHODS = Object.freeze(["getAuthorizationInstructions", "validateConfiguration", "testConnection"]);
 
 const CONNECTION_STATUSES = Object.freeze(new Set(["connected", "degraded", "error", "disconnected"]));
+
+// A capability may require more than one method; normalize to a list.
+function methodsFor(capability) {
+  const methods = CAPABILITY_METHODS[capability];
+  return Array.isArray(methods) ? methods : [methods];
+}
 
 function assertConnectorContract(connector) {
   if (!connector || typeof connector !== "object") {
@@ -60,16 +71,18 @@ function assertConnectorContract(connector) {
   // A declared capability without its method would fail at the call site, long
   // after the mistake was made. Catch it at registration instead.
   for (const capability of connector.capabilities) {
-    const method = CAPABILITY_METHODS[capability];
-    if (typeof connector[method] !== "function") {
-      throw new AppError("INVALID_CONNECTOR", `Connector ${connector.id} declares ${capability} but has no ${method}().`);
+    for (const method of methodsFor(capability)) {
+      if (typeof connector[method] !== "function") {
+        throw new AppError("INVALID_CONNECTOR", `Connector ${connector.id} declares ${capability} but has no ${method}().`);
+      }
     }
   }
   // The reverse is just as dangerous: an implemented-but-undeclared capability
   // is invisible to every capability check in the app.
-  for (const [capability, method] of Object.entries(CAPABILITY_METHODS)) {
-    if (typeof connector[method] === "function" && !connector.capabilities.includes(capability)) {
-      throw new AppError("INVALID_CONNECTOR", `Connector ${connector.id} implements ${method}() without declaring ${capability}.`);
+  for (const capability of Object.values(CONNECTOR_CAPABILITIES)) {
+    const methods = methodsFor(capability);
+    if (methods.some((method) => typeof connector[method] === "function") && !connector.capabilities.includes(capability)) {
+      throw new AppError("INVALID_CONNECTOR", `Connector ${connector.id} implements ${methods[0]}() without declaring ${capability}.`);
     }
   }
   return connector;

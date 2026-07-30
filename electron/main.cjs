@@ -187,7 +187,8 @@ if (hasSingleInstanceLock) {
         store,
         connectorRegistry: connectors.connectorRegistry,
         connections,
-        mediaJobs
+        mediaJobs,
+        credentialVault: store.credentialVault
       });
       protocol.handle("produdash-media", createMediaProtocolHandler(mediaLibrary, brandAssets, mediaJobs));
       registerIpc({

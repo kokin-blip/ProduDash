@@ -4,6 +4,12 @@ const { AppError, ConnectorError, asAppError } = require("../errors.cjs");
 const { CONNECTOR_CAPABILITIES, connectorSupports } = require("../connectors/contract.cjs");
 const { getPlatform } = require("../platforms/registry.cjs");
 const { RECEIPT_STATUSES, createReceipt, isAlreadyPublished } = require("./receipt.cjs");
+const { UploadSessionStore, createUploadSession, isUsableSession } = require("./upload-session.cjs");
+
+// An unresolved session is a local error, but unlike every other local error
+// the previous attempt did reach the provider. Retrying cannot be made safe
+// until a human has checked the destination, so the receipt must not offer it.
+const NEVER_RETRYABLE = Object.freeze(new Set(["UPLOAD_SESSION_UNRESOLVED"]));
 
 // Dispatches an approved post plan to real connectors.
 //
@@ -13,11 +19,14 @@ const { RECEIPT_STATUSES, createReceipt, isAlreadyPublished } = require("./recei
 // idempotency keys the approval snapshot already generates rather than minting
 // new ones, so a repeated click or a restart mid-flight cannot double-post.
 class PublishingDispatchService {
-  constructor({ store, connectorRegistry, connections, mediaJobs }) {
+  constructor({ store, connectorRegistry, connections, mediaJobs, credentialVault, uploadSessions }) {
     this.store = store;
     this.connectorRegistry = connectorRegistry;
     this.connections = connections;
     this.mediaJobs = mediaJobs;
+    // Session URIs are capabilities, so they live in the encrypted vault beside
+    // tokens rather than anywhere the renderer can reach.
+    this.sessions = uploadSessions || new UploadSessionStore(credentialVault);
   }
 
   // Resolves the rendered file. Absolute paths live in the encrypted vault and
@@ -60,31 +69,124 @@ class PublishingDispatchService {
     const integration = state.integrations.find((item) => item.id === destination.platformId);
     const pack = this.packageFor(plan, destination.platformId);
     const { filePath, contentLength } = this.resolveMediaFile(plan);
+    const accountId = integration?.authorization?.selectedAccount?.id || null;
+    const metadata = { title: pack.title, description: pack.caption, ...(pack.options || {}) };
+
+    // A connector without resumable support uploads in one call. It cannot be
+    // reconciled after a crash, and that limitation is real rather than hidden.
+    if (!connectorSupports(connector, CONNECTOR_CAPABILITIES.RESUMABLE_UPLOAD)) {
+      const result = await this.sendWholeFile({ connector, destination, filePath, contentLength, metadata });
+      return { result, accountId };
+    }
+
+    const existing = this.sessions.get(destination.idempotencyKey);
+    if (existing) {
+      // The session expired or is otherwise unusable, and we cannot tell
+      // whether it created a video. Opening a replacement could duplicate the
+      // upload, so this requires an explicit decision from the user instead.
+      if (!isUsableSession(existing)) await this.refuseUnresolved(destination.idempotencyKey);
+      // The approval hash covers media names and sources, not bytes, so
+      // re-rendering the media job produces a different file under the same
+      // idempotency key. Resuming would append the new render's bytes to what
+      // the provider already holds of the old one and publish a corrupt video.
+      if (contentLength !== existing.contentLength) await this.refuseUnresolved(destination.idempotencyKey);
+      const result = await this.resumeSession({ connector, destination, session: existing, filePath, metadata });
+      return { result, accountId };
+    }
+
+    // Order matters: open the session, persist its URI, and only then send
+    // bytes. Persisting afterwards would leave the exact gap this prevents.
+    const opened = await this.connections.withFreshAuthorization(destination.platformId, (accessToken) =>
+      connector.beginUpload({ accessToken, request: metadata, contentLength, contentType: "video/*" })
+    );
+    const session = await this.sessions.save(
+      createUploadSession({
+        planId: plan.id,
+        platformId: destination.platformId,
+        approvalHash: plan.approvalSnapshot.hash,
+        idempotencyKey: destination.idempotencyKey,
+        uploadUri: opened.uploadUri,
+        contentLength
+      })
+    );
+
+    const result = await this.sendBytes({ connector, destination, session, filePath, metadata, offset: 0 });
+    return { result, accountId };
+  }
+
+  // Refuses an attempt whose predecessor cannot be accounted for. The session
+  // record is retained, not cleared: clearing it would make the next dispatch
+  // look like a first attempt and upload the duplicate this prevents.
+  async refuseUnresolved(idempotencyKey) {
+    await this.sessions.markUnresolved(idempotencyKey);
+    throw new AppError(
+      "UPLOAD_SESSION_UNRESOLVED",
+      "A previous upload attempt could not be reconciled with the provider. Check the destination before retrying."
+    );
+  }
+
+  // Single-call upload for connectors that do not expose a resumable session.
+  async sendWholeFile({ connector, destination, filePath, contentLength, metadata }) {
     const body = fs.createReadStream(filePath);
+    body.on("error", () => {});
+    try {
+      return await this.connections.withFreshAuthorization(destination.platformId, (accessToken) =>
+        connector.publish({ accessToken, ...metadata, media: { body, contentLength, contentType: "video/*" } })
+      );
+    } catch (error) {
+      body.destroy();
+      throw error;
+    }
+  }
+
+  // Reconciles an interrupted upload with the provider before doing anything
+  // that could create a second video.
+  async resumeSession({ connector, destination, session, filePath, metadata }) {
+    const probe = await this.connections.withFreshAuthorization(destination.platformId, (accessToken) =>
+      connector.probeUpload({ accessToken, uploadUri: session.uploadUri, contentLength: session.contentLength, request: metadata })
+    );
+    if (probe.completed) {
+      // The provider already has the whole thing and returned the resource.
+      // Recording its id is the only correct action; uploading again would
+      // publish a duplicate. The session is retired by dispatch() once that id
+      // is durably written, not here.
+      return probe.result;
+    }
+    // The provider is authoritative about how much it holds, so its answer is
+    // used directly rather than any offset we might have recorded ourselves.
+    return this.sendBytes({ connector, destination, session, filePath, metadata, offset: probe.offset });
+  }
+
+  async sendBytes({ connector, destination, session, filePath, metadata, offset }) {
+    // Streaming from the offset means a resumed upload re-sends only what the
+    // provider is missing, and never loads the file into memory.
+    const body = fs.createReadStream(filePath, offset > 0 ? { start: offset } : undefined);
     // createReadStream opens lazily, and a stream with no error listener turns
     // a failed open into an uncaught exception. If the file disappears between
     // the stat above and the upload, the publish call surfaces that properly.
     body.on("error", () => {});
     try {
-      // A short-lived access token can expire between approval and upload, so
-      // it is acquired through the one refresh-aware path rather than read
-      // straight from storage.
       const result = await this.connections.withFreshAuthorization(destination.platformId, (accessToken) =>
-        connector.publish({
+        connector.sendUpload({
           accessToken,
-          title: pack.title,
-          description: pack.caption,
-          // Every per-destination choice comes from the immutable approved
-          // snapshot, never from current draft state or a default chosen here.
-          // The connector reports back what the provider actually applied.
-          ...(pack.options || {}),
-          media: { body, contentLength, contentType: "video/*" }
+          uploadUri: session.uploadUri,
+          body,
+          contentLength: session.contentLength,
+          contentType: "video/*",
+          offset,
+          request: metadata
         })
       );
-      return { result, accountId: integration?.authorization?.selectedAccount?.id || null };
+      // Deliberately NOT cleared here. Between this line and the receipt being
+      // written, the provider holds a video whose id ProduDash has not recorded
+      // -- exactly the crash window this module exists to close. The session is
+      // what lets the next dispatch reconcile instead of uploading again, so it
+      // survives until dispatch() has the id safely on disk.
+      return result;
     } catch (error) {
       // A connector that failed before consuming the body would otherwise leave
-      // the file handle open until GC.
+      // the file handle open until GC. The session record is deliberately kept
+      // so the next attempt can reconcile rather than restart.
       body.destroy();
       throw error;
     }
@@ -112,6 +214,7 @@ class PublishingDispatchService {
             idempotencyKey: destination.idempotencyKey
           })),
         status: RECEIPT_STATUSES.UPLOADING,
+        hasResumableSession: isUsableSession(this.sessions.get(destination.idempotencyKey)),
         attempts: [...(existing?.attempts || []), { startedAt, endedAt: null, outcome: RECEIPT_STATUSES.UPLOADING }]
       };
       await this.store.recordPublicationReceipt(planId, receipt);
@@ -124,20 +227,28 @@ class PublishingDispatchService {
           accountId,
           providerPublicationId: result.publicationId,
           status: RECEIPT_STATUSES.PUBLISHED,
+          hasResumableSession: false,
           errorCode: null,
           retryable: false,
           attempts: [...receipt.attempts.slice(0, -1), { startedAt, endedAt, outcome: RECEIPT_STATUSES.PUBLISHED }]
         });
+        // The publication id is now durable, so a crash can no longer lose it.
+        // Only at this point has the session finished its job.
+        await this.sessions.clear(destination.idempotencyKey);
       } catch (error) {
         const safe = asAppError(error, "PUBLISH_FAILED", "The destination could not be published.");
         const endedAt = new Date().toISOString();
         await this.store.recordPublicationReceipt(planId, {
           ...receipt,
           status: RECEIPT_STATUSES.FAILED,
+          // Kept truthful: a surviving session is what makes the next attempt a
+          // reconciliation rather than a fresh upload.
+          hasResumableSession: isUsableSession(this.sessions.get(destination.idempotencyKey)),
           errorCode: safe.code,
           // Honest retryability: only a connector that said so, or an error
-          // that never reached the provider at all.
-          retryable: error instanceof ConnectorError ? error.retryable : true,
+          // that never reached the provider at all -- with the one exception
+          // whose whole point is that an earlier attempt did.
+          retryable: error instanceof ConnectorError ? error.retryable : !NEVER_RETRYABLE.has(safe.code),
           attempts: [...receipt.attempts.slice(0, -1), { startedAt, endedAt, outcome: RECEIPT_STATUSES.FAILED }]
         });
       }

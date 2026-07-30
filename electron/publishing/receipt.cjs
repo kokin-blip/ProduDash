@@ -46,7 +46,10 @@ function createReceipt({ planId, platformId, accountId, approvedContentHash, ide
     status: RECEIPT_STATUSES.PENDING,
     attempts: [],
     errorCode: null,
-    retryable: true
+    retryable: true,
+    // Says only that a resumable session exists. The session URI itself is a
+    // capability and lives in the encrypted vault, never here.
+    hasResumableSession: false
   };
 }
 
@@ -82,7 +85,8 @@ function normalizeReceipt(value) {
     attempts: (Array.isArray(value.attempts) ? value.attempts : []).map(normalizeAttempt).filter(Boolean).slice(-MAX_ATTEMPTS_RECORDED),
     // Codes only -- never a provider message.
     errorCode: typeof value.errorCode === "string" && /^[A-Z0-9_]{1,60}$/.test(value.errorCode) ? value.errorCode : null,
-    retryable: value.retryable !== false
+    retryable: value.retryable !== false,
+    hasResumableSession: value.hasResumableSession === true
   };
 }
 
@@ -98,6 +102,7 @@ function validateReceipt(value) {
   if (value.attempts.some((attempt) => !isIsoTimestamp(attempt?.startedAt))) return false;
   if (value.errorCode !== null && !/^[A-Z0-9_]{1,60}$/.test(value.errorCode)) return false;
   if (typeof value.retryable !== "boolean") return false;
+  if (typeof value.hasResumableSession !== "boolean") return false;
   if (value.providerPublicationId !== null && typeof value.providerPublicationId !== "string") return false;
   if (value.accountId !== null && typeof value.accountId !== "string") return false;
   // A receipt must never carry a token, a path, or a raw provider body.

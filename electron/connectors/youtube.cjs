@@ -78,6 +78,7 @@ class YouTubeConnector {
       CONNECTOR_CAPABILITIES.AUTHORIZE,
       CONNECTOR_CAPABILITIES.REFRESH,
       CONNECTOR_CAPABILITIES.PUBLISH,
+      CONNECTOR_CAPABILITIES.RESUMABLE_UPLOAD,
       CONNECTOR_CAPABILITIES.PUBLISHING_STATUS,
       CONNECTOR_CAPABILITIES.DISCONNECT
     ];
@@ -394,45 +395,96 @@ class YouTubeConnector {
     }
 
     const metadata = this.buildVideoMetadata(request);
-    const uploadUri = request.uploadUri || (await this.createUploadSession({ accessToken, metadata, contentLength, contentType }));
-    // Surfaced so a caller can resume rather than restart after a crash.
-    const session = { uploadUri };
+    // Single-shot: opens a session and sends the whole file. A caller that needs
+    // to survive an interruption uses beginUpload/probeUpload/sendUpload below,
+    // which let it persist the session URI before any bytes leave.
+    const uploadUri = await this.createUploadSession({ accessToken, metadata, contentLength, contentType });
+    const video = await this.uploadBytes({ accessToken, uploadUri, body, contentLength, contentType, signal: request.signal });
+    return this.describePublication(video, metadata);
+  }
 
-    if (request.signal?.aborted) {
+  // Sends the bytes for an already-open session. Split out from publish() so a
+  // caller can durably persist the session URI in between.
+  async uploadBytes({ accessToken, uploadUri, body, contentLength, contentType = "video/*", offset = 0, signal }) {
+    // A resume position outside the file would silently upload the wrong bytes,
+    // so it is refused rather than clamped.
+    if (!Number.isInteger(offset) || offset < 0 || offset >= contentLength) {
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.UPLOAD, "YOUTUBE_UPLOAD_OFFSET_INVALID", "The resume position is out of bounds.", {
+        platformId: this.id
+      });
+    }
+    if (signal?.aborted) {
       throw connectorError(CONNECTOR_ERROR_CATEGORIES.UPLOAD, "YOUTUBE_UPLOAD_CANCELED", "The upload was canceled.", {
-        platformId: this.id,
-        session
+        platformId: this.id
       });
     }
 
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": contentType,
+      "Content-Length": String(contentLength - offset)
+    };
+    // Only sent when resuming; a fresh upload has no range.
+    if (offset > 0) headers["Content-Range"] = `bytes ${offset}-${contentLength - 1}/${contentLength}`;
+
     let response;
     try {
-      response = await this.transport(uploadUri, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": contentType,
-          "Content-Length": String(contentLength)
-        },
-        body,
-        signal: request.signal
-      });
+      response = await this.transport(uploadUri, { method: "PUT", headers, body, signal });
     } catch (error) {
       if (error?.name === "AbortError") {
         throw connectorError(CONNECTOR_ERROR_CATEGORIES.UPLOAD, "YOUTUBE_UPLOAD_CANCELED", "The upload was canceled.", {
-          platformId: this.id,
-          session
+          platformId: this.id
         });
       }
       throw connectorError(CONNECTOR_ERROR_CATEGORIES.NETWORK, "YOUTUBE_UPLOAD_INTERRUPTED", "The upload was interrupted.", {
         platformId: this.id,
-        session,
         cause: error
       });
     }
     if (!response.ok) throw safeGoogleError(response.status, { duringUpload: true });
+    return response.json();
+  }
 
-    const video = await response.json();
+  // --- resumable upload capability ----------------------------------------
+  //
+  // Three steps rather than one call, so the dispatcher can persist the session
+  // URI before any bytes leave and reconcile an interrupted transfer instead of
+  // opening a second session.
+
+  async beginUpload({ accessToken, request, contentLength, contentType = "video/*" }) {
+    const metadata = this.buildVideoMetadata(request);
+    const uploadUri = await this.createUploadSession({ accessToken, metadata, contentLength, contentType });
+    return { uploadUri };
+  }
+
+  // Asks the provider what it actually holds. `completed` means a video already
+  // exists for this session and must not be uploaded again.
+  async probeUpload({ accessToken, uploadUri, contentLength, request }) {
+    const probe = await this.probeUploadOffset(uploadUri, accessToken, contentLength);
+    if (probe.completed) {
+      return { completed: true, offset: contentLength, result: this.describePublication(probe.body, this.buildVideoMetadata(request)) };
+    }
+    // Google can answer 308 with the full range while it is still committing.
+    // Nothing is left to send, and forwarding this offset would be rejected as
+    // out of bounds and stall the destination forever. It is a wait, not a
+    // failure, so it is reported as retryable processing.
+    if (probe.offset >= contentLength) {
+      throw connectorError(
+        CONNECTOR_ERROR_CATEGORIES.PROCESSING,
+        "YOUTUBE_UPLOAD_COMMIT_PENDING",
+        "YouTube has the whole video and is still finalizing it.",
+        { platformId: this.id }
+      );
+    }
+    return { completed: false, offset: probe.offset };
+  }
+
+  async sendUpload({ accessToken, uploadUri, body, contentLength, contentType = "video/*", offset = 0, signal, request }) {
+    const video = await this.uploadBytes({ accessToken, uploadUri, body, contentLength, contentType, offset, signal });
+    return this.describePublication(video, this.buildVideoMetadata(request));
+  }
+
+  describePublication(video, metadata) {
     if (!video?.id) {
       throw connectorError(CONNECTOR_ERROR_CATEGORIES.PROCESSING, "YOUTUBE_NO_VIDEO_ID", "YouTube did not return a video id.", {
         platformId: this.id
@@ -444,7 +496,7 @@ class YouTubeConnector {
       // requested: an unaudited project has its uploads forced to private.
       privacyStatus: video.status?.privacyStatus || null,
       uploadStatus: video.status?.uploadStatus || null,
-      requestedPrivacyStatus: metadata.status.privacyStatus
+      requestedPrivacyStatus: metadata?.status?.privacyStatus || null
     };
   }
 

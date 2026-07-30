@@ -434,6 +434,29 @@ test("an interrupted upload resumes from the byte count Google reports", async (
   assert.equal(done.completed, true);
 });
 
+test("a probe reporting every byte but no video is a wait, not an upload failure", async () => {
+  // Google can answer 308 with the full range while it is still committing.
+  // Forwarding that offset would be rejected as out of bounds and the
+  // destination would never publish, even though YouTube holds the whole file.
+  const { connector } = createConnector({
+    responses: [uploadResponse({}, { status: 308, headers: { range: "bytes=0-4999" } })]
+  });
+  await assert.rejects(
+    connector.probeUpload({
+      accessToken: "at",
+      uploadUri: "https://upload.example/s",
+      contentLength: 5000,
+      request: { title: "t", description: "d", selfDeclaredMadeForKids: false, privacyStatus: "private" }
+    }),
+    (error) => {
+      assert.equal(error.code, "YOUTUBE_UPLOAD_COMMIT_PENDING");
+      // Retryable: the next probe is what resolves it.
+      assert.equal(error.retryable, true);
+      return true;
+    }
+  );
+});
+
 test("publication status never claims public until YouTube says so", async () => {
   const processing = createConnector({
     responses: [
