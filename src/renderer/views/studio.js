@@ -671,12 +671,20 @@ function renderPlatformChecks() {
     <fieldset class="platform-checks">
       <legend>Destinations</legend>
       ${ui.appState.creatorPlatforms
-        .map(
-          (platform) => `
-            <label><input name="platforms" type="checkbox" value="${escapeHtml(platform.id)}" /><span>${escapeHtml(platform.name)}</span></label>
-          `
-        )
+        .map((platform) => {
+          // Every publish destination is offered, but only some can be
+          // published to. Saying so here is the difference between an informed
+          // choice and picking a destination that silently removes the
+          // approve-for-publishing button later with no explanation.
+          const live = platformEntry(platform.id)?.hasLiveConnector;
+          return `
+            <label data-destination="${escapeHtml(platform.id)}"><input name="platforms" type="checkbox" value="${escapeHtml(
+              platform.id
+            )}" /><span>${escapeHtml(platform.name)}${live ? "" : " · export only"}</span></label>
+          `;
+        })
         .join("")}
+      <small class="compact-note">Destinations marked export only have no connector yet. They can be planned and exported for a manual upload, but ProduDash cannot publish to them.</small>
     </fieldset>
   `;
 }

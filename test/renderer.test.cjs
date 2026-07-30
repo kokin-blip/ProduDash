@@ -1887,3 +1887,29 @@ test("Juanito reacts once to genuine media transitions and removes completed rea
     window.matchMedia = originalMatchMedia;
   }
 });
+
+test("Publishing says which destinations it cannot actually publish to", async () => {
+  // Every publish destination is offered, but only some have a connector.
+  // Picking one that does not silently removed the approve-for-publishing
+  // button later, with nothing on screen explaining why.
+  const catalog = buildPlatformCatalog({ credentialSettings: [], integrations: [] });
+  const renderer = await setupRenderer();
+  renderer.setAppState(
+    baseState({
+      platformCatalog: catalog,
+      creatorPlatforms: [
+        { id: "youtube", name: "YouTube Shorts" },
+        { id: "instagram", name: "Instagram Reels" }
+      ],
+      postQueue: []
+    })
+  );
+  renderer.ui.activeSection = "studio";
+  renderer.ui.studioTab = "publishing";
+  renderer.renderApp();
+
+  const youtube = document.querySelector("[data-destination='youtube']").textContent;
+  const instagram = document.querySelector("[data-destination='instagram']").textContent;
+  assert.doesNotMatch(youtube, /export only/, "YouTube has a connector and can be published to");
+  assert.match(instagram, /export only/, "Instagram has none, and the checkbox has to say so");
+});
