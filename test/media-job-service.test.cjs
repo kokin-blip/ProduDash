@@ -530,3 +530,61 @@ test("retrying a render whose analysis artifacts are unreadable goes back to ana
   assert.equal(retried.status, "queued", "a render with no usable analysis has to start from analysis");
   assert.deepEqual(retried.selectedCandidateIds, [], "selections against regenerated candidates would refer to nothing");
 });
+
+test("cancelling during cloud analysis ends the job cancelled, not reviewed", async (context) => {
+  // Once the local worker has gone terminal, handle.cancel() is a no-op, so a
+  // cancel during the cloud call did nothing: the job either reappeared as
+  // awaiting_review or sat in "canceling", which offers no action at all.
+  const harness = await createHarness();
+  context.after(harness.cleanup);
+  const sourcePath = path.join(harness.directory, "source.mp4");
+  const outputParent = path.join(harness.directory, "outputs");
+  fs.writeFileSync(sourcePath, "fixture");
+  fs.mkdirSync(outputParent);
+  const runner = createFakeRunner();
+  let jobs;
+  const analysisService = {
+    analyze: async ({ job, localResult }) => {
+      // The user cancels while the provider request is in flight.
+      await jobs.cancel(job.id);
+      return localResult;
+    }
+  };
+  jobs = new MediaJobService({
+    store: harness.store,
+    mediaLibrary: {
+      getClipSummary: (id) => ({ id, name: "Source.mp4", status: "available" }),
+      resolveClipPath: () => sourcePath,
+      startClipAccess: () => null,
+      addFiles: async () => ({})
+    },
+    credentialVault: harness.vault,
+    runner,
+    analysisService,
+    onEvent: () => {}
+  });
+  await jobs.initialize();
+  const selection = jobs.rememberOutputSelection({ path: outputParent });
+  const created = await jobs.create({
+    sourceMediaId: "media-source",
+    outputSelectionId: selection.id,
+    title: "Cancelled during analysis",
+    goal: "",
+    maxClips: 1,
+    targetDuration: 8,
+    captionMode: "off",
+    captionText: "",
+    aspectTreatment: "fit_pad",
+    targetAspect: "vertical",
+    platforms: ["tiktok"]
+  });
+  const jobId = created.mediaJobs[0].id;
+  await waitFor(() => runner.starts.length === 1);
+  // Put the job on a cloud analysis path so finish() takes the analyze branch.
+  harness.store.state.mediaJobs.find((item) => item.id === jobId).settings.analysisMode = "transcript_only";
+
+  runner.starts[0].completion.resolve({ type: "awaiting_review", metadata: { duration: 30 }, candidates: [], warnings: [] });
+
+  await waitFor(() => !["queued", "processing", "canceling"].includes(harness.store.getMediaJob(jobId).status));
+  assert.equal(harness.store.getMediaJob(jobId).status, "canceled");
+});

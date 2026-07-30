@@ -1032,7 +1032,12 @@ class MediaJobService {
       }
     }
     if (result.type === "awaiting_review" && (job.settings.analysisMode || "local_heuristics") !== "local_heuristics") {
-      if (!this.analysisService) {
+      if (this.cancelRequested.has(jobId)) {
+        // Cancelled while the local pass was finishing. Starting a cloud call
+        // now would send this person's media to a provider after they had
+        // already stopped the job.
+        result = { type: "canceled" };
+      } else if (!this.analysisService) {
         result = {
           type: "error",
           error: { code: "ANALYSIS_MODE_UNAVAILABLE", message: "The selected cloud analysis mode is unavailable." },
@@ -1041,6 +1046,14 @@ class MediaJobService {
       } else {
         try {
           result = await this.analysisService.analyze({ job, paths: this.getPrivatePaths(jobId), localResult: result });
+          // The request itself cannot be called back: analyze() takes no signal,
+          // and threading one through the provider and transcription chain is a
+          // much larger change than this. But a cancel during it used to do
+          // nothing at all -- the runner had already gone terminal, so
+          // handle.cancel() was a no-op, and the job reappeared as
+          // awaiting_review or sat in "canceling", which has no action left in
+          // the UI. It now ends where the user put it.
+          if (this.cancelRequested.has(jobId)) result = { type: "canceled" };
         } catch (error) {
           result = {
             type: "error",
