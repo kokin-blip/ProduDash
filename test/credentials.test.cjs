@@ -198,3 +198,50 @@ test("delete-all removes the vault copies a recovery leaves behind", async (t) =
     "deleting all local data must leave no copy of the credential vault behind"
   );
 });
+
+test("a legacy credentials file that cannot be migrated does not brick startup", async (t) => {
+  const directory = createDirectory();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const legacyPath = path.join(directory, "produdash-credentials.json");
+  fs.writeFileSync(legacyPath, "{ not valid json", { mode: 0o600 });
+
+  // Throwing here reaches main.cjs, which shows a fatal dialog and quits. The
+  // file is still there on the next launch, so it fails identically forever and
+  // the user cannot reach the UI to clear it -- the app is unlaunchable.
+  const vault = new CredentialVault(directory, fakeEncryption());
+  const notices = await vault.initialize();
+  assert.ok(
+    notices.some((notice) => notice.code === "LEGACY_CREDENTIALS_UNREADABLE"),
+    "the user has to be told their old credentials were not migrated"
+  );
+  assert.equal(fs.existsSync(legacyPath), false, "the unreadable file is set aside so the next launch is clean");
+  assert.ok(
+    fs.readdirSync(directory).some((entry) => entry.startsWith("produdash-credentials.json.")),
+    "and it is kept rather than destroyed -- it is the user's only copy"
+  );
+
+  // The app is usable: credentials can be entered again.
+  await vault.save("gemini", { apiKey: "AIza-new" });
+  assert.equal(vault.get("gemini").apiKey, "AIza-new");
+
+  // A second launch sees no legacy file at all.
+  const relaunched = new CredentialVault(directory, fakeEncryption());
+  await relaunched.initialize();
+  assert.equal(relaunched.get("gemini").apiKey, "AIza-new");
+});
+
+test("delete-all removes a preserved legacy credentials file", async (t) => {
+  const directory = createDirectory();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(directory, "produdash-credentials.json"), "{ not valid json", { mode: 0o600 });
+  const vault = new CredentialVault(directory, fakeEncryption());
+  await vault.initialize();
+
+  // The preserved copy is plaintext, so leaving it behind after "delete all
+  // local data" is worse than the encrypted sidecars.
+  await vault.clearAll();
+  assert.deepEqual(
+    fs.readdirSync(directory).filter((entry) => entry.startsWith("produdash-credentials")),
+    []
+  );
+});

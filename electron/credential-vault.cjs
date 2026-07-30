@@ -98,8 +98,22 @@ class CredentialVault {
     try {
       legacy = readJson(this.legacyPath);
       if (!legacy || typeof legacy !== "object" || Array.isArray(legacy)) throw new Error("Invalid legacy credentials");
-    } catch (error) {
-      throw new AppError("LEGACY_CREDENTIALS_INVALID", "Legacy credentials could not be migrated safely.", { cause: error });
+    } catch {
+      // Set aside rather than thrown on. Throwing reached main.cjs, which shows
+      // a fatal dialog and quits -- and the file was left in place, so the next
+      // launch failed identically. The app became permanently unlaunchable, with
+      // no way to reach the UI and clear it.
+      //
+      // The file is kept, not deleted: it is the user's only copy of those
+      // credentials, and it is plaintext, so clearAll() removes its preserved
+      // copies too. They are told rather than left to guess why the app is
+      // suddenly asking for credentials again.
+      preserveFile(this.legacyPath, "recovery");
+      this.notices.push({
+        code: "LEGACY_CREDENTIALS_UNREADABLE",
+        message: "Saved credentials from an older version could not be read. Enter them again to reconnect."
+      });
+      return;
     }
     await this.writeEncrypted(legacy);
     const descriptor = fs.openSync(this.legacyPath, "r+");
@@ -160,7 +174,7 @@ class CredentialVault {
       // decode is not the same as being damaged: a reinstalled OS or a changed
       // keychain leaves the ciphertext intact and readable elsewhere. Matching
       // the prefix means a new sidecar name cannot reintroduce this.
-      if (entry === legacyName || entry === encryptedName || entry.startsWith(`${encryptedName}.`)) {
+      if (entry === legacyName || entry === encryptedName || entry.startsWith(`${encryptedName}.`) || entry.startsWith(`${legacyName}.`)) {
         fs.unlinkSync(path.join(directory, entry));
       }
     }
