@@ -22,12 +22,14 @@ const SESSION_STATUSES = Object.freeze({ OPEN: "open", UNRESOLVED: "unresolved" 
 
 const HEX_64 = /^[a-f0-9]{64}$/;
 
+// Mirrors the existing `media-job-${id}` convention in the vault.
+const VAULT_KEY_PREFIX = "upload-session-";
+
 function vaultKeyFor(idempotencyKey) {
   if (typeof idempotencyKey !== "string" || !HEX_64.test(idempotencyKey)) {
     throw new AppError("INVALID_INPUT", "An upload session requires a valid idempotency key.");
   }
-  // Mirrors the existing `media-job-${id}` convention in the vault.
-  return `upload-session-${idempotencyKey}`;
+  return `${VAULT_KEY_PREFIX}${idempotencyKey}`;
 }
 
 function createUploadSession({ planId, platformId, approvalHash, idempotencyKey, uploadUri, contentLength, createdAt }) {
@@ -116,6 +118,16 @@ class UploadSessionStore {
   async clear(idempotencyKey) {
     if (!this.credentialVault) return;
     await this.credentialVault.remove(vaultKeyFor(idempotencyKey));
+  }
+
+  // Every session record still stored, for when the plans that owned them are
+  // gone. A record is addressed by its destination's idempotency key, so once
+  // the plan carrying that destination is destroyed there is no way to name it
+  // again -- and it holds a URI that can still append bytes to a real upload.
+  async clearAll() {
+    if (!this.credentialVault) return;
+    const stored = this.credentialVault.entryIds().filter((id) => id.startsWith(VAULT_KEY_PREFIX));
+    if (stored.length) await this.credentialVault.removeMany(stored);
   }
 }
 

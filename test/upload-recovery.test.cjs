@@ -548,3 +548,31 @@ test("a structurally unusable record is refused without being probed", () => {
   assert.equal(isUsableSession({ ...createUploadSession(base), status: SESSION_STATUSES.UNRESOLVED }), false);
   assert.equal(isUsableSession(null), false);
 });
+
+test("abandoning a plan releases the upload sessions it orphans", async (t) => {
+  // A record is addressed by its destination's idempotency key. Once the plan
+  // carrying that destination is gone there is nothing left to reconstruct the
+  // key from, so the record becomes permanently unreachable -- while still
+  // holding a URI that can append bytes to a real upload.
+  const { service, planId, sessions, idempotencyKey, harness } = await scenario(t, { sessionDead: true });
+  await sessions.save(staleSession(harness, planId, idempotencyKey));
+  await service.dispatch(planId);
+  assert.ok(sessions.get(idempotencyKey), "the session is still there while the plan is");
+
+  await harness.store.cancelPostPlan(planId);
+  await service.releaseSessionsForPlan(planId);
+  assert.equal(sessions.get(idempotencyKey), null);
+  assert.equal(harness.vault.get(vaultKeyFor(idempotencyKey)).session, undefined, "and it is gone from the vault, not just from view");
+});
+
+test("a reset releases every session, including ones it can no longer name", async (t) => {
+  const { service, planId, sessions, idempotencyKey, harness } = await scenario(t);
+  await sessions.save(staleSession(harness, planId, idempotencyKey));
+  // A record whose plan has already been discarded: nothing can address it.
+  const orphan = "f".repeat(64);
+  await sessions.save({ ...staleSession(harness, planId, idempotencyKey), idempotencyKey: orphan });
+
+  await service.releaseAllSessions();
+  assert.equal(sessions.get(idempotencyKey), null);
+  assert.equal(sessions.get(orphan), null);
+});

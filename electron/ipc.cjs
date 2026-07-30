@@ -131,6 +131,9 @@ function createHandlers({
         if (projects) await projects.clearPreparation();
         if (brandAssets) await brandAssets.clearGeneratedVoiceovers();
         if (advisor) await advisor.clearHistory();
+        // Reset keeps credentials but discards every plan, so nothing would be
+        // left that can name these records again.
+        if (publishing) await publishing.releaseAllSessions();
         return await store.resetDashboardData();
       } finally {
         mediaJobs?.resume?.();
@@ -419,7 +422,14 @@ function createHandlers({
     "produdash:approvePostPlan": async (_event, payload) => store.approvePostPlan(payload?.planId, payload?.mode),
     "produdash:exportPostPackage": async (event, payload) => exportPostPackage(event, payload?.planId),
     "produdash:exportAnalyticsReport": async (event, payload) => exportAnalyticsReport(event, payload?.businessId, payload?.rangeDays),
-    "produdash:cancelPostPlan": async (_event, payload) => store.cancelPostPlan(payload?.planId),
+    "produdash:cancelPostPlan": async (_event, payload) => {
+      const state = await store.cancelPostPlan(payload?.planId);
+      // Cancelled after the store agreed to it, so a refused cancel leaves the
+      // session intact. The plan keeps its snapshot, so the destinations are
+      // still readable here -- this is the last moment they are.
+      if (publishing) await publishing.releaseSessionsForPlan(payload?.planId);
+      return state;
+    },
     "produdash:dispatchPostPlan": async (_event, payload) => {
       if (!publishing) throw new AppError("PUBLISHING_UNSUPPORTED", "Official API publishing is unavailable.");
       return publishing.dispatch(payload?.planId);

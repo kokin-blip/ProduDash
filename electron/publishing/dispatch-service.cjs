@@ -178,6 +178,23 @@ class PublishingDispatchService {
     return this.store.getAppState();
   }
 
+  // A plan being abandoned takes its upload sessions with it. A record is
+  // addressed by its destination's idempotency key, so once the plan is
+  // canceled there is nothing left to reconstruct that key from and the record
+  // becomes permanently unreachable -- while still holding a URI that can
+  // append bytes to a real upload.
+  async releaseSessionsForPlan(planId) {
+    const plan = this.store.getAppState().postQueue.find((item) => item.id === planId);
+    for (const destination of plan?.approvalSnapshot?.destinations || []) {
+      await this.sessions.clear(destination.idempotencyKey);
+    }
+  }
+
+  // For resets, which discard every plan at once and so orphan every record.
+  async releaseAllSessions() {
+    await this.sessions.clearAll();
+  }
+
   // Opens the file for a single upload attempt.
   //
   // A body must never be shared between attempts. withFreshAuthorization

@@ -136,6 +136,12 @@ class CredentialVault {
     return Object.keys(this.cache[integrationId] || {});
   }
 
+  // The vault's own top-level slots, for callers that store records under a
+  // key convention rather than an integration id and need to find them again.
+  entryIds() {
+    return Object.keys(this.cache);
+  }
+
   async save(integrationId, values) {
     this.cache[integrationId] = { ...(this.cache[integrationId] || {}), ...values };
     await this.writeEncrypted(this.cache);
