@@ -145,23 +145,36 @@ class PublishingDispatchService {
     if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
     const destination = (plan.approvalSnapshot?.destinations || []).find((item) => item.platformId === platformId);
     if (!destination) throw new AppError("PUBLICATION_NOT_FOUND", "That destination is not part of the approved plan.");
-    await this.sessions.clear(destination.idempotencyKey);
 
+    // Only an unresolved destination may be discarded. The IPC channel accepts
+    // any plan and platform, so without this a stale button in an old render --
+    // or a second window -- could clear the session of an upload that is still
+    // running, destroying the one record whose purpose is to survive exactly
+    // that moment.
     const receipt = plan.publicationReceipts.find((item) => item.idempotencyKey === destination.idempotencyKey);
-    if (receipt) {
-      await this.store.recordPublicationReceipt(planId, {
-        ...receipt,
-        hasResumableSession: false,
-        // Still a failed attempt -- that is the truth and the record keeps it.
-        // But it is no longer *unresolved*, and the code has to say so: the
-        // renderer decides whether to warn and offer the discard control by
-        // reading this exact field, so leaving it would make the action appear
-        // to do nothing and invite the user to discard a second time.
-        errorCode: "UPLOAD_SESSION_DISCARDED",
-        // The block was the unknown outcome, and the user has resolved it.
-        retryable: true
-      });
+    if (receipt?.errorCode !== "UPLOAD_SESSION_UNRESOLVED") {
+      throw new AppError("UPLOAD_SESSION_NOT_DISCARDABLE", "That destination has no unresolved upload to discard.");
     }
+
+    // Receipt first, session second -- the same ordering the dispatcher uses,
+    // and for the same reason. Clearing first meant a crash in between left the
+    // session gone while the receipt still read UNRESOLVED: the next dispatch
+    // would see no session, treat itself as a first attempt, and publish the
+    // duplicate this module exists to prevent. This way round the worst case is
+    // that the user is asked to discard a second time.
+    await this.store.recordPublicationReceipt(planId, {
+      ...receipt,
+      hasResumableSession: false,
+      // Still a failed attempt -- that is the truth and the record keeps it.
+      // But it is no longer *unresolved*, and the code has to say so: the
+      // renderer decides whether to warn and offer the discard control by
+      // reading this exact field, so leaving it would make the action appear
+      // to do nothing and invite the user to discard a second time.
+      errorCode: "UPLOAD_SESSION_DISCARDED",
+      // The block was the unknown outcome, and the user has resolved it.
+      retryable: true
+    });
+    await this.sessions.clear(destination.idempotencyKey);
     return this.store.getAppState();
   }
 

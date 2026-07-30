@@ -444,3 +444,43 @@ test("the session URI never reaches app state, receipts, or exports", async (t) 
   assert.equal(receipt.hasResumableSession, true);
   assert.equal(Object.hasOwn(receipt, "uploadUri"), false);
 });
+
+test("discarding is refused unless the destination is actually unresolved", async (t) => {
+  // The IPC channel accepts any plan and platform, so a stale button in an old
+  // render -- or a second window -- must not be able to clear the session of an
+  // upload that is still running. That record is the only thing standing
+  // between an interrupted upload and a duplicate.
+  const { service, planId, sessions, idempotencyKey } = await scenario(t, {
+    onSend: async () => {
+      await assert.rejects(service.discardUploadSession(planId, "youtube"), { code: "UPLOAD_SESSION_NOT_DISCARDABLE" });
+      assert.ok(sessions.get(idempotencyKey), "the in-flight session must survive the attempt");
+    }
+  });
+  await service.dispatch(planId);
+
+  // And once published there is nothing to discard either.
+  await assert.rejects(service.discardUploadSession(planId, "youtube"), { code: "UPLOAD_SESSION_NOT_DISCARDABLE" });
+});
+
+test("a crash between discarding and clearing cannot produce a duplicate", async (t) => {
+  const { service, planId, sessions, idempotencyKey, calls, harness } = await scenario(t, { sessionDead: true });
+  await sessions.save(staleSession(harness, planId, idempotencyKey));
+  await service.dispatch(planId);
+
+  // Die between the two writes. Clearing first would already have destroyed the
+  // session by this point; recording first has not touched it yet.
+  const realRecord = harness.store.recordPublicationReceipt.bind(harness.store);
+  harness.store.recordPublicationReceipt = async () => {
+    throw new Error("process died");
+  };
+  await assert.rejects(service.discardUploadSession(planId, "youtube"));
+  harness.store.recordPublicationReceipt = realRecord;
+
+  // The session survived, so the next dispatch still reconciles rather than
+  // starting over. Clearing first would have left no session and no receipt
+  // change -- a fresh upload, and a second video.
+  assert.ok(sessions.get(idempotencyKey), "the session must outlive a failed discard");
+  await service.dispatch(planId);
+  assert.equal(calls.begin, 0, "no fresh session may be opened after a half-finished discard");
+  assert.equal(calls.send, 0);
+});
