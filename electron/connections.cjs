@@ -35,8 +35,9 @@ class ConnectionService {
   // than in the credential vault.
   credentialsFor(integrationId) {
     const credentials = this.store.getIntegrationCredentials(integrationId);
-    const integration = this.store.getAppState().integrations.find((item) => item.id === integrationId);
-    return { ...credentials, tokenExpiresAt: integration?.authorization?.tokenExpiresAt || null };
+    // Deliberately not getAppState(): this runs on every connector call, and
+    // that would deep-clone the entire store to read a single timestamp.
+    return { ...credentials, tokenExpiresAt: this.store.getTokenExpiry(integrationId) };
   }
 
   // The single place an access token is obtained. Callers get a token that is

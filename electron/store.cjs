@@ -128,6 +128,18 @@ class ProduDashStore {
     return { ...state, systemNotices: clone(this.notices), platformCatalog: buildPlatformCatalog(state) };
   }
 
+  // The public token expiry, read without cloning the store.
+  //
+  // getAppState() deep-clones every plan, media job, and conversation, which is
+  // roughly two hundred times the cost of everything else it does. That is fine
+  // for rendering, but this value is needed on every connector call, so going
+  // through getAppState() for it made each token fetch clone the whole app.
+  // The value is a string, so returning it directly exposes nothing mutable.
+  getTokenExpiry(integrationId) {
+    const integration = this.state.integrations.find((item) => item.id === integrationId);
+    return integration?.authorization?.tokenExpiresAt || null;
+  }
+
   getBusiness(businessId) {
     const business = this.state.businesses.find((item) => item.id === businessId);
     if (!business) throw new AppError("BUSINESS_NOT_FOUND", "Business not found.");
