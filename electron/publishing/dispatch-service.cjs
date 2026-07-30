@@ -3,7 +3,7 @@ const path = require("node:path");
 const { AppError, ConnectorError, asAppError } = require("../errors.cjs");
 const { CONNECTOR_CAPABILITIES, connectorSupports } = require("../connectors/contract.cjs");
 const { getPlatform } = require("../platforms/registry.cjs");
-const { RECEIPT_STATUSES, createReceipt, isAlreadyPublished } = require("./receipt.cjs");
+const { RECEIPT_STATUSES, createReceipt, hasProviderPublication } = require("./receipt.cjs");
 const { UploadSessionStore, createUploadSession, isUsableSession } = require("./upload-session.cjs");
 
 // An unresolved session is a local error, but unlike every other local error
@@ -312,7 +312,7 @@ class PublishingDispatchService {
       const existing = plan.publicationReceipts.find((item) => item.idempotencyKey === destination.idempotencyKey);
       // Already published under this exact approved content -- skipping is what
       // makes a second click and a restart mid-dispatch safe.
-      if (isAlreadyPublished(existing)) continue;
+      if (hasProviderPublication(existing)) continue;
 
       const startedAt = new Date().toISOString();
       const receipt = {
@@ -333,15 +333,21 @@ class PublishingDispatchService {
       try {
         const { result, accountId } = await this.publishDestination(plan, destination);
         const endedAt = new Date().toISOString();
+        // The upload finishing is not the provider finishing. YouTube reports
+        // "uploaded" at this point and only later "processed", so claiming
+        // published here said the video was live before it was. A connector
+        // that reports no upload status is taken at its word.
+        const outcome =
+          result.uploadStatus && result.uploadStatus !== "processed" ? RECEIPT_STATUSES.PROCESSING : RECEIPT_STATUSES.PUBLISHED;
         await this.store.recordPublicationReceipt(planId, {
           ...receipt,
           accountId,
           providerPublicationId: result.publicationId,
-          status: RECEIPT_STATUSES.PUBLISHED,
+          status: outcome,
           hasResumableSession: false,
           errorCode: null,
           retryable: false,
-          attempts: [...receipt.attempts.slice(0, -1), { startedAt, endedAt, outcome: RECEIPT_STATUSES.PUBLISHED }]
+          attempts: [...receipt.attempts.slice(0, -1), { startedAt, endedAt, outcome }]
         });
         // The publication id is now durable, so a crash can no longer lose it.
         // Only at this point has the session finished its job.
@@ -373,7 +379,13 @@ class PublishingDispatchService {
   async refreshPublicationStatus(planId, platformId) {
     const plan = this.store.getAppState().postQueue.find((item) => item.id === planId);
     if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
-    const receipt = plan.publicationReceipts.find((item) => item.platformId === platformId);
+    // Resolved through the approved destination rather than by platform alone,
+    // so a plan holding more than one receipt for a platform cannot silently
+    // refresh the wrong one.
+    const destination = (plan.approvalSnapshot?.destinations || []).find((item) => item.platformId === platformId);
+    const receipt = plan.publicationReceipts.find((item) =>
+      destination ? item.idempotencyKey === destination.idempotencyKey : item.platformId === platformId
+    );
     if (!receipt?.providerPublicationId) {
       throw new AppError("PUBLICATION_NOT_FOUND", "That destination has no recorded publication.");
     }
@@ -383,9 +395,26 @@ class PublishingDispatchService {
     }
     // Status checks are long-lived reads that often run well after the upload,
     // so they need the same refresh-aware path.
-    return this.connections.withFreshAuthorization(platformId, (accessToken) =>
+    const status = await this.connections.withFreshAuthorization(platformId, (accessToken) =>
       connector.getPublishingStatus({ accessToken, publicationId: receipt.providerPublicationId })
     );
+
+    // Recorded, not just returned. This previously handed the provider's status
+    // object straight back to the caller, so the receipt never learned the
+    // answer -- and the renderer's runAction would have set that object as the
+    // whole app state.
+    const resolved = status.failed ? RECEIPT_STATUSES.FAILED : status.complete ? RECEIPT_STATUSES.PUBLISHED : RECEIPT_STATUSES.PROCESSING;
+    if (resolved !== receipt.status) {
+      await this.store.recordPublicationReceipt(planId, {
+        ...receipt,
+        status: resolved,
+        // The provider rejected what it had already accepted, which no retry of
+        // ours can change.
+        errorCode: status.failed ? "PROVIDER_REJECTED_PUBLICATION" : receipt.errorCode,
+        retryable: false
+      });
+    }
+    return this.store.getAppState();
   }
 }
 

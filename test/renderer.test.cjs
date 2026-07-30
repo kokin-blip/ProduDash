@@ -743,6 +743,147 @@ test("Publishing offers a discard control only for an upload whose outcome is un
   assert.doesNotMatch(document.querySelector(".publication-receipts").textContent, /could not be accounted for/);
 });
 
+test("Publishing explains a failure in words, and never swallows an unmapped code", async () => {
+  const renderer = await setupRenderer();
+  const show = (receipt) => {
+    renderer.setAppState(
+      baseState({
+        creatorPlatforms: [{ id: "youtube", name: "YouTube Shorts" }],
+        postQueue: [
+          {
+            id: "post-1",
+            title: "Launch",
+            caption: "Approved copy",
+            platforms: ["youtube"],
+            status: "dispatch_failed",
+            schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+            mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
+            approvalSnapshot: { hash: "a".repeat(64) },
+            exportReceipt: null,
+            publicationReceipts: [
+              {
+                platformId: "youtube",
+                idempotencyKey: "b".repeat(64),
+                status: "failed",
+                providerPublicationId: null,
+                attempts: [{ startedAt: "2026-07-30T00:00:00.000Z", endedAt: "2026-07-30T00:01:00.000Z", outcome: "failed" }],
+                hasResumableSession: false,
+                ...receipt
+              }
+            ]
+          }
+        ]
+      })
+    );
+    renderer.ui.activeSection = "studio";
+    renderer.ui.studioTab = "publishing";
+    renderer.renderApp();
+    return document.querySelector(".publication-receipts").textContent;
+  };
+
+  // Receipts carry a code and never a provider message, which is what keeps
+  // tokens and paths out of them -- but it meant users read the code itself.
+  assert.match(show({ errorCode: "YOUTUBE_RATE_LIMITED", retryable: true }), /rate limiting/);
+  assert.doesNotMatch(show({ errorCode: "YOUTUBE_RATE_LIMITED", retryable: true }), /YOUTUBE_RATE_LIMITED/);
+  // An unmapped code is ugly rather than invisible.
+  assert.match(show({ errorCode: "SOME_FUTURE_CODE", retryable: true }), /SOME_FUTURE_CODE/);
+});
+
+test("Publishing withholds Retry from a destination that cannot be retried", async () => {
+  const renderer = await setupRenderer();
+  const show = (receipt) => {
+    renderer.setAppState(
+      baseState({
+        creatorPlatforms: [{ id: "youtube", name: "YouTube Shorts" }],
+        postQueue: [
+          {
+            id: "post-1",
+            title: "Launch",
+            caption: "Approved copy",
+            platforms: ["youtube"],
+            status: "dispatch_failed",
+            schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+            mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
+            approvalSnapshot: { hash: "a".repeat(64) },
+            exportReceipt: null,
+            publicationReceipts: [
+              {
+                platformId: "youtube",
+                idempotencyKey: "b".repeat(64),
+                status: "failed",
+                providerPublicationId: null,
+                attempts: [],
+                hasResumableSession: false,
+                ...receipt
+              }
+            ]
+          }
+        ]
+      })
+    );
+    renderer.ui.activeSection = "studio";
+    renderer.ui.studioTab = "publishing";
+    renderer.renderApp();
+  };
+
+  show({ errorCode: "YOUTUBE_NETWORK_ERROR", retryable: true });
+  assert.ok(document.querySelector("[data-dispatch-post='post-1']"), "a retryable failure still offers Retry");
+
+  // Clicking Retry on a non-retryable destination cannot help, and each click
+  // appended an attempt that pushed the real early history out of the record.
+  show({ errorCode: "UPLOAD_SESSION_UNRESOLVED", retryable: false });
+  assert.equal(document.querySelector("[data-dispatch-post='post-1']"), null);
+});
+
+test("Publishing offers a status check only while the provider is still finalizing", async () => {
+  const renderer = await setupRenderer();
+  const show = (receipt) => {
+    renderer.setAppState(
+      baseState({
+        creatorPlatforms: [{ id: "youtube", name: "YouTube Shorts" }],
+        postQueue: [
+          {
+            id: "post-1",
+            title: "Launch",
+            caption: "Approved copy",
+            platforms: ["youtube"],
+            status: "published",
+            schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+            mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
+            approvalSnapshot: { hash: "a".repeat(64) },
+            exportReceipt: null,
+            publicationReceipts: [
+              {
+                platformId: "youtube",
+                idempotencyKey: "b".repeat(64),
+                providerPublicationId: "video-1",
+                attempts: [],
+                errorCode: null,
+                retryable: false,
+                hasResumableSession: false,
+                ...receipt
+              }
+            ]
+          }
+        ]
+      })
+    );
+    renderer.ui.activeSection = "studio";
+    renderer.ui.studioTab = "publishing";
+    renderer.renderApp();
+  };
+
+  show({ status: "processing" });
+  const button = document.querySelector("[data-refresh-publication='post-1']");
+  assert.ok(button, "a destination the provider is still finalizing can be re-asked");
+  assert.equal(button.dataset.refreshPlatform, "youtube");
+  // And it must not claim the video is live yet.
+  assert.match(document.querySelector(".publication-receipts").textContent, /still finalizing/);
+
+  show({ status: "published" });
+  assert.equal(document.querySelector("[data-refresh-publication]"), null, "nothing left to ask once it is published");
+});
+
 test("Publishing renders a control for every option the provider requires", async () => {
   // Built from the real catalog rather than a hand-written fixture on purpose.
   // A literal here would keep passing while buildPlatformEntry dropped the

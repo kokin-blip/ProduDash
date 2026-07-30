@@ -986,6 +986,14 @@ async function handleClick(event) {
     return;
   }
 
+  const refreshPublicationButton = event.target.closest("[data-refresh-publication]");
+  if (refreshPublicationButton) {
+    await runAction(`refresh-publication-${refreshPublicationButton.dataset.refreshPublication}`, refreshPublicationButton, () =>
+      api.refreshPublicationStatus(refreshPublicationButton.dataset.refreshPublication, refreshPublicationButton.dataset.refreshPlatform)
+    );
+    return;
+  }
+
   const discardSessionButton = event.target.closest("[data-discard-session]");
   if (discardSessionButton) {
     // The provider already said it cannot tell whether that upload published

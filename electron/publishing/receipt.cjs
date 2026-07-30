@@ -20,9 +20,6 @@ const RECEIPT_STATUSES = Object.freeze({
 
 const STATUS_VALUES = Object.freeze(new Set(Object.values(RECEIPT_STATUSES)));
 
-// A receipt that reached one of these is finished for this content hash.
-const TERMINAL_STATUSES = Object.freeze(new Set([RECEIPT_STATUSES.PUBLISHED]));
-
 const MAX_ATTEMPTS_RECORDED = 10;
 const HEX_64 = /^[a-f0-9]{64}$/;
 
@@ -115,19 +112,34 @@ function validateReceipt(value) {
   return true;
 }
 
-// A destination is already done when a prior attempt produced a publication for
-// the same approved content. This is what makes a repeated dispatch -- another
+// Whether the provider has already created something for this destination.
+//
+// This is the question that decides not to upload again, and it is keyed on the
+// provider's own id rather than on how the attempt is classified. A video
+// YouTube has accepted but not finished processing exists; so does one it
+// accepted and later rejected. Sending either a second time puts a duplicate on
+// the channel, so the id alone is what makes a repeated dispatch -- another
 // click, or a restart mid-flight -- safe.
+function hasProviderPublication(receipt) {
+  return Boolean(receipt?.providerPublicationId);
+}
+
+// Whether this destination actually succeeded, which is a different question
+// and decides whether the plan as a whole published. A receipt the provider
+// later rejected keeps its id, so that a retry cannot duplicate it, but it is
+// not a success.
 function isAlreadyPublished(receipt) {
-  return Boolean(receipt && TERMINAL_STATUSES.has(receipt.status) && receipt.providerPublicationId);
+  return Boolean(
+    receipt?.providerPublicationId && (receipt.status === RECEIPT_STATUSES.PUBLISHED || receipt.status === RECEIPT_STATUSES.PROCESSING)
+  );
 }
 
 module.exports = {
   MAX_ATTEMPTS_RECORDED,
   RECEIPT_STATUSES,
   RECEIPT_VERSION,
-  TERMINAL_STATUSES,
   createReceipt,
+  hasProviderPublication,
   isAlreadyPublished,
   normalizeReceipt,
   validateReceipt

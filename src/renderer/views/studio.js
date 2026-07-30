@@ -694,6 +694,57 @@ function renderClipJob(job) {
 
 // Shows what actually happened per destination. Never claims a publication the
 // provider did not confirm, and never renders anything but a safe error code.
+function receiptsOf(plan) {
+  return asArray(plan.publicationReceipts);
+}
+
+// Human wording for the codes a receipt can carry.
+//
+// Receipts store a code and never a provider message, which is what keeps
+// tokens and paths out of them -- but it meant the code itself was rendered, so
+// a failure read "Failed · APPROVAL_PREDATES_REQUIRED_OPTIONS". Anything not
+// listed here still shows its raw code rather than being swallowed, so a new
+// one is merely ugly instead of invisible.
+const RECEIPT_ERROR_COPY = {
+  UPLOAD_SESSION_UNRESOLVED: "An earlier upload could not be accounted for",
+  UPLOAD_SESSION_DISCARDED: "Earlier upload discarded at your request",
+  APPROVAL_PREDATES_REQUIRED_OPTIONS: "This approval predates required publishing choices",
+  PROVIDER_REJECTED_PUBLICATION: "The provider rejected the upload after accepting it",
+  MEDIA_JOB_NOT_READY: "This plan has no rendered video",
+  MEDIA_FILE_MISSING: "The rendered video could not be found",
+  PUBLISHING_UNSUPPORTED: "This destination cannot publish from ProduDash",
+  SECURE_STORAGE_UNAVAILABLE: "Secure storage is unavailable",
+  REAUTHORIZATION_REQUIRED: "Reauthorize this destination to continue",
+  INTEGRATION_UNAVAILABLE: "This destination has no live connector",
+  PUBLISH_FAILED: "The upload did not complete",
+  YOUTUBE_AUTH_FAILED: "YouTube rejected the stored authorization",
+  YOUTUBE_FORBIDDEN: "YouTube refused this request",
+  YOUTUBE_RATE_LIMITED: "YouTube is rate limiting uploads",
+  YOUTUBE_SERVER_ERROR: "YouTube had a server error",
+  YOUTUBE_REQUEST_REJECTED: "YouTube rejected the request",
+  YOUTUBE_TIMEOUT: "YouTube did not respond in time",
+  YOUTUBE_NETWORK_ERROR: "The connection to YouTube failed",
+  YOUTUBE_NOT_AUTHORIZED: "Authorize YouTube before publishing",
+  YOUTUBE_NO_ACCESS_TOKEN: "No YouTube access token is stored",
+  YOUTUBE_NO_REFRESH_TOKEN: "No YouTube refresh token is stored",
+  YOUTUBE_NO_UPLOAD_SESSION: "YouTube did not open an upload session",
+  YOUTUBE_AUDIENCE_DECLARATION_REQUIRED: "The audience declaration is missing",
+  YOUTUBE_MEDIA_UNREADABLE: "The rendered video could not be read",
+  YOUTUBE_UPLOAD_OFFSET_INVALID: "The resume position was out of bounds",
+  YOUTUBE_UPLOAD_CANCELED: "The upload was canceled",
+  YOUTUBE_UPLOAD_INTERRUPTED: "The upload was interrupted",
+  YOUTUBE_UPLOAD_COMMIT_PENDING: "YouTube has the whole video and is finalizing it",
+  YOUTUBE_NO_VIDEO_ID: "YouTube did not return a video id",
+  YOUTUBE_VIDEO_NOT_FOUND: "YouTube no longer reports that video",
+  YOUTUBE_STATUS_UNAVAILABLE: "The publication status could not be read",
+  CONNECTOR_NOT_CONFIGURED: "This destination is not configured"
+};
+
+function receiptErrorText(errorCode) {
+  if (!errorCode) return "Unknown error";
+  return RECEIPT_ERROR_COPY[errorCode] || errorCode;
+}
+
 function renderPublicationReceipts(planId, receipts) {
   if (!receipts.length) return "";
   return `
@@ -704,9 +755,16 @@ function renderPublicationReceipts(planId, receipts) {
           const outcome =
             receipt.status === "published" && receipt.providerPublicationId
               ? `Published · ${escapeHtml(receipt.providerPublicationId)}`
-              : receipt.status === "failed"
-                ? `Failed · ${escapeHtml(receipt.errorCode || "UNKNOWN")}${receipt.retryable ? " · retry available" : " · not retryable"}`
-                : escapeHtml(statusLabel(receipt.status));
+              : receipt.status === "processing" && receipt.providerPublicationId
+                ? `Uploaded · ${escapeHtml(receipt.providerPublicationId)} · the provider is still finalizing it`
+                : receipt.status === "failed"
+                  ? `Failed · ${escapeHtml(receiptErrorText(receipt.errorCode))}${
+                      receipt.retryable ? " · retry available" : " · not retryable"
+                    }`
+                  : escapeHtml(statusLabel(receipt.status));
+          // A processing destination is the one case where asking the provider
+          // again changes anything, so the control appears only there.
+          const refreshable = receipt.status === "processing" && receipt.providerPublicationId;
           const attempts = asArray(receipt.attempts);
           const last = attempts[attempts.length - 1];
           // The provider could not say whether the earlier attempt published
@@ -719,6 +777,13 @@ function renderPublicationReceipts(planId, receipts) {
             <small>${escapeHtml(
               `${attempts.length} attempt${attempts.length === 1 ? "" : "s"}${last?.endedAt ? ` · last ${formatDate(last.endedAt)}` : ""}`
             )}</small>
+            ${
+              refreshable
+                ? `<button class="ghost-button small" type="button" data-refresh-publication="${escapeHtml(
+                    planId
+                  )}" data-refresh-platform="${escapeHtml(receipt.platformId)}" data-pending-label="Checking…">Check status</button>`
+                : ""
+            }
             ${
               unresolved
                 ? `<small class="compact-note">An earlier upload could not be accounted for. Check ${escapeHtml(
@@ -742,7 +807,12 @@ function renderPostPlan(plan) {
   // canceled locally, and published plans are terminal.
   const canCancel = ["needs_approval", "approved_for_manual_export", "approved_for_official_api", "dispatch_failed"].includes(plan.status);
   const editable = plan.status === "needs_approval";
-  const canDispatch = ["approved_for_official_api", "dispatch_failed"].includes(plan.status) && Boolean(plan.approvalSnapshot);
+  // A destination the dispatcher marked non-retryable is not made retryable by
+  // clicking again. Offering the button anyway meant every click appended an
+  // attempt that pushed the genuine early history out of the capped array,
+  // destroying the record of what actually happened.
+  const blocked = receiptsOf(plan).some((receipt) => receipt.status === "failed" && !receipt.retryable);
+  const canDispatch = ["approved_for_official_api", "dispatch_failed"].includes(plan.status) && Boolean(plan.approvalSnapshot) && !blocked;
   const receipts = asArray(plan.publicationReceipts);
   const packages = platforms.map(
     (platformId) =>

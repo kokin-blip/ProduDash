@@ -135,7 +135,10 @@ test("the approval path now invokes a real connector and publishes", async (t) =
 
   const receipt = plan.publicationReceipts[0];
   assert.equal(receipt.providerPublicationId, "video-1");
-  assert.equal(receipt.status, RECEIPT_STATUSES.PUBLISHED);
+  // The upload finishing is not YouTube finishing: it reports "uploaded" here
+  // and only later "processed". Claiming published at this point said the video
+  // was live before it was.
+  assert.equal(receipt.status, RECEIPT_STATUSES.PROCESSING);
   assert.equal(receipt.accountId, "UC-channel");
   assert.equal(receipt.approvedContentHash, plan.approvalSnapshot.hash);
   assert.equal(receipt.idempotencyKey, plan.approvalSnapshot.destinations[0].idempotencyKey);
@@ -241,9 +244,13 @@ test("receipts never carry tokens, secrets, or absolute paths", async (t) => {
 test("publication status is re-read from the provider, never assumed", async (t) => {
   const { service, planId } = await approvedPlan(t);
   await service.dispatch(planId);
-  const status = await service.refreshPublicationStatus(planId, "youtube");
-  assert.equal(status.publicationId, "video-1");
-  assert.equal(status.complete, true);
+  // The answer is recorded, not just returned. Handing the provider's status
+  // object back meant the receipt never learned it -- and the renderer's
+  // runAction would have set that object as the entire app state.
+  const state = await service.refreshPublicationStatus(planId, "youtube");
+  const refreshed = state.postQueue.find((item) => item.id === planId).publicationReceipts[0];
+  assert.equal(refreshed.status, RECEIPT_STATUSES.PUBLISHED);
+  assert.equal(refreshed.providerPublicationId, "video-1");
   // A destination with no publication cannot be queried.
   await assert.rejects(() => service.refreshPublicationStatus(planId, "tiktok"), { code: "PUBLICATION_NOT_FOUND" });
 });
