@@ -658,6 +658,53 @@ test("Publishing renders immutable local export packages, schedule context, and 
   assert.doesNotMatch(document.querySelector("#viewRoot").textContent, /published successfully/i);
 });
 
+test("Publishing offers a discard control only for an upload whose outcome is unknown", async () => {
+  const renderer = await setupRenderer();
+  const plan = (receipt) => ({
+    id: "post-1",
+    title: "Launch",
+    caption: "Approved copy",
+    platforms: ["youtube"],
+    status: "dispatch_failed",
+    schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+    mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
+    approvalSnapshot: { hash: "a".repeat(64) },
+    exportReceipt: null,
+    publicationReceipts: [
+      {
+        platformId: "youtube",
+        idempotencyKey: "b".repeat(64),
+        status: "failed",
+        providerPublicationId: null,
+        attempts: [{ startedAt: "2026-07-30T00:00:00.000Z", endedAt: "2026-07-30T00:01:00.000Z", outcome: "failed" }],
+        hasResumableSession: false,
+        ...receipt
+      }
+    ]
+  });
+
+  const show = (receipt) => {
+    renderer.setAppState(baseState({ creatorPlatforms: [{ id: "youtube", name: "YouTube Shorts" }], postQueue: [plan(receipt)] }));
+    renderer.ui.activeSection = "studio";
+    renderer.ui.studioTab = "publishing";
+    renderer.renderApp();
+  };
+
+  // An ordinary retryable failure must not offer to discard anything -- there
+  // is nothing ambiguous to resolve.
+  show({ errorCode: "YOUTUBE_UPLOAD_INTERRUPTED", retryable: true });
+  assert.equal(document.querySelector("[data-discard-session]"), null);
+
+  show({ errorCode: "UPLOAD_SESSION_UNRESOLVED", retryable: false });
+  const discard = document.querySelector("[data-discard-session='post-1']");
+  assert.ok(discard, "an unresolved upload needs the explicit way out");
+  assert.equal(discard.dataset.discardPlatform, "youtube");
+  // The receipt must say plainly that retrying is not the answer here.
+  const record = document.querySelector(".publication-receipts").textContent;
+  assert.match(record, /not retryable/);
+  assert.match(record, /Check YouTube Shorts before retrying/);
+});
+
 test("Publishing shows editable destination drafts and a truthful local schedule summary before approval", async () => {
   const renderer = await setupRenderer();
   renderer.setAppState(

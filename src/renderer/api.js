@@ -118,5 +118,6 @@ export const api = {
   exportPostPackage: (planId) => unwrap(client().exportPostPackage(planId)),
   cancelPostPlan: (planId) => unwrap(client().cancelPostPlan(planId)),
   dispatchPostPlan: (planId) => unwrap(client().dispatchPostPlan(planId)),
-  refreshPublicationStatus: (planId, platformId) => unwrap(client().refreshPublicationStatus(planId, platformId))
+  refreshPublicationStatus: (planId, platformId) => unwrap(client().refreshPublicationStatus(planId, platformId)),
+  discardUploadSession: (planId, platformId) => unwrap(client().discardUploadSession(planId, platformId))
 };

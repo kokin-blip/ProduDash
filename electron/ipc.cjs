@@ -428,6 +428,10 @@ function createHandlers({
       if (!publishing) throw new AppError("PUBLISHING_UNSUPPORTED", "Official API publishing is unavailable.");
       return publishing.refreshPublicationStatus(payload?.planId, payload?.platformId);
     },
+    "produdash:discardUploadSession": async (_event, payload) => {
+      if (!publishing) throw new AppError("PUBLISHING_UNSUPPORTED", "Official API publishing is unavailable.");
+      return publishing.discardUploadSession(payload?.planId, payload?.platformId);
+    },
     "produdash:authorizeIntegration": async (_event, payload) => connections.authorizeIntegration(payload?.integrationId),
     "produdash:disconnectIntegration": async (_event, payload) => connections.disconnectIntegration(payload?.integrationId),
     "produdash:getAuthorizationInstructions": async (_event, payload) => {

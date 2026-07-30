@@ -434,6 +434,26 @@ test("an interrupted upload resumes from the byte count Google reports", async (
   assert.equal(done.completed, true);
 });
 
+test("a session the provider has forgotten is reported as undetermined, not as safe", async () => {
+  // A 404 cannot distinguish "never completed" from "completed before ProduDash
+  // recorded the id, then expired". Treating it as proof that no video exists
+  // would reintroduce the duplicate this module exists to prevent, just on a
+  // slower timeline -- so it is reported as unresolved and escalated.
+  for (const status of [404, 410]) {
+    const { connector } = createConnector({ responses: [uploadResponse({}, { status })] });
+    assert.deepEqual(await connector.probeUploadOffset("https://upload.example/s", "at", 5000), { dead: true });
+
+    const viaCapability = createConnector({ responses: [uploadResponse({}, { status })] });
+    const probe = await viaCapability.connector.probeUpload({
+      accessToken: "at",
+      uploadUri: "https://upload.example/s",
+      contentLength: 5000,
+      request: { title: "t", description: "d", selfDeclaredMadeForKids: false, privacyStatus: "private" }
+    });
+    assert.deepEqual(probe, { unresolved: true });
+  }
+});
+
 test("a probe reporting every byte but no video is a wait, not an upload failure", async () => {
   // Google can answer 308 with the full range while it is still committing.
   // Forwarding that offset would be rejected as out of bounds and the

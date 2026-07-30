@@ -125,6 +125,30 @@ class PublishingDispatchService {
     );
   }
 
+  // The explicit decision an unresolved session asks for. The user has checked
+  // the destination themselves and is stating that no publication came of the
+  // earlier attempt, which is a claim only they can make: the provider has
+  // already said it cannot tell us. Discarding the record lets the next
+  // dispatch start cleanly.
+  async discardUploadSession(planId, platformId) {
+    const plan = this.store.getAppState().postQueue.find((item) => item.id === planId);
+    if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
+    const destination = (plan.approvalSnapshot?.destinations || []).find((item) => item.platformId === platformId);
+    if (!destination) throw new AppError("PUBLICATION_NOT_FOUND", "That destination is not part of the approved plan.");
+    await this.sessions.clear(destination.idempotencyKey);
+
+    const receipt = plan.publicationReceipts.find((item) => item.idempotencyKey === destination.idempotencyKey);
+    if (receipt) {
+      await this.store.recordPublicationReceipt(planId, {
+        ...receipt,
+        hasResumableSession: false,
+        // The block was the unknown outcome, and the user has resolved it.
+        retryable: true
+      });
+    }
+    return this.store.getAppState();
+  }
+
   // Single-call upload for connectors that do not expose a resumable session.
   async sendWholeFile({ connector, destination, filePath, contentLength, metadata }) {
     const body = fs.createReadStream(filePath);
@@ -145,6 +169,9 @@ class PublishingDispatchService {
     const probe = await this.connections.withFreshAuthorization(destination.platformId, (accessToken) =>
       connector.probeUpload({ accessToken, uploadUri: session.uploadUri, contentLength: session.contentLength, request: metadata })
     );
+    // The provider no longer recognizes the session and cannot say whether it
+    // produced a video. Restarting might duplicate one; resuming is impossible.
+    if (probe.unresolved) await this.refuseUnresolved(destination.idempotencyKey);
     if (probe.completed) {
       // The provider already has the whole thing and returned the resource.
       // Recording its id is the only correct action; uploading again would

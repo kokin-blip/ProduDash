@@ -220,6 +220,17 @@ test("publishing IPC keeps approval, export, and cancellation in normalized enve
   assert.equal((await handlers["produdash:cancelPostPlan"]({}, { planId: "post-1" })).ok, true);
 });
 
+test("upload-session channels exist and refuse cleanly without a publishing service", async () => {
+  const handlers = fixtures(() => true);
+  // Registered, so the renderer's control is reachable at all...
+  assert.equal(typeof handlers["produdash:discardUploadSession"], "function");
+  // ...and when official publishing is unavailable it fails in a normalized
+  // envelope rather than throwing across the bridge.
+  const refused = await handlers["produdash:discardUploadSession"]({}, { planId: "post-1", platformId: "youtube" });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.error.code, "PUBLISHING_UNSUPPORTED");
+});
+
 test("analytics IPC keeps reports and local CSV export in normalized envelopes", async () => {
   const handlers = fixtures(() => true);
   assert.equal((await handlers["produdash:getAnalyticsReport"]({}, { businessId: "business-1" })).data.businessId, "business-1");

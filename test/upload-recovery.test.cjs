@@ -5,7 +5,13 @@ const test = require("node:test");
 const { PublishingDispatchService } = require("../electron/publishing/dispatch-service.cjs");
 const { POST_PLAN_STATUSES } = require("../electron/publishing/post-status.cjs");
 const { RECEIPT_STATUSES } = require("../electron/publishing/receipt.cjs");
-const { UploadSessionStore, createUploadSession, isUsableSession, vaultKeyFor } = require("../electron/publishing/upload-session.cjs");
+const {
+  SESSION_STATUSES,
+  UploadSessionStore,
+  createUploadSession,
+  isUsableSession,
+  vaultKeyFor
+} = require("../electron/publishing/upload-session.cjs");
 const { ConnectorRegistry } = require("../electron/connectors.cjs");
 const { CONNECTOR_CAPABILITIES } = require("../electron/connectors/contract.cjs");
 const { CONNECTOR_ERROR_CATEGORIES, connectorError } = require("../electron/errors.cjs");
@@ -14,9 +20,9 @@ const { createDirectory, createHarness } = require("./helpers.cjs");
 const VIDEO_BYTES = "0123456789abcdef";
 
 // A resumable-upload connector whose provider-side state the test controls.
-function resumableConnector({ providerHas = 0, onSend, onBegin } = {}) {
+function resumableConnector({ providerHas = 0, sessionDead = false, onSend, onBegin } = {}) {
   const calls = { begin: 0, probe: 0, send: 0 };
-  const state = { bytesHeld: providerHas, videoId: null };
+  const state = { bytesHeld: providerHas, videoId: null, sessionDead };
   return {
     calls,
     state,
@@ -34,6 +40,9 @@ function resumableConnector({ providerHas = 0, onSend, onBegin } = {}) {
       },
       probeUpload: async ({ contentLength }) => {
         calls.probe += 1;
+        // The provider no longer recognizes the session and cannot say whether
+        // it produced a video.
+        if (state.sessionDead) return { unresolved: true };
         if (state.videoId) {
           return { completed: true, offset: contentLength, result: { publicationId: state.videoId, privacyStatus: "private" } };
         }
@@ -99,6 +108,20 @@ async function scenario(t, connectorOptions = {}) {
     uploadSessions: sessions
   });
   return { harness, service, planId, idempotencyKey, sessions, ...built };
+}
+
+// A long-abandoned session record. Its age is deliberately extreme: nothing in
+// the dispatcher may treat that as an answer in its own right.
+function staleSession(harness, planId, idempotencyKey) {
+  return createUploadSession({
+    planId,
+    platformId: "youtube",
+    approvalHash: harness.store.getAppState().postQueue[0].approvalSnapshot.hash,
+    idempotencyKey,
+    uploadUri: "https://upload.example/stale",
+    contentLength: VIDEO_BYTES.length,
+    createdAt: "2020-01-01T00:00:00.000Z"
+  });
 }
 
 test("the session URI is persisted before any bytes are sent", async (t) => {
@@ -190,23 +213,13 @@ test("the session record is cleared once the upload succeeds", async (t) => {
 });
 
 test("an unusable session is not silently replaced", async (t) => {
-  const { service, planId, sessions, idempotencyKey, calls, harness } = await scenario(t);
-  // An expired session: we cannot tell whether it created a video.
-  await sessions.save(
-    createUploadSession({
-      planId,
-      platformId: "youtube",
-      approvalHash: harness.store.getAppState().postQueue[0].approvalSnapshot.hash,
-      idempotencyKey,
-      uploadUri: "https://upload.example/stale",
-      contentLength: VIDEO_BYTES.length,
-      createdAt: "2020-01-01T00:00:00.000Z"
-    })
-  );
+  const { service, planId, sessions, idempotencyKey, calls, harness } = await scenario(t, { sessionDead: true });
+  await sessions.save(staleSession(harness, planId, idempotencyKey));
 
   const state = await service.dispatch(planId);
-  // Opening a replacement session could publish a duplicate, so the attempt
-  // stops and asks for an explicit decision instead.
+  // The provider was asked and could not say. Opening a replacement session
+  // could publish a duplicate, so the attempt stops and asks the user instead.
+  assert.equal(calls.probe, 1, "the provider must be asked before anything is condemned");
   assert.equal(calls.begin, 0, "no replacement session may be opened while the outcome is unknown");
   assert.equal(calls.send, 0);
   const receipt = state.postQueue[0].publicationReceipts[0];
@@ -219,6 +232,20 @@ test("an unusable session is not silently replaced", async (t) => {
   // claim otherwise.
   assert.equal(receipt.retryable, false);
   assert.equal(harness.store.getAppState().postQueue[0].status, POST_PLAN_STATUSES.DISPATCH_FAILED);
+});
+
+test("age alone never condemns a session -- the provider is asked", async (t) => {
+  // The regression behind this: a session older than an arbitrary cutoff used
+  // to be declared unusable without asking, forcing a restart of an upload the
+  // provider was still perfectly willing to resume.
+  const { service, planId, sessions, idempotencyKey, calls, harness } = await scenario(t, { providerHas: 6 });
+  await sessions.save(staleSession(harness, planId, idempotencyKey));
+
+  const state = await service.dispatch(planId);
+  assert.equal(calls.probe, 1);
+  assert.equal(calls.begin, 0, "an old but live session is resumed, not replaced");
+  assert.equal(calls.send, 1);
+  assert.equal(state.postQueue[0].publicationReceipts[0].status, RECEIPT_STATUSES.PUBLISHED);
 });
 
 test("a crash between the upload and the receipt does not upload again", async (t) => {
@@ -253,18 +280,8 @@ test("an unresolved session keeps refusing however often it is retried", async (
   // The regression this module exists for: a refusal that clears the record
   // turns the next attempt back into a first attempt, and the duplicate that
   // was just prevented gets published anyway.
-  const { service, planId, sessions, idempotencyKey, calls, harness } = await scenario(t);
-  await sessions.save(
-    createUploadSession({
-      planId,
-      platformId: "youtube",
-      approvalHash: harness.store.getAppState().postQueue[0].approvalSnapshot.hash,
-      idempotencyKey,
-      uploadUri: "https://upload.example/stale",
-      contentLength: VIDEO_BYTES.length,
-      createdAt: "2020-01-01T00:00:00.000Z"
-    })
-  );
+  const { service, planId, sessions, idempotencyKey, calls, harness } = await scenario(t, { sessionDead: true });
+  await sessions.save(staleSession(harness, planId, idempotencyKey));
 
   await service.dispatch(planId);
   const state = await service.dispatch(planId);
@@ -275,6 +292,26 @@ test("an unresolved session keeps refusing however often it is retried", async (
   const receipt = state.postQueue[0].publicationReceipts[0];
   assert.equal(receipt.errorCode, "UPLOAD_SESSION_UNRESOLVED");
   assert.equal(receipt.retryable, false);
+});
+
+test("discarding an unresolved session is what unblocks a fresh upload", async (t) => {
+  const { service, planId, sessions, idempotencyKey, calls, state, harness } = await scenario(t, { sessionDead: true });
+  await sessions.save(staleSession(harness, planId, idempotencyKey));
+  await service.dispatch(planId);
+  assert.equal(calls.begin, 0);
+
+  // The user has checked the destination and states nothing was published --
+  // the one claim ProduDash cannot make for itself.
+  const afterDiscard = await service.discardUploadSession(planId, "youtube");
+  assert.equal(sessions.get(idempotencyKey), null, "the dead record is gone");
+  const discarded = afterDiscard.postQueue[0].publicationReceipts[0];
+  assert.equal(discarded.hasResumableSession, false);
+  assert.equal(discarded.retryable, true, "the block was the unknown outcome, and it has been resolved");
+
+  state.sessionDead = false;
+  const republished = await service.dispatch(planId);
+  assert.equal(calls.begin, 1, "only now may a fresh session be opened");
+  assert.equal(republished.postQueue[0].publicationReceipts[0].status, RECEIPT_STATUSES.PUBLISHED);
 });
 
 test("a session whose file has since changed size is refused rather than resumed", async (t) => {
@@ -303,18 +340,8 @@ test("a session whose file has since changed size is refused rather than resumed
 });
 
 test("an unresolved record is not reported as a resumable session", async (t) => {
-  const { service, planId, sessions, idempotencyKey, harness } = await scenario(t);
-  await sessions.save(
-    createUploadSession({
-      planId,
-      platformId: "youtube",
-      approvalHash: harness.store.getAppState().postQueue[0].approvalSnapshot.hash,
-      idempotencyKey,
-      uploadUri: "https://upload.example/stale",
-      contentLength: VIDEO_BYTES.length,
-      createdAt: "2020-01-01T00:00:00.000Z"
-    })
-  );
+  const { service, planId, sessions, idempotencyKey, harness } = await scenario(t, { sessionDead: true });
+  await sessions.save(staleSession(harness, planId, idempotencyKey));
   const state = await service.dispatch(planId);
   const receipt = state.postQueue[0].publicationReceipts[0];
   // A dead record still exists in the vault, but claiming it is resumable while
@@ -324,7 +351,7 @@ test("an unresolved record is not reported as a resumable session", async (t) =>
   assert.equal(receipt.retryable, false);
 });
 
-test("session age is what makes a record unusable", () => {
+test("what makes a record unusable is its status, never its age", () => {
   const base = {
     planId: "p",
     platformId: "youtube",
@@ -334,9 +361,11 @@ test("session age is what makes a record unusable", () => {
     contentLength: 10
   };
   assert.equal(isUsableSession(createUploadSession(base)), true);
-  assert.equal(isUsableSession(createUploadSession({ ...base, createdAt: "2020-01-01T00:00:00.000Z" })), false);
+  // Old is not the same as dead, and only the provider can tell them apart.
+  assert.equal(isUsableSession(createUploadSession({ ...base, createdAt: "2020-01-01T00:00:00.000Z" })), true);
   assert.equal(isUsableSession(null), false);
-  assert.equal(isUsableSession({ ...createUploadSession(base), status: "closed" }), false);
+  assert.equal(isUsableSession({ ...createUploadSession(base), status: SESSION_STATUSES.UNRESOLVED }), false);
+  assert.equal(isUsableSession({ ...createUploadSession(base), uploadUri: "" }), false);
 });
 
 test("the session URI never reaches app state, receipts, or exports", async (t) => {

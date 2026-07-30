@@ -986,6 +986,24 @@ async function handleClick(event) {
     return;
   }
 
+  const discardSessionButton = event.target.closest("[data-discard-session]");
+  if (discardSessionButton) {
+    // The provider already said it cannot tell whether that upload published
+    // anything. Discarding on the user's word is the only way forward, so the
+    // confirmation has to state plainly what they are vouching for.
+    if (
+      !window.confirm(
+        "Only discard this if you have checked the destination and no post from this plan appeared. Discarding lets ProduDash upload again, which would duplicate it if one did."
+      )
+    ) {
+      return;
+    }
+    await runAction(`discard-session-${discardSessionButton.dataset.discardSession}`, discardSessionButton, () =>
+      api.discardUploadSession(discardSessionButton.dataset.discardSession, discardSessionButton.dataset.discardPlatform)
+    );
+    return;
+  }
+
   const dispatchPostButton = event.target.closest("[data-dispatch-post]");
   if (dispatchPostButton) {
     // Publishing sends media to a real account, so it needs its own explicit

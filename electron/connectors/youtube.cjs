@@ -349,6 +349,11 @@ class YouTubeConnector {
       return { completed: false, offset: match ? Number(match[1]) + 1 : 0 };
     }
     if (response.ok) return { completed: true, body: await response.json() };
+    // The session is gone. This does NOT establish that no video was created:
+    // an upload that completed before ProduDash recorded the id would expire
+    // into the same 404 as one that never finished. Report it as undetermined
+    // and let the caller decide, rather than guessing in either direction.
+    if (response.status === 404 || response.status === 410) return { dead: true };
     throw safeGoogleError(response.status, { duringUpload: true });
   }
 
@@ -461,6 +466,7 @@ class YouTubeConnector {
   // exists for this session and must not be uploaded again.
   async probeUpload({ accessToken, uploadUri, contentLength, request }) {
     const probe = await this.probeUploadOffset(uploadUri, accessToken, contentLength);
+    if (probe.dead) return { unresolved: true };
     if (probe.completed) {
       return { completed: true, offset: contentLength, result: this.describePublication(probe.body, this.buildVideoMetadata(request)) };
     }

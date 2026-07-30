@@ -694,7 +694,7 @@ function renderClipJob(job) {
 
 // Shows what actually happened per destination. Never claims a publication the
 // provider did not confirm, and never renders anything but a safe error code.
-function renderPublicationReceipts(receipts) {
+function renderPublicationReceipts(planId, receipts) {
   if (!receipts.length) return "";
   return `
     <div class="publication-receipts">
@@ -709,12 +709,26 @@ function renderPublicationReceipts(receipts) {
                 : escapeHtml(statusLabel(receipt.status));
           const attempts = asArray(receipt.attempts);
           const last = attempts[attempts.length - 1];
+          // The provider could not say whether the earlier attempt published
+          // anything, so ProduDash will not guess. Only the person who can look
+          // at the destination is able to settle it.
+          const unresolved = receipt.status === "failed" && receipt.errorCode === "UPLOAD_SESSION_UNRESOLVED";
           return `<div class="publication-receipt">
             <span>${escapeHtml(platformName(receipt.platformId))}</span>
             <span>${outcome}</span>
             <small>${escapeHtml(
               `${attempts.length} attempt${attempts.length === 1 ? "" : "s"}${last?.endedAt ? ` · last ${formatDate(last.endedAt)}` : ""}`
             )}</small>
+            ${
+              unresolved
+                ? `<small class="compact-note">An earlier upload could not be accounted for. Check ${escapeHtml(
+                    platformName(receipt.platformId)
+                  )} before retrying.</small>
+                   <button class="ghost-button small" type="button" data-discard-session="${escapeHtml(planId)}" data-discard-platform="${escapeHtml(
+                     receipt.platformId
+                   )}" data-pending-label="Discarding…">Discard and allow a new upload</button>`
+                : ""
+            }
           </div>`;
         })
         .join("")}
@@ -817,7 +831,7 @@ function renderPostPlan(plan) {
             : ""
         }
       </div>
-      ${renderPublicationReceipts(receipts)}
+      ${renderPublicationReceipts(plan.id, receipts)}
     </div>
   `;
 }

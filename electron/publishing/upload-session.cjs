@@ -20,10 +20,6 @@ const SESSION_VERSION = 1;
 // attempt and upload the duplicate this module exists to prevent.
 const SESSION_STATUSES = Object.freeze({ OPEN: "open", UNRESOLVED: "unresolved" });
 
-// Google documents resumable session URIs as having a finite lifetime; treat
-// anything older as unusable rather than assuming it still works.
-const MAX_SESSION_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-
 const HEX_64 = /^[a-f0-9]{64}$/;
 
 function vaultKeyFor(idempotencyKey) {
@@ -58,12 +54,13 @@ function createUploadSession({ planId, platformId, approvalHash, idempotencyKey,
   };
 }
 
-function isUsableSession(session, { now = Date.now() } = {}) {
+// Whether this record is worth taking to the provider. Age is deliberately not
+// a criterion: a session URI's real state is only knowable by asking, and
+// condemning an old-but-live session on a guess is what forced a restart --
+// the exact thing this module exists to avoid. The probe decides.
+function isUsableSession(session) {
   if (!session || session.version !== SESSION_VERSION || session.status !== SESSION_STATUSES.OPEN) return false;
-  if (typeof session.uploadUri !== "string" || !session.uploadUri) return false;
-  const createdAt = Date.parse(session.createdAt);
-  if (!Number.isFinite(createdAt)) return false;
-  return now - createdAt <= MAX_SESSION_AGE_MS;
+  return typeof session.uploadUri === "string" && Boolean(session.uploadUri);
 }
 
 // Reading, writing, and clearing the private session record. Kept behind a
@@ -113,7 +110,6 @@ class UploadSessionStore {
 }
 
 module.exports = {
-  MAX_SESSION_AGE_MS,
   SESSION_STATUSES,
   SESSION_VERSION,
   UploadSessionStore,
