@@ -54,13 +54,23 @@ function createUploadSession({ planId, platformId, approvalHash, idempotencyKey,
   };
 }
 
-// Whether this record is worth taking to the provider. Age is deliberately not
-// a criterion: a session URI's real state is only knowable by asking, and
-// condemning an old-but-live session on a guess is what forced a restart --
-// the exact thing this module exists to avoid. The probe decides.
+// Whether this record is worth taking to the provider.
+//
+// Two things are deliberately not criteria. Age is not: a session URI's real
+// state is only knowable by asking, and condemning an old-but-live session on a
+// guess is the restart this module exists to avoid. `version` is not either --
+// it is provenance, and a record written by a different build still carries the
+// only two fields that mean anything to the provider. Refusing on version alone
+// turned a routine bump into a message telling every user with an interrupted
+// upload that it could not be reconciled, without ever asking.
+//
+// The obligation that buys: a future version that changes what `uploadUri` or
+// `contentLength` mean must migrate or clear existing records, because old ones
+// are still acted upon. Adding a field is free; redefining these two is not.
 function isUsableSession(session) {
-  if (!session || session.version !== SESSION_VERSION || session.status !== SESSION_STATUSES.OPEN) return false;
-  return typeof session.uploadUri === "string" && Boolean(session.uploadUri);
+  if (!session || session.status !== SESSION_STATUSES.OPEN) return false;
+  if (typeof session.uploadUri !== "string" || !session.uploadUri) return false;
+  return Number.isFinite(session.contentLength) && session.contentLength > 0;
 }
 
 // Reading, writing, and clearing the private session record. Kept behind a

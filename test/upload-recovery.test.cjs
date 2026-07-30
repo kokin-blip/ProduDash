@@ -516,3 +516,35 @@ test("an authorization retry asks the provider where to resume", async (t) => {
   assert.deepEqual(offsets, [0, 9], "the retry must resume where the provider actually is");
   assert.equal(calls.probe, 1, "which means asking it, not reusing the offset from before the failure");
 });
+
+test("a record from a different build is asked about, not written off", async (t) => {
+  // SESSION_VERSION exists to be bumped. Refusing on it alone meant the next
+  // bump would tell everyone with an interrupted upload that it could not be
+  // reconciled with the provider -- without ever asking the provider, and while
+  // the session URI was still valid.
+  const { service, planId, sessions, idempotencyKey, calls, harness } = await scenario(t, { providerHas: 6 });
+  await sessions.save({ ...staleSession(harness, planId, idempotencyKey), version: 99 });
+
+  const state = await service.dispatch(planId);
+  assert.equal(calls.probe, 1, "the provider decides, not the version number");
+  assert.equal(calls.begin, 0, "and the existing session is reused rather than replaced");
+  assert.equal(state.postQueue[0].publicationReceipts[0].status, RECEIPT_STATUSES.PUBLISHED);
+});
+
+test("a structurally unusable record is refused without being probed", () => {
+  const base = {
+    planId: "p",
+    platformId: "youtube",
+    approvalHash: "a".repeat(64),
+    idempotencyKey: "b".repeat(64),
+    uploadUri: "https://upload.example/s",
+    contentLength: 10
+  };
+  assert.equal(isUsableSession(createUploadSession(base)), true);
+  // The two fields the provider actually acts on have to be there and sane.
+  assert.equal(isUsableSession({ ...createUploadSession(base), uploadUri: "" }), false);
+  assert.equal(isUsableSession({ ...createUploadSession(base), contentLength: 0 }), false);
+  assert.equal(isUsableSession({ ...createUploadSession(base), contentLength: undefined }), false);
+  assert.equal(isUsableSession({ ...createUploadSession(base), status: SESSION_STATUSES.UNRESOLVED }), false);
+  assert.equal(isUsableSession(null), false);
+});
