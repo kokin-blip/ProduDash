@@ -576,3 +576,39 @@ test("a reset releases every session, including ones it can no longer name", asy
   assert.equal(sessions.get(idempotencyKey), null);
   assert.equal(sessions.get(orphan), null);
 });
+
+test("an approval missing only a newly required choice is refused with the message that helps", async (t) => {
+  // A snapshot approved when the platform declared fewer options carries a
+  // truthy options object that is missing the newest one. Testing only that the
+  // object existed let that reach the connector, which raised a non-retryable
+  // validation error -- leaving a locked plan and a message about a missing
+  // declaration that never said what to do about it.
+  const { service, planId, calls, harness } = await scenario(t);
+  delete harness.store.state.postQueue[0].approvalSnapshot.payload.platformPackages[0].options.selfDeclaredMadeForKids;
+
+  const state = await service.dispatch(planId);
+  assert.equal(calls.begin, 0);
+  const receipt = state.postQueue[0].publicationReceipts[0];
+  assert.equal(receipt.errorCode, "APPROVAL_PREDATES_REQUIRED_OPTIONS");
+  assert.equal(receipt.retryable, false);
+});
+
+test("a destination declared unretryable is not re-attempted by a stale click", async (t) => {
+  // The renderer withholds the control, but it cannot bind a second window or a
+  // DOM that predates the receipt. Every accepted click appended an attempt,
+  // and the history is capped -- so repeated clicks evicted the record of what
+  // actually went wrong.
+  const { service, planId, sessions, idempotencyKey, calls, harness } = await scenario(t, { sessionDead: true });
+  await sessions.save(staleSession(harness, planId, idempotencyKey));
+  await service.dispatch(planId);
+  const before = harness.store.getAppState().postQueue[0].publicationReceipts[0];
+  assert.equal(before.retryable, false);
+  const attemptsBefore = before.attempts.length;
+
+  await service.dispatch(planId);
+  await service.dispatch(planId);
+  const after = harness.store.getAppState().postQueue[0].publicationReceipts[0];
+  assert.equal(calls.probe, 1, "the provider is not asked again on a refused destination");
+  assert.equal(calls.begin, 0);
+  assert.equal(after.attempts.length, attemptsBefore, "and no attempt is appended to push out the real history");
+});

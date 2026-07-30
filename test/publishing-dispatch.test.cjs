@@ -11,7 +11,7 @@ const { connectorError, CONNECTOR_ERROR_CATEGORIES } = require("../electron/erro
 const { createDirectory, createHarness } = require("./helpers.cjs");
 
 // A YouTube-shaped connector that records what it was asked to publish.
-function publishingConnector({ onPublish } = {}) {
+function publishingConnector({ onPublish, providerStatus = { failed: false } } = {}) {
   let counter = 0;
   const calls = [];
   return {
@@ -30,19 +30,16 @@ function publishingConnector({ onPublish } = {}) {
         counter += 1;
         return { publicationId: `video-${counter}`, privacyStatus: "private", uploadStatus: "uploaded" };
       },
-      getPublishingStatus: async ({ publicationId }) => ({
-        publicationId,
-        uploadStatus: "processed",
-        privacyStatus: "private",
-        complete: true,
-        failed: false
-      })
+      getPublishingStatus: async ({ publicationId }) =>
+        providerStatus.failed
+          ? { publicationId, uploadStatus: "rejected", privacyStatus: "private", complete: false, failed: true }
+          : { publicationId, uploadStatus: "processed", privacyStatus: "private", complete: true, failed: false }
     }
   };
 }
 
 // Builds an approved-for-official-API plan with a real rendered file on disk.
-async function approvedPlan(t, { onPublish } = {}) {
+async function approvedPlan(t, { onPublish, providerStatus = { failed: false } } = {}) {
   const harness = await createHarness();
   t.after(harness.cleanup);
   const outputPath = createDirectory();
@@ -92,7 +89,7 @@ async function approvedPlan(t, { onPublish } = {}) {
   state = await harness.store.approvePostPlan(planId, "official_api");
   assert.equal(state.postQueue[0].status, POST_PLAN_STATUSES.APPROVED_FOR_OFFICIAL_API);
 
-  const { connector, calls } = publishingConnector({ onPublish });
+  const { connector, calls } = publishingConnector({ onPublish, providerStatus });
   const service = new PublishingDispatchService({
     store: harness.store,
     connectorRegistry: new ConnectorRegistry([connector]),
@@ -104,7 +101,7 @@ async function approvedPlan(t, { onPublish } = {}) {
     },
     mediaJobs: { getPrivatePaths: () => ({ sourcePath: "/src", outputPath, tempPath: "/tmp" }) }
   });
-  return { harness, service, planId, calls, outputPath };
+  return { harness, service, planId, calls, outputPath, providerStatus };
 }
 
 test("the transition table matches the documented publishing lifecycle", () => {
@@ -278,4 +275,43 @@ test("an already-published receipt is recognized regardless of plan state", () =
   assert.equal(isAlreadyPublished({ ...base, status: RECEIPT_STATUSES.PUBLISHED, providerPublicationId: "v1" }), true);
   // A failed attempt that somehow has an id is still not published.
   assert.equal(isAlreadyPublished({ ...base, status: RECEIPT_STATUSES.FAILED, providerPublicationId: "v1" }), false);
+});
+
+test("a provider that rejects a publication after accepting it reaches the audit log", async (t) => {
+  // The plan is recorded as published because every destination was delivered.
+  // If a later rejection only changed the receipt, the compliance record would
+  // permanently assert a publication that no longer exists, with nothing
+  // anywhere contradicting it.
+  const providerStatus = { failed: false };
+  const { service, planId } = await approvedPlan(t, { providerStatus });
+  await service.dispatch(planId);
+  // YouTube accepted the upload, then rejected the video.
+  providerStatus.failed = true;
+
+  const state = await service.refreshPublicationStatus(planId, "youtube");
+  const receipt = state.postQueue.find((item) => item.id === planId).publicationReceipts[0];
+  assert.equal(receipt.status, RECEIPT_STATUSES.FAILED);
+  assert.equal(receipt.errorCode, "PROVIDER_REJECTED_PUBLICATION");
+  // The id is kept so no retry can duplicate the video that does exist.
+  assert.equal(receipt.providerPublicationId, "video-1");
+  assert.ok(
+    state.auditLog.some((entry) => /rejected the upload/i.test(entry.detail)),
+    "the audit log has to record that the publication was rejected"
+  );
+});
+
+test("a plan left mid-dispatch by a previous run is recoverable", async (t) => {
+  // beginPostPlanDispatch writes "dispatching" to disk, and only PUBLISHED or
+  // DISPATCH_FAILED lead out of it. Quitting mid-upload therefore stranded the
+  // plan permanently: dispatch refused it, cancel refused it, and the UI showed
+  // no control at all -- just "Publishing in progress."
+  const { service, planId, harness } = await approvedPlan(t);
+  harness.store.state.postQueue[0].status = "dispatching";
+
+  await assert.rejects(() => harness.store.cancelPostPlan(planId), /no longer be canceled/);
+
+  await service.initialize();
+  assert.equal(harness.store.getAppState().postQueue[0].status, "dispatch_failed");
+  // And from there the normal escapes work again.
+  assert.equal((await harness.store.cancelPostPlan(planId)).postQueue[0].status, "canceled");
 });

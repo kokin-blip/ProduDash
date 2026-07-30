@@ -285,3 +285,27 @@ test("a rejected grant is still recorded as needing reauthorization", async (t) 
   const integration = harness.store.getAppState().integrations.find((item) => item.id === "youtube");
   assert.equal(integration.status, "error", "the grant really is dead, so the UI must say so");
 });
+
+test("a revoked grant is recorded even though Google reports it as a bad request", async () => {
+  // Google's token endpoint answers a revoked or expired refresh token with 400
+  // invalid_grant, not 401. Falling through to the validation default meant the
+  // one failure that genuinely requires reauthorizing was classified as a
+  // malformed request, so nothing recorded the grant as dead and the badge
+  // stayed green until someone happened to press Test connection.
+  const { YouTubeConnector } = require("../electron/connectors/youtube.cjs");
+  const connector = new YouTubeConnector({
+    transport: async () => ({ ok: false, status: 400, json: async () => ({ error: "invalid_grant" }) })
+  });
+  await assert.rejects(
+    () => connector.refreshAuthorization({ clientId: "client-1", oauthRefreshToken: "1//revoked" }),
+    (error) => {
+      assert.equal(error.code, "YOUTUBE_AUTH_FAILED");
+      assert.equal(error.category, CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION);
+      return true;
+    }
+  );
+
+  // A 400 from an ordinary API call still means a malformed request.
+  const api = new YouTubeConnector({ transport: async () => ({ ok: false, status: 400, json: async () => ({}) }) });
+  await assert.rejects(() => api.getPublishingStatus({ accessToken: "at", publicationId: "v1" }), { code: "YOUTUBE_REQUEST_REJECTED" });
+});

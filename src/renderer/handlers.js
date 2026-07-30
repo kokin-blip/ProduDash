@@ -988,8 +988,14 @@ async function handleClick(event) {
 
   const refreshPublicationButton = event.target.closest("[data-refresh-publication]");
   if (refreshPublicationButton) {
-    await runAction(`refresh-publication-${refreshPublicationButton.dataset.refreshPublication}`, refreshPublicationButton, () =>
-      api.refreshPublicationStatus(refreshPublicationButton.dataset.refreshPublication, refreshPublicationButton.dataset.refreshPlatform)
+    // Keyed by destination as well as plan: both controls render once per
+    // destination, so a plan-only key made the second one a silent no-op --
+    // no request, no error, no spinner.
+    await runAction(
+      `refresh-publication-${refreshPublicationButton.dataset.refreshPublication}-${refreshPublicationButton.dataset.refreshPlatform}`,
+      refreshPublicationButton,
+      () =>
+        api.refreshPublicationStatus(refreshPublicationButton.dataset.refreshPublication, refreshPublicationButton.dataset.refreshPlatform)
     );
     return;
   }
@@ -1006,8 +1012,10 @@ async function handleClick(event) {
     ) {
       return;
     }
-    await runAction(`discard-session-${discardSessionButton.dataset.discardSession}`, discardSessionButton, () =>
-      api.discardUploadSession(discardSessionButton.dataset.discardSession, discardSessionButton.dataset.discardPlatform)
+    await runAction(
+      `discard-session-${discardSessionButton.dataset.discardSession}-${discardSessionButton.dataset.discardPlatform}`,
+      discardSessionButton,
+      () => api.discardUploadSession(discardSessionButton.dataset.discardSession, discardSessionButton.dataset.discardPlatform)
     );
     return;
   }

@@ -9,7 +9,7 @@ const { buildAnalyticsReport } = require("./analytics-report.cjs");
 const { getPlatform } = require("./platforms/registry.cjs");
 const { buildPlatformCatalog } = require("./platforms/catalog.cjs");
 const { DISPATCHABLE_STATUSES, POST_PLAN_STATUSES, assertTransition, canTransition } = require("./publishing/post-status.cjs");
-const { isAlreadyPublished, normalizeReceipt } = require("./publishing/receipt.cjs");
+const { RECEIPT_STATUSES, isAlreadyPublished, normalizeReceipt } = require("./publishing/receipt.cjs");
 const { TOKEN_VAULT_KEYS, createAuthorizationRecord, normalizeAuthorizationRecord } = require("./platforms/authorization.cjs");
 const {
   assertPublishingOptionsComplete,
@@ -1028,10 +1028,55 @@ class ProduDashStore {
       assertTransition(plan.status, target);
       plan.status = target;
       if (published) plan.publishedAt = new Date().toISOString();
+      // The audit log is the compliance record, so it must not assert more than
+      // happened. Every destination was delivered, but a provider still
+      // finalizing has not confirmed anything, and it can still reject.
+      const finalizing = plan.publicationReceipts.some((receipt) => receipt.status === RECEIPT_STATUSES.PROCESSING);
       this.audit(
         "publisher",
-        published ? `Published ${plan.title} to every approved destination.` : `Official API publishing did not complete for ${plan.title}.`
+        published
+          ? finalizing
+            ? `Uploaded ${plan.title} to every approved destination; at least one provider is still finalizing it.`
+            : `Published ${plan.title} to every approved destination.`
+          : `Official API publishing did not complete for ${plan.title}.`
       );
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  // Rescues plans left mid-dispatch, mirroring interruptActiveMediaJobs.
+  //
+  // beginPostPlanDispatch writes `dispatching` to disk, and TRANSITIONS allows
+  // only PUBLISHED or DISPATCH_FAILED out of it. So quitting mid-upload, losing
+  // power, or throwing outside the per-destination try/catch stranded the plan
+  // permanently: dispatch refused it, cancel refused it, and the UI offered no
+  // control at all -- only the text saying publishing was in progress.
+  //
+  // Receipts already record what actually reached the provider, so nothing is
+  // assumed here beyond the fact that this run is over.
+  async recoverInterruptedDispatches() {
+    return this.enqueueMutation(async () => {
+      let changed = false;
+      for (const plan of this.state.postQueue) {
+        if (plan.status !== POST_PLAN_STATUSES.DISPATCHING) continue;
+        plan.status = POST_PLAN_STATUSES.DISPATCH_FAILED;
+        changed = true;
+        this.audit("publisher", `Publishing for ${plan.title} was interrupted before it finished.`);
+      }
+      if (changed) this.persist();
+      return this.getAppState();
+    });
+  }
+
+  // Records something that happened to a plan after dispatch finished. The
+  // audit log is the compliance record, so a provider changing its mind about a
+  // publication has to land there too.
+  async recordPublishingOutcome(planId, detail) {
+    requireId(planId, "Post plan");
+    return this.enqueueMutation(async () => {
+      this.requirePostPlan(planId);
+      this.audit("publisher", boundedString(detail, 300));
       this.persist();
       return this.getAppState();
     });

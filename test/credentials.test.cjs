@@ -245,3 +245,38 @@ test("delete-all removes a preserved legacy credentials file", async (t) => {
     []
   );
 });
+
+test("a legacy credentials file that is momentarily unreadable is kept for the next launch", async (t) => {
+  // preserveFile renames, and migrateLegacy returns early once the path is gone,
+  // so treating a locked file as corruption would discard the user's only copy
+  // of their credentials because a virus scanner held it open for a second.
+  const directory = createDirectory();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const legacyPath = path.join(directory, "produdash-credentials.json");
+  fs.writeFileSync(legacyPath, JSON.stringify({ gemini: { apiKey: "AIza-still-needed" } }), { mode: 0o600 });
+
+  const realReadFile = fs.readFileSync;
+  let locked = true;
+  fs.readFileSync = (target, ...rest) => {
+    if (locked && String(target) === legacyPath) {
+      const error = new Error("EBUSY: resource busy or locked");
+      error.code = "EBUSY";
+      throw error;
+    }
+    return realReadFile(target, ...rest);
+  };
+  t.after(() => {
+    fs.readFileSync = realReadFile;
+  });
+
+  const blocked = new CredentialVault(directory, fakeEncryption());
+  const notices = await blocked.initialize();
+  assert.ok(notices.some((notice) => notice.code === "LEGACY_CREDENTIALS_UNAVAILABLE"));
+  assert.equal(fs.existsSync(legacyPath), true, "a lock is not corruption -- the file has to survive it");
+
+  // The lock clears, and the next launch migrates normally.
+  locked = false;
+  const later = new CredentialVault(directory, fakeEncryption());
+  await later.initialize();
+  assert.equal(later.get("gemini").apiKey, "AIza-still-needed");
+});

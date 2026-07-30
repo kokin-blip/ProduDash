@@ -190,6 +190,9 @@ if (hasSingleInstanceLock) {
         mediaJobs,
         credentialVault: store.credentialVault
       });
+      // Rescues any plan left mid-dispatch by a previous run, the way
+      // MediaJobService already does for media jobs.
+      await publishing.initialize();
       protocol.handle("produdash-media", createMediaProtocolHandler(mediaLibrary, brandAssets, mediaJobs));
       registerIpc({
         store,

@@ -98,7 +98,22 @@ class CredentialVault {
     try {
       legacy = readJson(this.legacyPath);
       if (!legacy || typeof legacy !== "object" || Array.isArray(legacy)) throw new Error("Invalid legacy credentials");
-    } catch {
+    } catch (error) {
+      // Only a file we can read and cannot understand is set aside.
+      //
+      // preserveFile *renames*, and migrateLegacy returns early once the path is
+      // gone, so it never looks again. Treating an environmental read failure as
+      // corruption would therefore discard someone's credentials permanently
+      // because a virus scanner or backup agent happened to hold the plaintext
+      // file open for a moment. Filesystem errors carry a code; a JSON or shape
+      // failure does not.
+      if (error?.code) {
+        this.notices.push({
+          code: "LEGACY_CREDENTIALS_UNAVAILABLE",
+          message: "Saved credentials from an older version could not be read this time. ProduDash will try again next launch."
+        });
+        return;
+      }
       // Set aside rather than thrown on. Throwing reached main.cjs, which shows
       // a fatal dialog and quits -- and the file was left in place, so the next
       // launch failed identically. The app became permanently unlaunchable, with

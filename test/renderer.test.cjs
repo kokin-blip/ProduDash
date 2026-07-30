@@ -1928,3 +1928,58 @@ test("the sidebar names the running build", async () => {
   renderer.renderApp();
   assert.equal(document.querySelector(".sidebar-footer span:last-child").textContent, "Official APIs only");
 });
+
+test("Publishing keeps Retry available while any destination can still make progress", async () => {
+  const renderer = await setupRenderer();
+  const show = (receipts) => {
+    renderer.setAppState(
+      baseState({
+        creatorPlatforms: [
+          { id: "youtube", name: "YouTube Shorts" },
+          { id: "instagram", name: "Instagram Reels" }
+        ],
+        postQueue: [
+          {
+            id: "post-1",
+            title: "Launch",
+            caption: "Approved copy",
+            platforms: ["youtube", "instagram"],
+            status: "dispatch_failed",
+            schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+            mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
+            approvalSnapshot: { hash: "a".repeat(64) },
+            exportReceipt: null,
+            publicationReceipts: receipts.map((receipt, index) => ({
+              platformId: index === 0 ? "youtube" : "instagram",
+              idempotencyKey: String(index).repeat(64),
+              status: "failed",
+              providerPublicationId: null,
+              attempts: [],
+              hasResumableSession: false,
+              ...receipt
+            }))
+          }
+        ]
+      })
+    );
+    renderer.ui.activeSection = "studio";
+    renderer.ui.studioTab = "publishing";
+    renderer.renderApp();
+  };
+
+  // One destination is permanently blocked, the other failed transiently and is
+  // resumable. Withholding the plan-level control for the first stranded the
+  // second, whose session record is deliberately kept for exactly this case.
+  show([
+    { errorCode: "YOUTUBE_FORBIDDEN", retryable: false },
+    { errorCode: "YOUTUBE_NETWORK_ERROR", retryable: true }
+  ]);
+  assert.ok(document.querySelector("[data-dispatch-post='post-1']"), "a resumable sibling must still be reachable");
+
+  // Only when nothing can make progress does the control go.
+  show([
+    { errorCode: "YOUTUBE_FORBIDDEN", retryable: false },
+    { errorCode: "UPLOAD_SESSION_UNRESOLVED", retryable: false }
+  ]);
+  assert.equal(document.querySelector("[data-dispatch-post='post-1']"), null);
+});

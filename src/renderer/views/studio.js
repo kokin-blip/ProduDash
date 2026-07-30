@@ -819,7 +819,13 @@ function renderPostPlan(plan) {
   // clicking again. Offering the button anyway meant every click appended an
   // attempt that pushed the genuine early history out of the capped array,
   // destroying the record of what actually happened.
-  const blocked = receiptsOf(plan).some((receipt) => receipt.status === "failed" && !receipt.retryable);
+  //
+  // Judged across the plan rather than per receipt, because the control is
+  // plan-level: it is withheld only when no destination could still make
+  // progress. Blocking on `some` stranded a sibling destination that had failed
+  // transiently and was perfectly resumable.
+  const outstanding = receiptsOf(plan).filter((receipt) => receipt.status !== "published" && receipt.status !== "processing");
+  const blocked = outstanding.length > 0 && outstanding.every((receipt) => receipt.status === "failed" && !receipt.retryable);
   const canDispatch = ["approved_for_official_api", "dispatch_failed"].includes(plan.status) && Boolean(plan.approvalSnapshot) && !blocked;
   const receipts = asArray(plan.publicationReceipts);
   const packages = platforms.map(

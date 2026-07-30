@@ -34,8 +34,13 @@ const PRIVACY_STATUSES = Object.freeze(new Set(["private", "unlisted", "public"]
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-function safeGoogleError(status, { duringUpload = false } = {}) {
-  if (status === 401) {
+function safeGoogleError(status, { duringUpload = false, duringTokenExchange = false } = {}) {
+  // Google's token endpoint answers a revoked or expired grant with 400
+  // invalid_grant, not 401. Letting that fall through to the validation default
+  // meant the one failure that genuinely requires reauthorizing was reported as
+  // a malformed request -- so nothing recorded the grant as dead and the
+  // integration kept showing a green badge.
+  if (status === 401 || (duringTokenExchange && status === 400)) {
     return connectorError(
       CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION,
       "YOUTUBE_AUTH_FAILED",
@@ -154,7 +159,8 @@ class YouTubeConnector {
     return this.request(TOKEN_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(body).toString()
+      body: new URLSearchParams(body).toString(),
+      duringTokenExchange: true
     });
   }
 
@@ -497,7 +503,18 @@ class YouTubeConnector {
 
   async sendUpload({ accessToken, uploadUri, body, contentLength, contentType = "video/*", offset = 0, signal, request }) {
     const video = await this.uploadBytes({ accessToken, uploadUri, body, contentLength, contentType, offset, signal });
-    return this.describePublication(video, this.buildVideoMetadata(request));
+    // Same reasoning as probeUpload, and for the same moment: the bytes are
+    // delivered and YouTube has made the video. Re-deriving the requested
+    // privacy status is a nicety, and letting a validation error in it throw
+    // would discard the id of a video that is live on someone's channel --
+    // leaving ProduDash no record of it and no way to reconcile.
+    let metadata = null;
+    try {
+      metadata = this.buildVideoMetadata(request);
+    } catch {
+      metadata = null;
+    }
+    return this.describePublication(video, metadata);
   }
 
   describePublication(video, metadata) {

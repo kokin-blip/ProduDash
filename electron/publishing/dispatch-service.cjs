@@ -72,11 +72,22 @@ class PublishingDispatchService {
     // carries none: nobody was ever asked. Choosing an audience declaration on
     // the user's behalf is not available to ProduDash, and the snapshot is
     // immutable by design, so the only honest move is to ask for a new one.
-    if (platform.publishingOptions && !pack.options) {
-      throw new AppError(
-        "APPROVAL_PREDATES_REQUIRED_OPTIONS",
-        `${platform.displayName} requires publishing choices this approval never captured. Cancel this plan and create it again to choose them.`
-      );
+    //
+    // Checked key by key, not merely that an options object exists. A snapshot
+    // approved when the platform declared fewer options carries a perfectly
+    // truthy object that is missing the newest one -- exactly the additive
+    // release that load-time validation was loosened to keep working. Testing
+    // only for presence let that reach the connector, which raised a
+    // non-retryable validation error and left the user on a locked plan with a
+    // message that never explained what to do about it.
+    for (const [key, definition] of Object.entries(platform.publishingOptions || {})) {
+      if (definition.default !== null) continue;
+      if (pack.options?.[key] === undefined || pack.options?.[key] === null) {
+        throw new AppError(
+          "APPROVAL_PREDATES_REQUIRED_OPTIONS",
+          `${platform.displayName} requires publishing choices this approval never captured. Cancel this plan and create it again to choose them.`
+        );
+      }
     }
     const { filePath, contentLength } = this.resolveMediaFile(plan);
     const accountId = integration?.authorization?.selectedAccount?.id || null;
@@ -176,6 +187,11 @@ class PublishingDispatchService {
     });
     await this.sessions.clear(destination.idempotencyKey);
     return this.store.getAppState();
+  }
+
+  // Called at startup, before any dispatch can run.
+  async initialize() {
+    await this.store.recoverInterruptedDispatches();
   }
 
   // A plan being abandoned takes its upload sessions with it. A record is
@@ -313,6 +329,12 @@ class PublishingDispatchService {
       // Already published under this exact approved content -- skipping is what
       // makes a second click and a restart mid-dispatch safe.
       if (hasProviderPublication(existing)) continue;
+      // A destination a previous attempt declared unretryable is skipped here
+      // too, not only in the renderer. The renderer's guard cannot bind a second
+      // window or a stale DOM, and every accepted click appended an attempt that
+      // evicted the earliest ones from the capped history -- destroying the
+      // record of what actually went wrong.
+      if (existing?.status === RECEIPT_STATUSES.FAILED && existing.retryable === false) continue;
 
       const startedAt = new Date().toISOString();
       const receipt = {
@@ -413,6 +435,16 @@ class PublishingDispatchService {
         errorCode: status.failed ? "PROVIDER_REJECTED_PUBLICATION" : receipt.errorCode,
         retryable: false
       });
+      // The plan may already have been recorded as published, since every
+      // destination was delivered. A later rejection has to reach the audit log
+      // as well, or the compliance record keeps asserting a publication that no
+      // longer exists and nothing anywhere contradicts it.
+      if (status.failed) {
+        await this.store.recordPublishingOutcome(
+          planId,
+          `${getPlatform(platformId).displayName} rejected the upload for ${plan.title} after accepting it.`
+        );
+      }
     }
     return this.store.getAppState();
   }
