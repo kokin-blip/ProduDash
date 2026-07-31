@@ -163,8 +163,22 @@ class PublishingDispatchService {
     // running, destroying the one record whose purpose is to survive exactly
     // that moment.
     const receipt = plan.publicationReceipts.find((item) => item.idempotencyKey === destination.idempotencyKey);
-    if (receipt?.errorCode !== "UPLOAD_SESSION_UNRESOLVED") {
-      throw new AppError("UPLOAD_SESSION_NOT_DISCARDABLE", "That destination has no unresolved upload to discard.");
+    // Any destination that has been blocked, not just an unresolved one.
+    //
+    // This started as an escape for UPLOAD_SESSION_UNRESOLVED alone, and every
+    // other route into a non-retryable receipt -- an expired session mid-send,
+    // an authentication failure, a rejected request -- reached the same dead end
+    // with nothing to clear it. Blocking is only defensible when it can be
+    // undone, so the escape covers every way in.
+    //
+    // The one thing it must never do is clear the record of a publication that
+    // exists: with a provider id present, the safe action is to keep it, since
+    // that id is what stops a retry duplicating the video.
+    if (receipt?.status !== RECEIPT_STATUSES.FAILED || receipt.retryable !== false) {
+      throw new AppError("UPLOAD_SESSION_NOT_DISCARDABLE", "That destination is not blocked, so there is nothing to discard.");
+    }
+    if (hasProviderPublication(receipt)) {
+      throw new AppError("PUBLICATION_ALREADY_EXISTS", "That destination already has a publication, so its record cannot be discarded.");
     }
 
     // Receipt first, session second -- the same ordering the dispatcher uses,
@@ -321,6 +335,24 @@ class PublishingDispatchService {
 
   async dispatch(planId) {
     await this.store.beginPostPlanDispatch(planId);
+    // `dispatching` is written to disk before anything else, and only PUBLISHED
+    // or DISPATCH_FAILED lead out of it. Anything thrown outside the
+    // per-destination try -- a malformed idempotency key, a failed persist --
+    // used to escape here and strand the plan in a status that can be neither
+    // cancelled nor retried until the next launch. The plan always leaves
+    // `dispatching`; the failure is still reported.
+    let failure = null;
+    try {
+      await this.dispatchDestinations(planId);
+    } catch (error) {
+      failure = error;
+    }
+    const state = await this.store.completePostPlanDispatch(planId);
+    if (failure) throw failure;
+    return state;
+  }
+
+  async dispatchDestinations(planId) {
     const plan = this.store.getAppState().postQueue.find((item) => item.id === planId);
     const destinations = plan.approvalSnapshot?.destinations || [];
 
@@ -392,8 +424,6 @@ class PublishingDispatchService {
         });
       }
     }
-
-    return this.store.completePostPlanDispatch(planId);
   }
 
   // Re-checks a published destination with the provider. Nothing here claims a

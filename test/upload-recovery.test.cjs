@@ -612,3 +612,39 @@ test("a destination declared unretryable is not re-attempted by a stale click", 
   assert.equal(calls.begin, 0);
   assert.equal(after.attempts.length, attemptsBefore, "and no attempt is appended to push out the real history");
 });
+
+test("any blocked destination can be cleared, not only an unresolved one", async (t) => {
+  // The escape started as a way out of UPLOAD_SESSION_UNRESOLVED alone. Every
+  // other route into a non-retryable receipt reached the same dead end with
+  // nothing able to clear it, so blocking became a one-way door.
+  const { service, planId, sessions, idempotencyKey, calls, harness } = await scenario(t, {
+    onSend: async () => {
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.VALIDATION, "YOUTUBE_REQUEST_REJECTED", "Rejected.");
+    }
+  });
+  await service.dispatch(planId);
+  const blocked = harness.store.getAppState().postQueue[0].publicationReceipts[0];
+  assert.equal(blocked.retryable, false, "a validation failure is not retryable");
+  assert.notEqual(blocked.errorCode, "UPLOAD_SESSION_UNRESOLVED");
+
+  const after = await service.discardUploadSession(planId, "youtube");
+  assert.equal(sessions.get(idempotencyKey), null);
+  assert.equal(after.postQueue[0].publicationReceipts[0].retryable, true, "clearing it has to make another attempt possible");
+
+  // And that attempt actually runs.
+  await service.dispatch(planId);
+  assert.equal(calls.begin, 2, "a cleared destination opens a fresh session");
+});
+
+test("a destination that already published cannot have its record cleared", async (t) => {
+  // The provider id is the only thing stopping a retry from duplicating a video
+  // that exists, so it must not be discardable however the receipt reads.
+  const { service, planId, harness } = await scenario(t);
+  await service.dispatch(planId);
+  const receipt = harness.store.getAppState().postQueue[0].publicationReceipts[0];
+  assert.ok(receipt.providerPublicationId);
+  harness.store.state.postQueue[0].publicationReceipts[0].status = RECEIPT_STATUSES.FAILED;
+  harness.store.state.postQueue[0].publicationReceipts[0].retryable = false;
+
+  await assert.rejects(service.discardUploadSession(planId, "youtube"), { code: "PUBLICATION_ALREADY_EXISTS" });
+});

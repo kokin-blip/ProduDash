@@ -512,3 +512,22 @@ test("setup instructions state the audit limitation up front", () => {
   assert.ok(instructions.limitations.some((line) => /private/i.test(line) && /audit/i.test(line)));
   assert.ok(/never supplies its own Google credentials/i.test(instructions.limitations.join(" ")));
 });
+
+test("a session that dies mid-send is reported as gone, not as a bad request", async () => {
+  // probeUploadOffset already recognizes 404/410 as "the provider has forgotten
+  // this". uploadBytes did not, so a session expiring between the probe and the
+  // send fell through to the validation default -- which is non-retryable, and
+  // left the destination blocked with a live session record and no way out.
+  for (const status of [404, 410]) {
+    const { connector } = createConnector({ responses: [uploadResponse({}, { status })] });
+    await assert.rejects(
+      connector.uploadBytes({ accessToken: "at", uploadUri: "https://upload.example/s", body: "bytes", contentLength: 5 }),
+      (error) => {
+        assert.equal(error.code, "YOUTUBE_UPLOAD_SESSION_GONE");
+        // Retryable, because the next attempt re-probes and can open a session.
+        assert.equal(error.retryable, true);
+        return true;
+      }
+    );
+  }
+});

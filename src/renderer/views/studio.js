@@ -779,6 +779,11 @@ function renderPublicationReceipts(planId, receipts) {
           // anything, so ProduDash will not guess. Only the person who can look
           // at the destination is able to settle it.
           const unresolved = receipt.status === "failed" && receipt.errorCode === "UPLOAD_SESSION_UNRESOLVED";
+          // Offered for every blocked destination, not only the unresolved one:
+          // a blocked receipt with no way to clear it is a dead end, and there
+          // are several ways to reach one. Never offered once a publication
+          // exists -- that id is what stops a retry duplicating the video.
+          const discardable = receipt.status === "failed" && receipt.retryable === false && !receipt.providerPublicationId;
           return `<div class="publication-receipt">
             <span>${escapeHtml(platformName(receipt.platformId))}</span>
             <span>${outcome}</span>
@@ -790,6 +795,13 @@ function renderPublicationReceipts(planId, receipts) {
                 ? `<button class="ghost-button small" type="button" data-refresh-publication="${escapeHtml(
                     planId
                   )}" data-refresh-platform="${escapeHtml(receipt.platformId)}" data-pending-label="Checking…">Check status</button>`
+                : ""
+            }
+            ${
+              discardable && !unresolved
+                ? `<button class="ghost-button small" type="button" data-discard-session="${escapeHtml(
+                    planId
+                  )}" data-discard-platform="${escapeHtml(receipt.platformId)}" data-pending-label="Clearing…">Clear and allow another attempt</button>`
                 : ""
             }
             ${

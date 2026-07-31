@@ -1076,7 +1076,7 @@ class ProduDashStore {
     requireId(planId, "Post plan");
     return this.enqueueMutation(async () => {
       this.requirePostPlan(planId);
-      this.audit("publisher", boundedString(detail, 300));
+      this.audit("publisher", boundedString(detail, { label: "Publishing outcome", min: 1, max: 300 }));
       this.persist();
       return this.getAppState();
     });

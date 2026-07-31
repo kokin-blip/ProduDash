@@ -315,3 +315,22 @@ test("a plan left mid-dispatch by a previous run is recoverable", async (t) => {
   // And from there the normal escapes work again.
   assert.equal((await harness.store.cancelPostPlan(planId)).postQueue[0].status, "canceled");
 });
+
+test("a plan is never stranded mid-dispatch by a failure outside a destination", async (t) => {
+  // `dispatching` is written before anything else and only PUBLISHED or
+  // DISPATCH_FAILED lead out of it, so a throw outside the per-destination try
+  // left a plan that could be neither cancelled nor retried until relaunch.
+  const { service, planId, harness } = await approvedPlan(t);
+  const realRecord = harness.store.recordPublicationReceipt.bind(harness.store);
+  harness.store.recordPublicationReceipt = async () => {
+    throw new Error("disk full");
+  };
+
+  await assert.rejects(() => service.dispatch(planId));
+  harness.store.recordPublicationReceipt = realRecord;
+
+  const plan = harness.store.getAppState().postQueue[0];
+  assert.notEqual(plan.status, "dispatching", "the plan has to leave dispatching whatever went wrong");
+  // And the ordinary escapes work again from there.
+  assert.equal((await harness.store.cancelPostPlan(planId)).postQueue[0].status, "canceled");
+});

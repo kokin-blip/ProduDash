@@ -452,6 +452,19 @@ class YouTubeConnector {
         cause: error
       });
     }
+    // A session can die between the probe and the send. Left to the default
+    // mapping this became a VALIDATION error, which is non-retryable -- so the
+    // destination was blocked with a live session record and no route out.
+    // It is the same "the provider has forgotten this" condition probeUploadOffset
+    // already recognizes, and it is reported the same way.
+    if (response.status === 404 || response.status === 410) {
+      throw connectorError(
+        CONNECTOR_ERROR_CATEGORIES.UPLOAD,
+        "YOUTUBE_UPLOAD_SESSION_GONE",
+        "YouTube no longer recognizes this upload session.",
+        { platformId: this.id }
+      );
+    }
     if (!response.ok) throw safeGoogleError(response.status, { duringUpload: true });
     return response.json();
   }
