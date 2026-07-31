@@ -36,8 +36,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Only the platforms electron-builder actually targets. There is no
+        # linux block in electron-builder.config.cjs and no vendor/media/linux-*
+        # bundle, so a Linux runner was validating a platform we never ship.
         os:
-          - ubuntu-latest
           - macos-14
           - windows-latest
     steps:
@@ -49,10 +51,8 @@ jobs:
       - run: npm ci
       - run: npm run check:media
       - run: npm test
-      - if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum npm run test:smoke
-      - if: runner.os != 'Linux'
-        run: npm run test:smoke
+      # No xvfb branch: both remaining runners have a real display server.
+      - run: npm run test:smoke
       # Storage quota problems must not mask passing tests.
       - if: always()
         continue-on-error: true
