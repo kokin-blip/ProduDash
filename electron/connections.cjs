@@ -124,8 +124,14 @@ class ConnectionService {
     try {
       return await operation(first.accessToken);
     } catch (error) {
-      const rejected = error?.category === "authentication";
-      if (!rejected || first.refreshed) throw error;
+      // Compared against the constant, not the literal it used to spell out:
+      // renaming the category would have silently disabled this retry.
+      if (error?.category !== CONNECTOR_ERROR_CATEGORIES.AUTHENTICATION) throw error;
+      // Deliberately not gated on whether the first call already refreshed. A
+      // token minted at the start of a multi-gigabyte upload can still expire
+      // before the last byte, and that is exactly the case the callers'
+      // re-probe-and-resume logic exists for. The retry is bounded to one
+      // either way, so a persistently rejected token cannot become a loop.
       const retry = await this.getFreshAuthorization(integrationId, { force: true });
       return operation(retry.accessToken);
     }

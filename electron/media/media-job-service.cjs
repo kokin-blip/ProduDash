@@ -673,16 +673,20 @@ class MediaJobService {
     if (job.status === "canceled") return this.store.getAppState();
     if (job.status === "completed") throw new AppError("MEDIA_JOB_TRANSITION_INVALID", "A completed media job cannot be canceled.");
     if (this.active?.jobId === jobId || this.claimed === jobId) {
-      const state = await this.store.updateMediaJobSummary(jobId, {
+      // Recorded before the await, not after. A job that finished while the
+      // status write was queued would otherwise have had start()'s cleanup run
+      // first, leaving this entry behind on an idle job -- and the next run for
+      // the same id would cancel itself immediately.
+      //
+      // Recorded as well as acted on, because a job that is claimed but still
+      // starting has no handle yet; start() applies this once it has one.
+      this.cancelRequested.add(jobId);
+      this.active?.handle?.cancel();
+      return this.store.updateMediaJobSummary(jobId, {
         status: "canceling",
         stage: "canceling",
         error: null
       });
-      // Recorded as well as acted on: a job that is claimed but still starting
-      // has no handle yet, and start() applies this the moment it has one.
-      this.cancelRequested.add(jobId);
-      this.active?.handle?.cancel();
-      return state;
     }
     if (!["queued", "render_queued", "awaiting_review", "failed", "interrupted"].includes(job.status)) {
       throw new AppError("MEDIA_JOB_TRANSITION_INVALID", "This media job cannot be canceled from its current state.");
@@ -699,16 +703,32 @@ class MediaJobService {
   // those artifacts were gone or truncated, every retry failed on the same read,
   // forever. The error even said "Retry analysis before rendering", which no
   // path could do. Checking here is what makes that instruction true.
-  hasReadableAnalysisArtifacts(jobId) {
+  // "readable", "unreadable", or "unknown".
+  //
+  // The distinction matters because retry() discards the user's approved
+  // candidate selections when it falls back to analysis. A bare catch treated
+  // secure storage being unavailable, or a momentary EACCES, exactly like a
+  // truncated file -- silently destroying those selections over a condition
+  // that would have cleared by itself.
+  analysisArtifactState(jobId) {
+    let tempPath;
     try {
-      const { tempPath } = this.getPrivatePaths(jobId);
-      for (const name of ["metadata.json", "analysis.json"]) {
-        JSON.parse(fs.readFileSync(path.join(tempPath, name), "utf8"));
-      }
-      return true;
+      ({ tempPath } = this.getPrivatePaths(jobId));
     } catch {
-      return false;
+      return "unknown";
     }
+    for (const name of ["metadata.json", "analysis.json"]) {
+      const file = path.join(tempPath, name);
+      if (!fs.existsSync(file)) return "unreadable";
+      try {
+        JSON.parse(fs.readFileSync(file, "utf8"));
+      } catch (error) {
+        // Filesystem errors carry a code; a parse failure does not.
+        if (error?.code) return "unknown";
+        return "unreadable";
+      }
+    }
+    return "readable";
   }
 
   async retry(jobId) {
@@ -719,7 +739,11 @@ class MediaJobService {
     if (!job.retryable && job.status !== "canceled") {
       throw new AppError("MEDIA_JOB_NOT_RETRYABLE", "This media job cannot be retried with its current source and settings.");
     }
-    const resumable = job.selectedCandidateIds.length && this.hasReadableAnalysisArtifacts(jobId);
+    // Only a positive finding that the artifacts are gone sends an approved job
+    // back to analysis. If we could not tell, the render is re-queued: it may
+    // fail again, but it keeps the selections the user made.
+    const artifacts = job.selectedCandidateIds.length ? this.analysisArtifactState(jobId) : "unreadable";
+    const resumable = artifacts !== "unreadable";
     const state = await this.store.updateMediaJobSummary(
       jobId,
       {
@@ -732,7 +756,9 @@ class MediaJobService {
         // ones would refer to nothing.
         ...(resumable ? {} : { selectedCandidateIds: [] })
       },
-      `Retried media job: ${job.title}.`
+      job.selectedCandidateIds.length && !resumable
+        ? `Retried media job from analysis after its validated artifacts were lost, discarding approved clips: ${job.title}.`
+        : `Retried media job: ${job.title}.`
     );
     this.schedule();
     return state;

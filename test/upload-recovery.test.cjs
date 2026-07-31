@@ -617,23 +617,26 @@ test("any blocked destination can be cleared, not only an unresolved one", async
   // The escape started as a way out of UPLOAD_SESSION_UNRESOLVED alone. Every
   // other route into a non-retryable receipt reached the same dead end with
   // nothing able to clear it, so blocking became a one-way door.
-  const { service, planId, sessions, idempotencyKey, calls, harness } = await scenario(t, {
-    onSend: async () => {
-      throw connectorError(CONNECTOR_ERROR_CATEGORIES.VALIDATION, "YOUTUBE_REQUEST_REJECTED", "Rejected.");
+  // Fails before a session exists, so nothing about the upload is resumable and
+  // the destination is genuinely blocked rather than merely interrupted.
+  let refuse = true;
+  const { service, planId, calls, harness } = await scenario(t, {
+    onBegin: async () => {
+      if (refuse) throw connectorError(CONNECTOR_ERROR_CATEGORIES.VALIDATION, "YOUTUBE_REQUEST_REJECTED", "Rejected.");
     }
   });
   await service.dispatch(planId);
   const blocked = harness.store.getAppState().postQueue[0].publicationReceipts[0];
-  assert.equal(blocked.retryable, false, "a validation failure is not retryable");
+  assert.equal(blocked.retryable, false, "a validation failure with nothing to resume is not retryable");
   assert.notEqual(blocked.errorCode, "UPLOAD_SESSION_UNRESOLVED");
 
   const after = await service.discardUploadSession(planId, "youtube");
-  assert.equal(sessions.get(idempotencyKey), null);
   assert.equal(after.postQueue[0].publicationReceipts[0].retryable, true, "clearing it has to make another attempt possible");
 
   // And that attempt actually runs.
+  refuse = false;
   await service.dispatch(planId);
-  assert.equal(calls.begin, 2, "a cleared destination opens a fresh session");
+  assert.equal(calls.begin, 2, "a cleared destination is attempted again");
 });
 
 test("a destination that already published cannot have its record cleared", async (t) => {

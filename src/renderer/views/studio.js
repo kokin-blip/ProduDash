@@ -836,8 +836,21 @@ function renderPostPlan(plan) {
   // plan-level: it is withheld only when no destination could still make
   // progress. Blocking on `some` stranded a sibling destination that had failed
   // transiently and was perfectly resumable.
-  const outstanding = receiptsOf(plan).filter((receipt) => receipt.status !== "published" && receipt.status !== "processing");
-  const blocked = outstanding.length > 0 && outstanding.every((receipt) => receipt.status === "failed" && !receipt.retryable);
+  //
+  // Walked over the approved destinations, not over the receipts. Receipts are
+  // written lazily, so a destination interrupted before its first attempt has
+  // none -- and judging by receipts alone declared the plan blocked because of
+  // a sibling's failure while dispatch would happily have published it.
+  const approvedDestinations = asArray(plan.approvalSnapshot?.destinations);
+  const canProgress = (destination) => {
+    const receipt = receiptsOf(plan).find((item) => item.idempotencyKey === destination.idempotencyKey);
+    // Never attempted, so dispatch would try it.
+    if (!receipt) return true;
+    // Already has a publication: finished, not blocked.
+    if (receipt.providerPublicationId) return false;
+    return receipt.status !== "failed" || receipt.retryable !== false;
+  };
+  const blocked = approvedDestinations.length > 0 && !approvedDestinations.some(canProgress);
   const canDispatch = ["approved_for_official_api", "dispatch_failed"].includes(plan.status) && Boolean(plan.approvalSnapshot) && !blocked;
   const receipts = asArray(plan.publicationReceipts);
   const packages = platforms.map(

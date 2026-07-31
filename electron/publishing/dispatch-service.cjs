@@ -409,17 +409,26 @@ class PublishingDispatchService {
       } catch (error) {
         const safe = asAppError(error, "PUBLISH_FAILED", "The destination could not be published.");
         const endedAt = new Date().toISOString();
+        // A surviving session is what makes the next attempt a reconciliation
+        // rather than a fresh upload.
+        const resumable = isUsableSession(this.sessions.get(destination.idempotencyKey));
         await this.store.recordPublicationReceipt(planId, {
           ...receipt,
           status: RECEIPT_STATUSES.FAILED,
-          // Kept truthful: a surviving session is what makes the next attempt a
-          // reconciliation rather than a fresh upload.
-          hasResumableSession: isUsableSession(this.sessions.get(destination.idempotencyKey)),
+          hasResumableSession: resumable,
           errorCode: safe.code,
           // Honest retryability: only a connector that said so, or an error
           // that never reached the provider at all -- with the one exception
           // whose whole point is that an earlier attempt did.
-          retryable: error instanceof ConnectorError ? error.retryable : !NEVER_RETRYABLE.has(safe.code),
+          //
+          // A live session overrides the category, because the category
+          // describes the request and the session describes the upload. An
+          // expired token mid-transfer raises an AUTHENTICATION error, which is
+          // not retryable as a request -- but reauthorizing and dispatching
+          // again resumes from where this attempt stopped, so blocking the
+          // destination forever would be wrong. Sessions left unresolved are
+          // not usable, so this cannot reopen that door.
+          retryable: NEVER_RETRYABLE.has(safe.code) ? false : resumable || (error instanceof ConnectorError ? error.retryable : true),
           attempts: [...receipt.attempts.slice(0, -1), { startedAt, endedAt, outcome: RECEIPT_STATUSES.FAILED }]
         });
       }

@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const { getPlatform } = require("../electron/platforms/registry.cjs");
 const { createHarness } = require("./helpers.cjs");
 const { validateState } = require("../electron/state-schema.cjs");
 
@@ -342,7 +343,17 @@ test("official API approval verifies genuine connection readiness", async (t) =>
     () => harness.store.approvePostPlan(planId, "official_api"),
     (error) => error.code === "INTEGRATION_NOT_READY"
   );
-  harness.store.state.integrations.find((item) => item.id === "youtube").status = "connected";
+  // A genuine connection, not a poked status field: readiness is now derived
+  // from stored configuration and a real authorization, so setting the status
+  // alone no longer passes -- which is the point of the gate.
+  await harness.store.saveIntegrationCredentials("youtube", { clientId: "client-1", clientSecret: "secret-1" });
+  await harness.store.saveIntegrationAuthorization("youtube", {
+    accessToken: "ya29.token",
+    refreshToken: "1//refresh",
+    grantedScopes: [...getPlatform("youtube").scopes],
+    selectedAccount: { id: "UC-channel", name: "Channel" }
+  });
+  await harness.store.setIntegrationResult("youtube", { status: "connected" });
   state = await harness.store.approvePostPlan(planId, "official_api");
   assert.equal(state.postQueue[0].status, "approved_for_official_api");
 });

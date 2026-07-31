@@ -6,11 +6,17 @@ const { AppError } = require("./errors.cjs");
 const { clone, loadRecoverableState } = require("./state-schema.cjs");
 const { writeJsonAtomic } = require("./atomic-json.cjs");
 const { buildAnalyticsReport } = require("./analytics-report.cjs");
-const { getPlatform } = require("./platforms/registry.cjs");
+const { findPlatform, getPlatform } = require("./platforms/registry.cjs");
 const { buildPlatformCatalog } = require("./platforms/catalog.cjs");
 const { DISPATCHABLE_STATUSES, POST_PLAN_STATUSES, assertTransition, canTransition } = require("./publishing/post-status.cjs");
 const { RECEIPT_STATUSES, isAlreadyPublished, normalizeReceipt } = require("./publishing/receipt.cjs");
-const { TOKEN_VAULT_KEYS, createAuthorizationRecord, normalizeAuthorizationRecord } = require("./platforms/authorization.cjs");
+const {
+  CONNECTION_STATES,
+  TOKEN_VAULT_KEYS,
+  createAuthorizationRecord,
+  deriveConnectionState,
+  normalizeAuthorizationRecord
+} = require("./platforms/authorization.cjs");
 const {
   assertPublishingOptionsComplete,
   boundedString,
@@ -933,9 +939,19 @@ class ProduDashStore {
       assertPublishingOptionsComplete(plan.platformPackages);
       if (mode === "official_api") {
         if (!plan.platforms.length) throw new AppError("INVALID_INPUT", "Select at least one publishing destination.");
-        const ready = plan.platforms.every((platformId) =>
-          this.state.integrations.some((item) => item.id === platformId && item.status === "connected")
-        );
+        // Asked of deriveConnectionState rather than of the raw status field.
+        // The raw field says only what the last verification returned, so an
+        // authorization missing a required scope, or a grant with nothing left
+        // to refresh from, still reads "connected" -- and the approval snapshot
+        // is immutable, so the problem would surface at dispatch on a plan that
+        // can no longer be edited. The catalog already computes the real answer.
+        const ready = plan.platforms.every((platformId) => {
+          const platform = findPlatform(platformId);
+          if (!platform) return false;
+          const integration = this.state.integrations.find((item) => item.id === platformId);
+          const setting = this.state.credentialSettings.find((item) => item.id === platformId);
+          return deriveConnectionState({ platform, integration, setting }) === CONNECTION_STATES.CONNECTED;
+        });
         if (!ready) throw new AppError("INTEGRATION_NOT_READY", "Every publishing destination must be genuinely connected.");
       }
       const mediaSnapshot = publishingMediaSnapshot(this.state, plan.mediaJobId);

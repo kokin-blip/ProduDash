@@ -146,7 +146,12 @@ export function getApprovals(businessId = ui.selectedBusinessId) {
 }
 
 export function integrationReady(integrationId) {
-  return ui.appState.integrations.some((integration) => integration?.id === integrationId && integration.status === "connected");
+  // Read from the catalog's derived connection state, which is the same answer
+  // the main process now gates approval on. The raw status field says only what
+  // the last verification returned, so an authorization missing a required
+  // scope still reads "connected" -- and the two gates would disagree about
+  // whether a plan can be approved.
+  return platformEntry(integrationId)?.connectionState === "connected";
 }
 
 export function providerReady(profileId) {

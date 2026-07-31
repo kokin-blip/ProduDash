@@ -191,3 +191,33 @@ test("the catalog is derived, never persisted", async (t) => {
   // The saved state object itself must stay free of the derived view model.
   assert.equal(Object.hasOwn(harness.store.state, "platformCatalog"), false);
 });
+
+test("a connection missing a required scope is not treated as ready", async (t) => {
+  // The raw status field records only what the last verification returned, so a
+  // grant that lost a scope still reads "connected". Approval snapshots are
+  // immutable, so gating on it meant the problem surfaced at dispatch on a plan
+  // that could no longer be edited -- while the catalog already knew.
+  const harness = await createHarness();
+  t.after(harness.cleanup);
+  await harness.store.saveIntegrationCredentials("youtube", { clientId: "client-1", clientSecret: "secret-1" });
+  await harness.store.saveIntegrationAuthorization("youtube", {
+    accessToken: "ya29.token",
+    refreshToken: "1//refresh",
+    // Authorized, but only for reading.
+    grantedScopes: ["https://www.googleapis.com/auth/youtube.readonly"],
+    selectedAccount: { id: "UC-channel", name: "Channel" }
+  });
+  await harness.store.setIntegrationResult("youtube", { status: "connected" });
+
+  const entry = buildPlatformCatalog(harness.store.getAppState()).find((item) => item.id === "youtube");
+  assert.equal(entry.connectionState, CONNECTION_STATES.MISSING_SCOPE);
+
+  let state = await harness.store.createPostPlan({ title: "Scoped", caption: "", platforms: ["youtube"] });
+  const planId = state.postQueue[0].id;
+  await harness.store.updatePostPlanDraft(planId, {
+    platformPackages: [
+      { platformId: "youtube", title: "Scoped", caption: "", options: { selfDeclaredMadeForKids: false, privacyStatus: "private" } }
+    ]
+  });
+  await assert.rejects(() => harness.store.approvePostPlan(planId, "official_api"), { code: "INTEGRATION_NOT_READY" });
+});

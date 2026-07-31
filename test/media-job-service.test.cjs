@@ -588,3 +588,69 @@ test("cancelling during cloud analysis ends the job cancelled, not reviewed", as
   await waitFor(() => !["queued", "processing", "canceling"].includes(harness.store.getMediaJob(jobId).status));
   assert.equal(harness.store.getMediaJob(jobId).status, "canceled");
 });
+
+test("retrying keeps approved clips when the artifacts cannot be checked", async (context) => {
+  // Falling back to analysis discards the user's approved selections, so it has
+  // to be reserved for a positive finding that the artifacts are gone. A bare
+  // catch treated secure storage being unavailable, or a momentary EACCES,
+  // exactly like a truncated file.
+  const harness = await createHarness();
+  context.after(harness.cleanup);
+  const sourcePath = path.join(harness.directory, "source.mp4");
+  const outputParent = path.join(harness.directory, "outputs");
+  fs.writeFileSync(sourcePath, "fixture");
+  fs.mkdirSync(outputParent);
+  const runner = createFakeRunner();
+  const jobs = new MediaJobService({
+    store: harness.store,
+    mediaLibrary: {
+      getClipSummary: (id) => ({ id, name: "Source.mp4", status: "available" }),
+      resolveClipPath: () => sourcePath,
+      startClipAccess: () => null,
+      addFiles: async () => ({})
+    },
+    credentialVault: harness.vault,
+    runner,
+    onEvent: () => {}
+  });
+  await jobs.initialize();
+  const selection = jobs.rememberOutputSelection({ path: outputParent });
+  const created = await jobs.create({
+    sourceMediaId: "media-source",
+    outputSelectionId: selection.id,
+    title: "Unknown artifacts",
+    goal: "",
+    maxClips: 1,
+    targetDuration: 8,
+    captionMode: "off",
+    captionText: "",
+    aspectTreatment: "fit_pad",
+    targetAspect: "vertical",
+    platforms: ["tiktok"]
+  });
+  const jobId = created.mediaJobs[0].id;
+  await waitFor(() => runner.starts.length === 1);
+  runner.starts[0].completion.resolve({
+    type: "awaiting_review",
+    metadata: { duration: 30 },
+    candidates: [{ id: "candidate-1", title: "Clip 1", start: 0, end: 8, duration: 8, confidence: 0.8, scores: {}, rationale: "Local" }],
+    warnings: []
+  });
+  await waitFor(() => harness.store.getMediaJob(jobId).status === "awaiting_review");
+  await jobs.approveCandidates(jobId, ["candidate-1"]);
+  await waitFor(() => runner.starts.length === 2);
+  runner.starts[1].completion.resolve({ type: "error", error: { code: "MEDIA_JOB_FAILED", message: "Failed." }, retryable: true });
+  await waitFor(() => harness.store.getMediaJob(jobId).status === "failed");
+
+  // Cannot look: this says nothing about whether the artifacts are intact.
+  const realGetPaths = jobs.getPrivatePaths.bind(jobs);
+  jobs.getPrivatePaths = () => {
+    throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure storage is unavailable.");
+  };
+  const state = await jobs.retry(jobId);
+  jobs.getPrivatePaths = realGetPaths;
+
+  const retried = state.mediaJobs.find((item) => item.id === jobId);
+  assert.deepEqual(retried.selectedCandidateIds, ["candidate-1"], "approved clips must survive a check that could not run");
+  assert.equal(retried.status, "render_queued");
+});

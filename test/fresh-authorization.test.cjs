@@ -160,10 +160,13 @@ test("a token rejected even after refreshing does not loop", async (t) => {
       }),
     { code: "YOUTUBE_AUTH_FAILED" }
   );
-  // The first call already used a freshly refreshed token, so there is nothing
-  // to retry with.
-  assert.equal(attempts, 1);
-  assert.equal(calls.refresh, 1);
+  // Bounded to one retry, which is what stops a rejected token becoming a loop.
+  // It used to stop at a single attempt whenever the first call had already
+  // refreshed -- but a token minted at the start of a multi-gigabyte upload can
+  // still expire before the last byte, and that is precisely when a second
+  // refresh is worth making.
+  assert.equal(attempts, 2);
+  assert.equal(calls.refresh, 2);
 });
 
 test("a non-authentication failure is not retried", async (t) => {

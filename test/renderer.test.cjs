@@ -804,7 +804,10 @@ test("Publishing withholds Retry from a destination that cannot be retried", asy
             status: "dispatch_failed",
             schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
             mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
-            approvalSnapshot: { hash: "a".repeat(64) },
+            approvalSnapshot: {
+              hash: "a".repeat(64),
+              destinations: [{ platformId: "youtube", idempotencyKey: "b".repeat(64) }]
+            },
             exportReceipt: null,
             publicationReceipts: [
               {
@@ -1947,7 +1950,13 @@ test("Publishing keeps Retry available while any destination can still make prog
             status: "dispatch_failed",
             schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
             mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
-            approvalSnapshot: { hash: "a".repeat(64) },
+            approvalSnapshot: {
+              hash: "a".repeat(64),
+              destinations: [
+                { platformId: "youtube", idempotencyKey: "0".repeat(64) },
+                { platformId: "instagram", idempotencyKey: "1".repeat(64) }
+              ]
+            },
             exportReceipt: null,
             publicationReceipts: receipts.map((receipt, index) => ({
               platformId: index === 0 ? "youtube" : "instagram",
@@ -1982,4 +1991,55 @@ test("Publishing keeps Retry available while any destination can still make prog
     { errorCode: "UPLOAD_SESSION_UNRESOLVED", retryable: false }
   ]);
   assert.equal(document.querySelector("[data-dispatch-post='post-1']"), null);
+});
+
+test("Publishing keeps Retry available for a destination that was never attempted", async () => {
+  // Receipts are written lazily, so a run interrupted after the first
+  // destination failed leaves the second with no receipt at all. Judging by
+  // receipts alone declared the plan blocked because of the first, while
+  // dispatch would have skipped it and published the second.
+  const renderer = await setupRenderer();
+  renderer.setAppState(
+    baseState({
+      creatorPlatforms: [
+        { id: "youtube", name: "YouTube Shorts" },
+        { id: "instagram", name: "Instagram Reels" }
+      ],
+      postQueue: [
+        {
+          id: "post-1",
+          title: "Launch",
+          caption: "Approved copy",
+          platforms: ["youtube", "instagram"],
+          status: "dispatch_failed",
+          schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+          mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
+          approvalSnapshot: {
+            hash: "a".repeat(64),
+            destinations: [
+              { platformId: "youtube", idempotencyKey: "0".repeat(64) },
+              { platformId: "instagram", idempotencyKey: "1".repeat(64) }
+            ]
+          },
+          exportReceipt: null,
+          publicationReceipts: [
+            {
+              platformId: "youtube",
+              idempotencyKey: "0".repeat(64),
+              status: "failed",
+              providerPublicationId: null,
+              errorCode: "UPLOAD_SESSION_UNRESOLVED",
+              retryable: false,
+              attempts: [],
+              hasResumableSession: false
+            }
+          ]
+        }
+      ]
+    })
+  );
+  renderer.ui.activeSection = "studio";
+  renderer.ui.studioTab = "publishing";
+  renderer.renderApp();
+  assert.ok(document.querySelector("[data-dispatch-post='post-1']"), "the unattempted destination is still reachable");
 });
