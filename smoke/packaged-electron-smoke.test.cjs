@@ -33,12 +33,23 @@ test("packaged ProduDash starts with secure local resources", { timeout: 90_000 
       } catch (error) {
         details = `(page state unavailable: ${error.message})`;
       }
+      // The main process writes this beside the user data because a packaged
+      // Windows GUI app has no reliable stderr -- so on the one platform where
+      // the sender check fails, `main process:` above is empty by construction.
+      let senderTrace = "(none)";
+      try {
+        const traced = fs.readFileSync(path.join(userDataPath, "ipc-sender-trace.log"), "utf8").trim();
+        if (traced) senderTrace = `\n  ${traced.split("\n").join("\n  ")}`;
+      } catch {
+        // No trace file means the check never rejected, which is the good case.
+      }
       process.stderr.write(
         [
           "",
           "--- packaged smoke diagnostics ---",
           `console problems: ${consoleProblems.length ? `\n  ${consoleProblems.join("\n  ")}` : "(none)"}`,
           `main process: ${mainProcessOutput.length ? `\n  ${mainProcessOutput.join("\n  ")}` : "(none)"}`,
+          `ipc sender trace: ${senderTrace}`,
           `sections: ${Array.isArray(details.sections) ? details.sections.join(", ") : details}`,
           `nav-list: ${details.navigation || details}`,
           `viewRoot: ${details.viewRoot || details}`,

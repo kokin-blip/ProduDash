@@ -1,4 +1,4 @@
-const { BrowserWindow, dialog, ipcMain } = require("electron");
+const { BrowserWindow, app, dialog, ipcMain } = require("electron");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -11,6 +11,10 @@ const { scanLocalVoiceCompatibility } = require("./ai/local-voice-compatibility.
 const { analyticsReportCsv } = require("./analytics-report.cjs");
 const { hasCapability } = require("./platforms/registry.cjs");
 
+// Read back by smoke/packaged-electron-smoke.test.cjs, which knows the same
+// name. Written only under PRODUDASH_TRACE_IPC_SENDER=1.
+const IPC_SENDER_TRACE_FILE = "ipc-sender-trace.log";
+
 function createTrustedSender(appUrl) {
   return (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -20,10 +24,20 @@ function createTrustedSender(appUrl) {
     // Opt-in trace for packaged smoke testing. A rejection here renders a fatal
     // startup error with no indication of which value differed.
     if (!trusted && process.env.PRODUDASH_TRACE_IPC_SENDER === "1") {
-      process.stderr.write(
+      const line =
         `[produdash] untrusted IPC sender expected=${appUrl} actual=${event.senderFrame?.url ?? "(no sender frame)"} ` +
-          `window=${Boolean(window)} mainFrame=${Boolean(window && event.senderFrame === window.webContents.mainFrame)}\n`
-      );
+        `window=${Boolean(window)} mainFrame=${Boolean(window && event.senderFrame === window.webContents.mainFrame)}\n`;
+      process.stderr.write(line);
+      // A packaged Windows GUI-subsystem app has no reliable stderr, and Windows
+      // is the only platform where this rejection actually fires -- so the trace
+      // written for it went nowhere, and the failure stayed unexplained through
+      // every prerelease attempt since 2026-07-27. Also write it beside the user
+      // data the launcher controls, where the packaged smoke test reads it back.
+      try {
+        fs.appendFileSync(path.join(app.getPath("userData"), IPC_SENDER_TRACE_FILE), line);
+      } catch {
+        // A diagnostic must never break the check it is diagnosing.
+      }
     }
     return trusted;
   };
