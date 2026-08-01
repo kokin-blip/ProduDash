@@ -129,6 +129,19 @@ function jsonResponse(body, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
 
+// Real fetch rejects .json() when the body is empty. Google's revocation
+// endpoint answers a successful revoke exactly that way, so a mock that always
+// returns parseable JSON cannot tell a working disconnect from a broken one.
+function emptyResponse(status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => {
+      throw new SyntaxError("Unexpected end of JSON input");
+    }
+  };
+}
+
 // A listener stub so tests never bind a socket or open a browser.
 function fakeListener(callbackResult = { code: "code-1" }) {
   return {
@@ -298,6 +311,12 @@ test("disconnect revokes at Google and tolerates an already-invalid token", asyn
   const revoked = createConnector({ responses: [jsonResponse({})] });
   assert.deepEqual(await revoked.connector.disconnect({ oauthRefreshToken: "rt" }), { revoked: true });
   assert.equal(revoked.requests[0].url, "https://oauth2.googleapis.com/revoke");
+
+  // The shape Google actually sends back. Parsing it as JSON throws, and that
+  // throw used to surface as a network error -- reporting a failed disconnect
+  // for a token that had in fact just been destroyed.
+  const emptyBody = createConnector({ responses: [emptyResponse()] });
+  assert.deepEqual(await emptyBody.connector.disconnect({ oauthRefreshToken: "rt" }), { revoked: true });
 
   const stale = createConnector({ responses: [jsonResponse({}, 400)] });
   assert.deepEqual(await stale.connector.disconnect({ oauthAccessToken: "at" }), { revoked: false, reason: "already_invalid" });

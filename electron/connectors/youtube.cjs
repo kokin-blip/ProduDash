@@ -138,6 +138,13 @@ class YouTubeConnector {
     try {
       const response = await this.transport(url, { ...options, signal: controller.signal });
       if (!response.ok) throw safeGoogleError(response.status, options);
+      // Google's revocation endpoint answers a successful revoke with 200 and an
+      // empty body. Calling response.json() on that throws, and the throw is
+      // indistinguishable here from a transport failure -- so a revocation that
+      // genuinely succeeded was reported as "could not reach YouTube", and the
+      // local cleanup that follows a disconnect never ran. The integration kept
+      // showing a connection whose token Google had already destroyed.
+      if (options.expectNoContent) return null;
       return await response.json();
     } catch (error) {
       if (error instanceof ConnectorError) throw error;
@@ -584,7 +591,9 @@ class YouTubeConnector {
       await this.request(REVOCATION_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ token }).toString()
+        body: new URLSearchParams({ token }).toString(),
+        // A successful revoke carries no body; nothing here reads one.
+        expectNoContent: true
       });
       return { revoked: true };
     } catch (error) {
