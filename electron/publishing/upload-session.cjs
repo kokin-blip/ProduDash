@@ -44,9 +44,12 @@ function createUploadSession({ planId, platformId, approvalHash, idempotencyKey,
     planId,
     platformId,
     // Provenance only. The vault key derives from the idempotency key, which is
-    // sha256(`${planId}:${platformId}:${approvalHash}`) and is re-verified on
-    // load, so a record found under this key cannot belong to a different
-    // approval. Guarding against a mismatch here would be unreachable code.
+    // sha256(`${planId}:${platformId}:${approvalHash}`), and save() always
+    // writes under the key derived from the record it is storing -- so a record
+    // found under this key was written by this approval. That holds structurally,
+    // not by a runtime check: get() parses whatever sits at the key and never
+    // re-reads this field. Guarding against a mismatch here would be unreachable
+    // code, but only for as long as save() stays the sole writer.
     approvalHash,
     idempotencyKey,
     uploadUri,
