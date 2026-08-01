@@ -36,9 +36,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Only the platforms electron-builder actually targets. There is no
-        # linux block in electron-builder.config.cjs and no vendor/media/linux-*
+        # The OS families we ship, not every shipped target. There is no linux
+        # block in electron-builder.config.cjs and no vendor/media/linux-*
         # bundle, so a Linux runner was validating a platform we never ship.
+        #
+        # Deliberately still uncovered: prerelease.yml packages mac-x64 on
+        # macos-15-intel, and no CI leg runs there -- an Intel-only failure
+        # surfaces during a manual prerelease, not here. Dropping Linux also
+        # gave up the only case-sensitive filesystem in CI and the only
+        # executor of the no-keyring path at credential-vault.cjs:209.
         os:
           - macos-14
           - windows-latest
