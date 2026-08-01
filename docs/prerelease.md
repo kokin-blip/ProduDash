@@ -21,7 +21,13 @@ Installer creation requires owner-approved FFmpeg and ffprobe bundles in:
 - `vendor/media/mac-x64` — still required
 
 Intel macOS packaging stays blocked until its bundle is supplied. Apple silicon
-macOS and Windows x64 can package now.
+macOS and Windows x64 both produce verified artifacts, first confirmed on
+2026-08-01.
+
+An approved media bundle is necessary for packaging but not sufficient: Windows
+x64 passed this gate on 2026-07-27 and still could not produce an artifact for
+another five days, for an unrelated reason recorded below. "The bundle is
+approved" and "the target packages" are separate claims.
 
 ### Resolved: win-x64 bundle linked a runtime library it did not ship
 
@@ -84,6 +90,45 @@ project's build deliberately disables, and are roughly four times the size.
 A corrected bundle is accepted only once `npm run check:distribution` passes
 natively on Windows x64 and both binaries report their version without a loader
 error. The rebuilt bundle satisfies both conditions.
+
+### Resolved: the packaged Windows app rejected its own renderer
+
+With the media gate passing, `npm run package:win` succeeded and
+`npm run verify:artifacts` then failed on every run from 2026-07-27 to
+2026-08-01 with `page.waitForFunction: Timeout 30000ms exceeded`. The packaged
+app launched and rendered **"Startup blocked — The request did not come from the
+ProduDash application."** No Windows artifact was produced in that window, so
+the earlier claim that Windows x64 packaging was unblocked described the media
+gate only.
+
+`createTrustedSender` compared `event.senderFrame.url` with `appUrl` as strings.
+`appUrl` is built by `pathToFileURL()` and the frame's URL by Chromium by way of
+`loadFile()`, and the two spell the same file differently:
+
+```
+expected=file:///C:/Users/RUNNER%7E1/.../app.asar/index.html
+actual=  file:///C:/Users/RUNNER~1/.../app.asar/index.html
+```
+
+`%7E` is `~`. A GitHub Windows runner resolves `os.tmpdir()` to
+`C:\Users\RUNNER~1\...`, the 8.3 short name for `runneradmin`. `pathToFileURL()`
+percent-encodes the tilde; Chromium does not. It never reproduced on a developer
+machine, because a temp path with no tilde has nothing to encode.
+
+The check now compares the resolved file path, which is the question being
+asked, and is case-folded on win32 only. Its security properties are unchanged
+and were always carried by the two conditions around it: the sender is a real
+`BrowserWindow`, and it is that window's main frame rather than an embedded one.
+
+The failure took five attempts to explain because `PRODUDASH_TRACE_IPC_SENDER`,
+which exists for exactly this, wrote only to `process.stderr` — and a packaged
+Windows GUI-subsystem app has no reliable stderr, so on the one platform where
+the check rejects, its diagnostic was guaranteed to vanish. The trace is now
+also written beside the user data and read back by the packaged smoke test.
+
+Note that `npm run verify:artifacts` and `npm run test:packaged` run in no CI
+job. They execute only here, so a packaged-app regression is invisible until a
+prerelease is attempted.
 
 Use private Git LFS for the executable files. Each directory must contain a completed `manifest.json`, its referenced notice file, and the exact binaries named by the manifest. The example in `vendor/media/manifest.example.json` documents the contract.
 
