@@ -2,6 +2,7 @@ const { BrowserWindow, app, dialog, ipcMain } = require("electron");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const { fileURLToPath } = require("node:url");
 const { AppError, errorResponse } = require("./errors.cjs");
 const { boundedString } = require("./validation.cjs");
 const { parseTranscriptText } = require("./projects/transcript-import.cjs");
@@ -15,11 +16,36 @@ const { hasCapability } = require("./platforms/registry.cjs");
 // name. Written only under PRODUDASH_TRACE_IPC_SENDER=1.
 const IPC_SENDER_TRACE_FILE = "ipc-sender-trace.log";
 
+// The frame URL and appUrl describe the same file but are built by different
+// code: appUrl comes from pathToFileURL(), the frame's from Chromium by way of
+// loadFile(). Those agree on most paths and diverge on percent-encoding, drive
+// letter case, and slash direction -- which is why the packaged Windows build
+// rejected its own renderer while macOS accepted it. Comparing the resolved
+// path answers the question actually being asked ("is this frame showing our
+// index.html?") without depending on two spellings matching.
+function sameLocalFile(frameUrl, expectedUrl) {
+  if (typeof frameUrl !== "string" || !frameUrl) return false;
+  try {
+    const frame = path.resolve(fileURLToPath(frameUrl));
+    const expected = path.resolve(fileURLToPath(expectedUrl));
+    // Windows paths are case-insensitive; every other platform's are not, and
+    // folding there would let a different file pass.
+    return process.platform === "win32" ? frame.toLowerCase() === expected.toLowerCase() : frame === expected;
+  } catch {
+    // A non-file URL cannot name our index.html, so it is not our renderer.
+    return false;
+  }
+}
+
 function createTrustedSender(appUrl) {
   return (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
+    // The first two conditions carry the security: the sender is a real window,
+    // and it is that window's main frame rather than an embedded one. The third
+    // confirms the frame is still showing the app rather than somewhere it
+    // navigated to.
     const trusted = Boolean(
-      window && event.senderFrame && event.senderFrame === window.webContents.mainFrame && event.senderFrame.url === appUrl
+      window && event.senderFrame && event.senderFrame === window.webContents.mainFrame && sameLocalFile(event.senderFrame.url, appUrl)
     );
     // Opt-in trace for packaged smoke testing. A rejection here renders a fatal
     // startup error with no indication of which value differed.
@@ -862,4 +888,4 @@ function registerIpc({
   }
 }
 
-module.exports = { createHandlers, createTrustedSender, registerIpc };
+module.exports = { createHandlers, createTrustedSender, registerIpc, sameLocalFile };

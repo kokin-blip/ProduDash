@@ -3,7 +3,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
-const { createHandlers } = require("../electron/ipc.cjs");
+const { pathToFileURL } = require("node:url");
+const { createHandlers, sameLocalFile } = require("../electron/ipc.cjs");
 
 function fixtures(isTrustedSender) {
   const state = { schemaVersion: 7 };
@@ -496,4 +497,34 @@ test("IPC returns controlled errors without stacks or secrets", async () => {
   assert.equal(response.error.code, "INTERNAL_ERROR");
   assert.equal(JSON.stringify(response).includes("shpat_secret"), false);
   assert.equal(JSON.stringify(response).includes("stack"), false);
+});
+
+// The packaged Windows build rejected its own renderer while macOS accepted it:
+// appUrl is built by pathToFileURL() and the frame's URL by Chromium via
+// loadFile(), and the two spell the same file differently. Comparing resolved
+// paths answers the question being asked without depending on one spelling.
+test("sender identity survives two spellings of the same file, and only that file", () => {
+  const indexPath = path.join(__dirname, "..", "index.html");
+  const canonical = pathToFileURL(indexPath).href;
+
+  assert.equal(sameLocalFile(canonical, canonical), true);
+
+  // A path segment needing escaping is where the two builders diverge: one
+  // percent-encodes the space, the other leaves it literal. Same file.
+  const spaced = pathToFileURL(path.join(os.tmpdir(), "Produ Dash", "index.html")).href;
+  assert.equal(spaced.includes("%20"), true, "precondition: pathToFileURL encodes the space");
+  assert.equal(sameLocalFile(spaced.replace(/%20/g, " "), spaced), true);
+
+  // A different file in the same directory is still refused.
+  assert.equal(sameLocalFile(pathToFileURL(path.join(__dirname, "..", "package.json")).href, canonical), false);
+
+  // Nothing that is not a local file can be the renderer.
+  for (const hostile of ["https://example.com/index.html", "data:text/html,<p>x", "", null, undefined]) {
+    assert.equal(sameLocalFile(hostile, canonical), false);
+  }
+
+  // Case folding is correct per platform: Windows paths are case-insensitive,
+  // and folding anywhere else would let a genuinely different file through.
+  const shouted = canonical.replace(/index\.html$/, "INDEX.HTML");
+  assert.equal(sameLocalFile(shouted, canonical), process.platform === "win32");
 });
