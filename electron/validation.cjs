@@ -1,7 +1,6 @@
 const { AppError } = require("./errors.cjs");
+const { CREATOR_PLATFORM_IDS, INTEGRATION_IDS, findPlatform } = require("./platforms/registry.cjs");
 
-const CREATOR_PLATFORM_IDS = new Set(["tiktok", "instagram", "youtube"]);
-const INTEGRATION_IDS = new Set(["shopify", "instagram", "facebook", "tiktok", "youtube", "stripe"]);
 const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 const CAPTION_MODES = new Set(["off", "srt", "srt_burned"]);
 const ASPECT_TREATMENTS = new Set(["original", "fit_pad", "center_crop"]);
@@ -85,6 +84,18 @@ function normalizeShopifyDomain(value) {
   return parsed.hostname;
 }
 
+// Per-platform normalization for non-sensitive credential values. Keyed here
+// rather than branched on at each call site, so the generic credential path in
+// store.cjs stays free of provider-specific logic.
+const PUBLIC_VALUE_NORMALIZERS = Object.freeze({
+  shopify: Object.freeze({ storeDomain: normalizeShopifyDomain })
+});
+
+function normalizePublicCredentialValue(platformId, fieldKey, value) {
+  const normalizer = PUBLIC_VALUE_NORMALIZERS[platformId]?.[fieldKey];
+  return normalizer ? normalizer(value) : value;
+}
+
 function validateClipPayload(payload) {
   return {
     title: boundedString(payload?.title, { label: "Clip title", min: 1, max: 120, fallback: "Untitled clip job" }),
@@ -130,8 +141,65 @@ function validatePostPayload(payload, clipJobs, mediaJobs = []) {
     scheduledFor,
     timeZone,
     platforms,
-    platformPackages: platforms.map((platformId) => ({ platformId, title, caption }))
+    platformPackages: platforms.map((platformId) => ({ platformId, title, caption, options: seedPublishingOptions(platformId) }))
   };
+}
+
+// A new plan starts with the registry defaults. Options with no safe default
+// start null, so the plan is visibly incomplete rather than quietly wrong.
+function seedPublishingOptions(platformId) {
+  const definitions = findPlatform(platformId)?.publishingOptions;
+  if (!definitions) return null;
+  return Object.fromEntries(Object.entries(definitions).map(([key, definition]) => [key, definition.default]));
+}
+
+// Approval is the gate: every required choice must actually have been made.
+function assertPublishingOptionsComplete(platformPackages) {
+  for (const pack of platformPackages || []) {
+    const definitions = findPlatform(pack?.platformId)?.publishingOptions;
+    if (!definitions) continue;
+    for (const [key, definition] of Object.entries(definitions)) {
+      if (definition.default !== null) continue;
+      if (pack.options?.[key] === undefined || pack.options?.[key] === null) {
+        throw new AppError(
+          "PUBLISHING_OPTION_REQUIRED",
+          `Choose ${definition.label.toLowerCase()} for ${pack.platformId} before approving this plan.`
+        );
+      }
+    }
+  }
+}
+
+// Per-destination publishing options, driven by the registry rather than by a
+// platform check here. An option whose registry default is null has no safe
+// guess: an absent value is rejected instead of silently becoming false.
+function normalizePublishingOptions(platformId, submitted) {
+  const definitions = findPlatform(platformId)?.publishingOptions;
+  if (!definitions) return null;
+  const provided = submitted && typeof submitted === "object" && !Array.isArray(submitted) ? submitted : {};
+  const options = {};
+  for (const [key, definition] of Object.entries(definitions)) {
+    const value = provided[key];
+    if (value === undefined || value === null || value === "") {
+      // A draft may legitimately still be undecided. Approval is the gate that
+      // requires a real choice, via assertPublishingOptionsComplete.
+      options[key] = definition.default;
+      continue;
+    }
+    if (definition.type === "boolean") {
+      // Accept only a real boolean or its exact string form. Anything else
+      // would be a coercion, which is what this exists to prevent.
+      if (typeof value === "boolean") options[key] = value;
+      else if (value === "true" || value === "false") options[key] = value === "true";
+      else throw new AppError("INVALID_INPUT", `${definition.label} for ${platformId} must be an explicit choice.`);
+      continue;
+    }
+    if (!definition.values.includes(value)) {
+      throw new AppError("INVALID_INPUT", `${definition.label} for ${platformId} is not a supported value.`);
+    }
+    options[key] = value;
+  }
+  return options;
 }
 
 function validatePostPlanDraft(payload, platformIds) {
@@ -148,7 +216,8 @@ function validatePostPlanDraft(payload, platformIds) {
     submitted.set(platformId, {
       platformId,
       title: boundedString(item?.title, { label: `${platformId} title`, min: 1, max: 120 }),
-      caption: boundedString(item?.caption, { label: `${platformId} caption`, max: 2200 })
+      caption: boundedString(item?.caption, { label: `${platformId} caption`, max: 2200 }),
+      options: normalizePublishingOptions(platformId, item?.options)
     });
   }
   const scheduledFor = normalizeOptionalIsoDate(payload?.scheduledFor);
@@ -313,6 +382,10 @@ module.exports = {
   boundedString,
   boundedInteger,
   normalizePlatforms,
+  assertPublishingOptionsComplete,
+  normalizePublicCredentialValue,
+  normalizePublishingOptions,
+  seedPublishingOptions,
   normalizeShopifyDomain,
   normalizeTimeZone,
   requireId,

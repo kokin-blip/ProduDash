@@ -176,5 +176,11 @@ contextBridge.exposeInMainWorld("produdash", {
   updatePostPlanDraft: (planId, values) => invoke("produdash:updatePostPlanDraft", { planId, values }),
   approvePostPlan: (planId, mode) => invoke("produdash:approvePostPlan", { planId, mode }),
   exportPostPackage: (planId) => invoke("produdash:exportPostPackage", { planId }),
-  cancelPostPlan: (planId) => invoke("produdash:cancelPostPlan", { planId })
+  cancelPostPlan: (planId) => invoke("produdash:cancelPostPlan", { planId }),
+  dispatchPostPlan: (planId) => invoke("produdash:dispatchPostPlan", { planId }),
+  refreshPublicationStatus: (planId, platformId) => invoke("produdash:refreshPublicationStatus", { planId, platformId }),
+  discardUploadSession: (planId, platformId) => invoke("produdash:discardUploadSession", { planId, platformId }),
+  authorizeIntegration: (integrationId) => invoke("produdash:authorizeIntegration", { integrationId }),
+  disconnectIntegration: (integrationId) => invoke("produdash:disconnectIntegration", { integrationId }),
+  getAuthorizationInstructions: (integrationId) => invoke("produdash:getAuthorizationInstructions", { integrationId })
 });

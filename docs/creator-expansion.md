@@ -1,11 +1,14 @@
 # ProduDash creator expansion
 
 Status: Phases 0–2 are implemented and validated. Phases 3–4 have implemented
-local product foundations, Phases 5–6 have complete local-only foundations, and
+local product foundations, Phase 5 has one live official connector (YouTube) with
+the rest local-only, Phase 6 remains a local-only foundation, and
 Phases 7–8 have tested internal contract foundations. Features that require
-hosted identity, storage, OAuth applications, official platform approval, or
-public infrastructure remain network- and UI-disabled rather than appearing as
-nonfunctional controls.
+hosted identity, storage, official platform approval, or public infrastructure
+remain network- and UI-disabled rather than appearing as nonfunctional controls.
+The exception is the YouTube OAuth application, which is network- and UI-enabled:
+it uses an owner-supplied client over a loopback redirect and needs no hosted
+callback.
 
 ## Sources and comparison boundary
 
@@ -30,14 +33,14 @@ music, cleanup rules, preview, undo/redo, and template saving.
 
 | Existing capability   | State and persistence                                                   | Service / IPC                                               | View and assets                                                               | Tests                                   | User workflow preserved                                         |
 | --------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------- |
-| Secure dashboard data | Schema 7 main state, atomic primary/backup/snapshots, encrypted vault   | store, credential service, normalized trusted IPC           | Overview, Integrations                                                        | persistence, credentials, IPC, smoke    | Connect, refresh, reset, delete-all                             |
+| Secure dashboard data | Schema 10 main state, atomic primary/backup/snapshots, encrypted vault   | store, credential service, normalized trusted IPC           | Overview, Integrations                                                        | persistence, credentials, IPC, smoke    | Connect, refresh, reset, delete-all                             |
 | Shopify               | Public connection metadata; secret token only in vault                  | GraphQL client, connection service                          | Setup, Integrations, dashboard metrics/orders                                 | Shopify, connection service             | Connect and synchronize a custom app                            |
 | Provider-neutral AI   | Provider profiles, verified capabilities, workload assignments          | provider registry/adapters                                  | AI Providers in Integrations                                                  | provider adapters/service               | Configure and assign Advisor, drafting, analysis, transcription |
 | Inbox approvals       | Conversations, drafts, approval audit                                   | workflow service                                            | Inbox master/detail                                                           | workflow, renderer                      | Draft, approve/reject; never claims “sent”                      |
 | Clip Library          | Separate media index with recovery, opaque IDs, bookmarks, thumbnails   | media library/protocol                                      | Studio → Library                                                              | media library/protocol, renderer, smoke | Add folders/files, scan, search, tag, preview, relocate         |
 | Clip generation       | Typed `clip_generation` media jobs; durable stages and artifacts        | media job service, utility runner, FFmpeg worker            | Studio → Create clips                                                         | media jobs, worker, analysis            | Create, cancel, retry, review, approve, render, reveal          |
 | Candidate editor      | Original suggestion plus bounded user edit, captions and ranking        | candidate validation/job IPC                                | Candidate review editor                                                       | candidate edit, captions, renderer      | Trim, restyle, select/reject, approve                           |
-| Local publishing plan | Post drafts and enforced approval/export transitions                    | workflow service                                            | Studio → Publishing                                                           | workflow, renderer                      | Plan locally; manual export only after approval                 |
+| Local publishing plan | Post drafts and enforced approval/export transitions                    | workflow service                                            | Studio → Publishing                                                           | workflow, renderer                      | Plan locally; manual export, or publish to YouTube once approved |
 | Juanito               | Separate bounded history, session consent, configurable name            | advisor service, read-only tool allowlist, one event stream | Accessible launcher/panel; Juanito sprite strips                              | advisor, renderer, smoke                | Ask, cancel, clear, inspect setup/jobs without mutation         |
 | Motion/accessibility  | Renderer-local state only                                               | none                                                        | navigation indicator, view transitions, disclosures, focus and reduced motion | renderer, smoke                         | Keyboard navigation and restrained motion                       |
 | Projects (Phase 1)    | Separate versioned project store, recoverable draft and max 50 versions | project store, project IPC, media queue                     | Studio → Projects                                                             | project, IPC, renderer, smoke           | Create/manage/edit/prepare/approve/render                       |
@@ -98,7 +101,7 @@ names a capability need, not an enabled ProduDash feature.
 | O. Thumbnails                              | Source/custom/generative thumbnails                     | Three local source-frame choices, validated custom-image variants, persisted preference, and approximate platform framing checks                                      | Partial: composition editor and provider-generated variants deferred     | Yes                                    | Optional generation provider              | Opaque previews; signature validation; no upload/publish                          | Existing job artifacts; medium     | **4:** implemented local source/custom review; generation requires a declared provider |
 | P. Results/clip management                 | Result cards, edit/download/publish and collections     | Jobs, candidates, artifacts, Library import, Projects/collections                                                                                                      | Partial: grid/list bulk workflows deferred                               | Yes                                    | Publishing API only when connected        | Human approval before render/publish                                            | Existing job/library UI; high      | **3/5:** filters and safe bulk validation before mutation                           |
 | Q. Social copy                             | Platform-specific copy generation                       | Bounded per-platform packages from shared user-authored copy, with immutable approval provenance                                                                       | Partial: provider-assisted variants and per-platform editing deferred    | Yes for manual                         | Optional current-data/provider capability | Human approval; never claims live trends                                        | Provider structured output; medium | **5:** local package foundation implemented; generated variants require exact consent |
-| R. Official publishing/scheduler           | Official social posting APIs                            | Local time-zone-aware outbox, rendered-media snapshot, idempotency keys, cancellation, and path-free manual package export                                              | Official OAuth connections, dispatch, retries and published URLs missing | Foundation only                        | OAuth and official APIs required          | Least privilege, immutable approval, no browser automation                      | Hosted callback backend; very high | **5:** local foundation implemented; live delivery waits for approved connectors    |
+| R. Official publishing/scheduler           | Official social posting APIs                            | Local time-zone-aware outbox, rendered-media snapshot, idempotency keys, cancellation, path-free manual package export, and live YouTube dispatch with resumable uploads | Scheduling and unattended delivery missing; other platforms have no connector | Live for YouTube; foundation elsewhere | OAuth and official APIs required          | Least privilege, immutable approval, no browser automation                      | Loopback for YouTube; hosted callback for others | **5:** YouTube delivery implemented; other platforms wait for approved connectors   |
 | S. Analytics                               | Official platform metrics                               | Defined/fresh Shopify aggregates, equal-window comparisons, non-causal observations, safe CSV, and bounded Juanito projection                                         | Official social performance and published-identity mapping unavailable  | Yes for imported Shopify snapshot      | Official platform analytics APIs          | PII-free aggregates; no fabricated profit/conversion/social metrics             | Connectors/reporting; very high    | **6 local foundation implemented:** live metrics wait for approved OAuth sources     |
 | T. Teams/collaboration                     | Project sharing and team management                     | Local single-user product plus UI-free role, scope, sync, device, review, conflict, revocation, export, and audit contracts                                           | No authentication, server persistence, sync transport, or team UI        | Local remains usable                   | Hosted identity/sync required             | Fail-closed tenant/project scopes; payload-free integrity records                | Backend; very high                 | **7 contract foundation implemented:** product exposure waits for owner backend      |
 | U. Export/interoperability                 | Downloads/transcript export and APIs                    | MP4, captions, thumbnails, manifests, EDL, portable project JSON, and integrity-checked template packages                                                             | Partial: ZIP bundles and named NLE interchange formats deferred          | Yes                                    | No                                        | No paths/secrets in exports; checksums                                          | Format writers/target QA; high     | **2/4 foundation implemented:** supported packages round-trip through validation     |
@@ -137,9 +140,9 @@ names a capability need, not an enabled ProduDash feature.
 
 ## Roadmap status: Phases 2–8
 
-Implemented local features below are exposed only when functional. Hosted and
-official-connector items remain documentation and tested internal contracts;
-they are not exposed as placeholder controls.
+Implemented local features below are exposed only when functional. Hosted items,
+and official-connector items other than YouTube, remain documentation and tested
+internal contracts; they are not exposed as placeholder controls.
 
 ### Phase 2 — Brand and composition (implemented)
 
@@ -282,7 +285,7 @@ they are not exposed as placeholder controls.
   The operation never changes provider on failure, saves the project once, and
   keeps every generated segment in draft until individual playback and review.
 
-### Phase 5 — Official publishing (local foundation implemented)
+### Phase 5 — Official publishing (YouTube live; other platforms local-only)
 
 - **Problem/scope:** approved social copy, OAuth connections, drafts, immediate
   publish, calendar/scheduling, retry/cancel and bulk scheduling.
@@ -291,7 +294,8 @@ they are not exposed as placeholder controls.
 - **Data/migration:** encrypted refresh tokens, public health/status, idempotent
   schedule records and platform metadata.
 - **Privacy/security/providers/APIs:** official APIs only, least privilege,
-  hosted OAuth callback, state/HMAC, token rotation, rate limits and audit.
+  OAuth callback (hosted where the platform requires one; YouTube uses loopback),
+  state/HMAC, token rotation, rate limits and audit.
 - **Failures/tests/acceptance:** DST/time-zone tests, duplicate prevention,
   revocation, normalized provider failures, published URLs and human approval.
 - **Risks/dependencies:** platform review/policy changes and hosted backend;
@@ -305,9 +309,10 @@ they are not exposed as placeholder controls.
   are idempotent and rejected after approval. Manual approval freezes a
   hash-verified snapshot and deterministic per-destination idempotency keys. The
   approved package exports as path-free JSON; cancellation is idempotent and
-  never deletes rendered or exported media. Official OAuth, remote scheduling,
-  retries, revocation and published URLs remain blocked on approved connectors
-  and a hosted callback backend.
+  never deletes rendered or exported media. Official OAuth, dispatch, retries,
+  revocation and published ids are implemented for YouTube. Remote scheduling and
+  unattended delivery remain unimplemented, and the other platforms remain blocked
+  on approved connectors.
 
 ### Phase 6 — Analytics (local foundation implemented)
 

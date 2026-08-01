@@ -25,6 +25,7 @@ class MediaUtilityRunner {
       env: this.environment
     });
     let terminal = false;
+    let canceled = false;
     let forceTimer = null;
     let resolveResult;
     let rejectResult;
@@ -52,17 +53,28 @@ class MediaUtilityRunner {
     child.on("error", () => {
       if (terminal) return;
       terminal = true;
+      // stop() as well, so a cancel already in its grace period does not leave
+      // a timer running against a child that is never coming back.
+      stop();
       rejectResult(new AppError("MEDIA_WORKER_FAILED", "The isolated local media worker could not be started."));
     });
     child.on("exit", () => {
       if (terminal) return;
       terminal = true;
+      if (canceled) {
+        // We killed it, because it did not acknowledge the cancel in time.
+        // Reporting that as an interrupted worker turned the user's own action
+        // into "Media job needs attention" with a crash message attached.
+        resolveResult({ type: "canceled" });
+        return;
+      }
       rejectResult(new AppError("MEDIA_WORKER_INTERRUPTED", "The isolated local media worker stopped unexpectedly."));
     });
     return {
       result,
       cancel() {
         if (terminal) return;
+        canceled = true;
         child.postMessage({ type: "cancel" });
         forceTimer = setTimeout(() => {
           if (!terminal) child.kill();

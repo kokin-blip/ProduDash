@@ -1,5 +1,5 @@
 import { escapeHtml, formatDate, statusLabel } from "../format.js";
-import { asArray, credentialStored, isPending, providerCredentialsStored, ui } from "../state.js";
+import { asArray, credentialStored, isPending, livePlatforms, plannedPlatforms, providerCredentialsStored, ui } from "../state.js";
 import { renderCompliancePanel, renderStatusBadge } from "./shared.js";
 
 const WORKLOADS = [
@@ -19,7 +19,7 @@ export function renderIntegrations() {
         </div>
         <span class="security-note">Protected by OS encryption</span>
       </div>
-      <div class="connection-stack">${renderShopifyConnection()}</div>
+      <div class="connection-stack">${livePlatforms().map(renderConnection).join("")}</div>
       ${renderAiProviders()}
       ${renderLocalVoiceOptions()}
       ${renderWorkloads()}
@@ -88,21 +88,91 @@ function renderLocalVoiceOptions() {
   `;
 }
 
-function renderShopifyConnection() {
-  const integrationId = "shopify";
-  const setting = ui.appState.credentialSettings.find((item) => item.id === integrationId);
-  const integration = ui.appState.integrations.find((item) => item.id === integrationId);
-  if (!setting) return "";
-  const pending = isPending(`credentials-${integrationId}`) || isPending(`refresh-${integrationId}`);
+// What each connection state means for the person looking at it. Every state
+// deriveConnectionState can return is covered, so none renders as a bare slug.
+// Label, help text, and badge tone for each connection state. The tone lives
+// here rather than being inferred from the slug so that adding a state without
+// deciding how it should read is not possible: every state below is a distinct
+// situation, and rendering them all in the same neutral grey told users nothing.
+const CONNECTION_STATE_COPY = {
+  unavailable: ["Unavailable", "ProduDash has no connector for this platform yet.", "neutral"],
+  requires_configuration: ["Configuration required", "Enter your own provider application details to begin.", "neutral"],
+  credentials_stored_unverified: ["Stored, not verified", "Configuration is saved. Test the connection to verify it.", "warning"],
+  authorization_required: ["Authorization required", "Configuration is saved. Authorize in your browser to continue.", "warning"],
+  // Only reached when there is no refresh token left, so this really does mean
+  // the grant is finished and a browser flow is the way back.
+  token_expired: ["Access expired", "The stored access token expired. Reauthorize to continue.", "danger"],
+  missing_scope: ["Missing permission", "The authorization is missing a permission ProduDash needs.", "danger"],
+  provider_approval_required: ["Provider review required", "Your provider application still needs review or an audit.", "warning"],
+  connected: ["Connected", "Verified against the provider.", "success"],
+  degraded: ["Partly connected", "Some provider data could not be refreshed. The details are below.", "warning"],
+  disconnected: ["Disconnected", "Previously verified. Test the connection to reconnect.", "neutral"],
+  error: ["Needs attention", "The last connection attempt failed.", "danger"]
+};
+
+function renderActionButton(entry, actionId, { pending, className = "ghost-button small", attribute, pendingLabel }) {
+  const action = entry.actions.find((item) => item.id === actionId);
+  if (!action) return "";
+  const disabled = pending || !action.available;
+  return `<button class="${className}" type="button" ${attribute}="${escapeHtml(entry.id)}" data-pending-label="${escapeHtml(
+    pendingLabel
+  )}" ${disabled ? "disabled" : ""} ${
+    // A disabled control always says why, rather than being inertly greyed out.
+    action.available ? "" : `title="${escapeHtml(action.reason || "")}" data-disabled-reason="${escapeHtml(action.reason || "")}"`
+  }>${escapeHtml(action.label)}</button>`;
+}
+
+function renderScopeDisclosure(entry) {
+  if (!entry.requiredScopes.length) return "";
   return `
-    <form class="panel connection-section" data-credentials-form="${integrationId}" aria-busy="${pending}">
+    <details class="disclosure scope-disclosure" data-scope-disclosure="${escapeHtml(entry.id)}">
+      <summary><span><strong>Required permissions</strong><small>${entry.requiredScopes.length} scope${
+        entry.requiredScopes.length === 1 ? "" : "s"
+      }</small></span><span class="disclosure-icon" aria-hidden="true">+</span></summary>
+      <div class="disclosure-content">
+        <ul class="scope-list">
+          ${entry.requiredScopes
+            .map((scope) => {
+              const missing = entry.missingScopes.includes(scope);
+              return `<li>${escapeHtml(scope)}${missing ? " <strong>· not granted</strong>" : ""}</li>`;
+            })
+            .join("")}
+        </ul>
+        ${
+          entry.reviewRequirement
+            ? `<div class="inline-message neutral"><strong>Provider requirement</strong><span>${escapeHtml(entry.reviewRequirement)}</span></div>`
+            : ""
+        }
+        <a class="text-button" href="${escapeHtml(entry.docsUrl)}" target="_blank" rel="noreferrer noopener">Provider setup documentation</a>
+      </div>
+    </details>
+  `;
+}
+
+function renderConnection(entry) {
+  const setting = ui.appState.credentialSettings.find((item) => item.id === entry.id);
+  const integration = ui.appState.integrations.find((item) => item.id === entry.id);
+  if (!setting) return "";
+  const pending =
+    isPending(`credentials-${entry.id}`) ||
+    isPending(`refresh-${entry.id}`) ||
+    isPending(`authorize-${entry.id}`) ||
+    isPending(`disconnect-${entry.id}`) ||
+    isPending(`remove-${entry.id}`);
+  const [stateLabel, stateHelp, stateTone] = CONNECTION_STATE_COPY[entry.connectionState] || ["Unknown", "", "neutral"];
+
+  return `
+    <form class="panel connection-section" data-credentials-form="${escapeHtml(entry.id)}" data-connection-state="${escapeHtml(
+      entry.connectionState
+    )}" aria-busy="${pending}">
       <div class="connection-heading">
         <div>
           <div class="connection-title">
             <h2>${escapeHtml(setting.name)}</h2>
-            ${renderStatusBadge(integration?.status || "disconnected", undefined, `integration-${integrationId}`)}
+            ${renderStatusBadge(entry.connectionState, stateLabel, `integration-${entry.id}`, stateTone)}
           </div>
-          <p>${escapeHtml(setting.note)}</p>
+          <p>${escapeHtml(stateHelp)}</p>
+          <p>${escapeHtml(entry.credentialNote || setting.note)}</p>
         </div>
         <small>${escapeHtml(integration?.lastSync || "Never validated")}</small>
       </div>
@@ -111,31 +181,58 @@ function renderShopifyConnection() {
           ? `<div class="inline-message error"><strong>Connection needs attention</strong><span>${escapeHtml(integration.error)}</span></div>`
           : ""
       }
+      ${
+        entry.selectedAccount
+          ? `<div class="inline-message neutral" data-selected-account="${escapeHtml(entry.id)}"><strong>Authorized account</strong><span>${escapeHtml(
+              entry.selectedAccount.name || entry.selectedAccount.id
+            )}</span></div>`
+          : ""
+      }
+      ${
+        entry.missingScopes.length
+          ? `<div class="inline-message error"><strong>Missing permission</strong><span>${escapeHtml(
+              `Reauthorize to grant: ${entry.missingScopes.join(", ")}`
+            )}</span></div>`
+          : ""
+      }
       <fieldset class="credential-fields" ${pending ? "disabled" : ""}>
         ${setting.fields.map((field) => renderCredentialField(field, setting.configuredFields, setting.publicValues)).join("")}
       </fieldset>
+      ${renderScopeDisclosure(entry)}
       <div class="connection-actions">
         <span>${
           setting.updatedAt
             ? `Updated ${escapeHtml(formatDate(setting.updatedAt))}`
-            : credentialStored(integrationId)
-              ? "Credentials stored securely"
-              : "No credentials stored"
+            : credentialStored(entry.id)
+              ? "Configuration stored securely"
+              : "No configuration stored"
         }</span>
         <div>
+          ${renderActionButton(entry, "remove", {
+            pending,
+            className: "text-button",
+            attribute: "data-remove-credentials",
+            pendingLabel: "Removing…"
+          })}
+          ${renderActionButton(entry, "disconnect", {
+            pending,
+            attribute: "data-disconnect-integration",
+            pendingLabel: "Disconnecting…"
+          })}
+          ${renderActionButton(entry, "test", { pending, attribute: "data-refresh-integration", pendingLabel: "Testing…" })}
           ${
-            credentialStored(integrationId)
-              ? `<button class="text-button" type="button" data-remove-credentials="${integrationId}" data-pending-label="Removing…" ${
-                  pending ? "disabled" : ""
-                }>Remove</button>
-                 <button class="ghost-button small" type="button" data-refresh-integration="${integrationId}" data-pending-label="Refreshing…" ${
-                   pending ? "disabled" : ""
-                 }>Refresh</button>`
+            entry.requiresAuthorizationFlow
+              ? renderActionButton(entry, "connect", {
+                  pending,
+                  className: "primary-button small",
+                  attribute: "data-authorize-integration",
+                  pendingLabel: "Authorizing…"
+                })
               : ""
           }
-          <button class="primary-button small" type="submit" data-pending-label="Validating…" ${
+          <button class="${entry.requiresAuthorizationFlow ? "ghost-button small" : "primary-button small"}" type="submit" data-pending-label="Saving…" ${
             pending ? "disabled" : ""
-          }>Save and validate</button>
+          }>Save configuration</button>
         </div>
       </div>
     </form>
@@ -310,8 +407,11 @@ function renderWorkload(workload) {
   `;
 }
 
+// Platforms with no connector behind them. Driven by the registry capability,
+// not by excluding one id, so a platform moves sections the moment its
+// connector lands.
 function renderPlannedConnections() {
-  const settings = ui.appState.credentialSettings.filter((setting) => setting.id !== "shopify");
+  const settings = plannedPlatforms();
   return `
     <section class="section-block" aria-labelledby="plannedConnectionsTitle">
       <div class="section-heading">
@@ -323,11 +423,13 @@ function renderPlannedConnections() {
       </div>
       <div class="planned-list">
         ${settings
-          .map((setting) => {
-            const integration = ui.appState.integrations.find((item) => item.id === setting.id);
+          .map((entry) => {
+            const integration = ui.appState.integrations.find((item) => item.id === entry.id);
             return `
-              <div class="planned-row">
-                <div><strong>${escapeHtml(setting.name)}</strong><span>${escapeHtml(integration?.detail || setting.note)}</span></div>
+              <div class="planned-row" data-planned-platform="${escapeHtml(entry.id)}">
+                <div><strong>${escapeHtml(entry.displayName)}</strong><span>${escapeHtml(
+                  integration?.detail || entry.credentialNote || ""
+                )}</span></div>
                 <div><small>Unavailable</small></div>
               </div>
             `;

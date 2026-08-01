@@ -73,14 +73,23 @@ class CredentialVault {
 
   async writeEncrypted(credentials) {
     const encrypted = await this.encryption.encrypt(JSON.stringify(credentials));
-    writeJsonAtomic(
-      this.filePath,
-      {
-        version: 1,
-        ciphertext: encrypted.toString("base64")
-      },
-      { mode: 0o600 }
-    );
+    const record = { version: 1, ciphertext: encrypted.toString("base64") };
+    // Written twice, deliberately. writeJsonAtomic copies the existing file to
+    // `.bak` before replacing it, so one write leaves the *previous* secrets
+    // sitting in the backup: revoking a grant or rotating a key would clean the
+    // vault while the old value stayed readable on disk. The second write makes
+    // the backup a copy of the new contents, which is what actually removes it.
+    //
+    // This lives here rather than at the call sites because it used to: remove()
+    // scrubbed, replace() scrubbed only when it emptied an entry, and save()
+    // never did -- so the disconnect path silently kept revoked tokens. One
+    // write path means that cannot drift apart again.
+    //
+    // The cost is a second write of a small file. Recovery is unaffected: a
+    // crash between the two writes leaves the previous contents in `.bak`, and
+    // after both it holds a valid copy of the current ones.
+    writeJsonAtomic(this.filePath, record, { mode: 0o600 });
+    writeJsonAtomic(this.filePath, record, { mode: 0o600 });
   }
 
   async migrateLegacy() {
@@ -90,7 +99,36 @@ class CredentialVault {
       legacy = readJson(this.legacyPath);
       if (!legacy || typeof legacy !== "object" || Array.isArray(legacy)) throw new Error("Invalid legacy credentials");
     } catch (error) {
-      throw new AppError("LEGACY_CREDENTIALS_INVALID", "Legacy credentials could not be migrated safely.", { cause: error });
+      // Only a file we can read and cannot understand is set aside.
+      //
+      // preserveFile *renames*, and migrateLegacy returns early once the path is
+      // gone, so it never looks again. Treating an environmental read failure as
+      // corruption would therefore discard someone's credentials permanently
+      // because a virus scanner or backup agent happened to hold the plaintext
+      // file open for a moment. Filesystem errors carry a code; a JSON or shape
+      // failure does not.
+      if (error?.code) {
+        this.notices.push({
+          code: "LEGACY_CREDENTIALS_UNAVAILABLE",
+          message: "Saved credentials from an older version could not be read this time. ProduDash will try again next launch."
+        });
+        return;
+      }
+      // Set aside rather than thrown on. Throwing reached main.cjs, which shows
+      // a fatal dialog and quits -- and the file was left in place, so the next
+      // launch failed identically. The app became permanently unlaunchable, with
+      // no way to reach the UI and clear it.
+      //
+      // The file is kept, not deleted: it is the user's only copy of those
+      // credentials, and it is plaintext, so clearAll() removes its preserved
+      // copies too. They are told rather than left to guess why the app is
+      // suddenly asking for credentials again.
+      preserveFile(this.legacyPath, "recovery");
+      this.notices.push({
+        code: "LEGACY_CREDENTIALS_UNREADABLE",
+        message: "Saved credentials from an older version could not be read. Enter them again to reconnect."
+      });
+      return;
     }
     await this.writeEncrypted(legacy);
     const descriptor = fs.openSync(this.legacyPath, "r+");
@@ -113,6 +151,12 @@ class CredentialVault {
     return Object.keys(this.cache[integrationId] || {});
   }
 
+  // The vault's own top-level slots, for callers that store records under a
+  // key convention rather than an integration id and need to find them again.
+  entryIds() {
+    return Object.keys(this.cache);
+  }
+
   async save(integrationId, values) {
     this.cache[integrationId] = { ...(this.cache[integrationId] || {}), ...values };
     await this.writeEncrypted(this.cache);
@@ -122,18 +166,15 @@ class CredentialVault {
     if (Object.keys(values).length) this.cache[integrationId] = { ...values };
     else delete this.cache[integrationId];
     await this.writeEncrypted(this.cache);
-    if (!Object.keys(values).length) await this.writeEncrypted(this.cache);
   }
 
   async remove(integrationId) {
     delete this.cache[integrationId];
     await this.writeEncrypted(this.cache);
-    await this.writeEncrypted(this.cache);
   }
 
   async removeMany(integrationIds) {
     for (const integrationId of integrationIds) delete this.cache[integrationId];
-    await this.writeEncrypted(this.cache);
     await this.writeEncrypted(this.cache);
   }
 
@@ -144,12 +185,17 @@ class CredentialVault {
     const encryptedName = path.basename(this.filePath);
     const legacyName = path.basename(this.legacyPath);
     for (const entry of fs.readdirSync(directory)) {
-      if (
-        entry === encryptedName ||
-        entry === `${encryptedName}.bak` ||
-        entry.startsWith(`${encryptedName}.recovery-`) ||
-        entry === legacyName
-      ) {
+      // Every sidecar of the vault file, whatever the suffix -- `.bak`, a
+      // `.recovery-<stamp>` copy, and `.bak.recovery-<stamp>`, which recovery
+      // creates when the *backup* is the unreadable one.
+      //
+      // This used to enumerate exact suffixes and missed that last shape, so a
+      // vault that had ever been through recovery kept a copy of the user's
+      // credentials after they asked for everything to be deleted. Failing to
+      // decode is not the same as being damaged: a reinstalled OS or a changed
+      // keychain leaves the ciphertext intact and readable elsewhere. Matching
+      // the prefix means a new sidecar name cannot reintroduce this.
+      if (entry === legacyName || entry === encryptedName || entry.startsWith(`${encryptedName}.`) || entry.startsWith(`${legacyName}.`)) {
         fs.unlinkSync(path.join(directory, entry));
       }
     }

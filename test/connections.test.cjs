@@ -1,6 +1,8 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { ConnectionService } = require("../electron/connections.cjs");
+const { createConnectorRegistry } = require("../electron/connectors.cjs");
+const { ShopifyConnector } = require("../electron/connectors/shopify.cjs");
 const { ProviderRegistry } = require("../electron/ai/provider-registry.cjs");
 const { ProviderService } = require("../electron/ai/provider-service.cjs");
 const { createHarness } = require("./helpers.cjs");
@@ -57,7 +59,10 @@ test("Shopify refresh creates and then updates one business record", async (t) =
       };
     }
   };
-  const service = new ConnectionService({ store: harness.store, shopify, providerService: {} });
+  // Drive the real connector with an injected client so the contract and result
+  // normalization are exercised rather than bypassed.
+  const connectorRegistry = createConnectorRegistry({ shopifyConnector: new ShopifyConnector({ client: shopify }) });
+  const service = new ConnectionService({ store: harness.store, connectorRegistry, providerService: {} });
   await service.refreshIntegration("shopify");
   const state = await service.refreshIntegration("shopify");
   assert.equal(state.businesses.length, 1);
@@ -94,4 +99,30 @@ test("provider failures persist a safe error state", async (t) => {
   const profile = harness.store.getAppState().aiProviders.find((item) => item.id === "gemini");
   assert.equal(profile.status, "error");
   assert.equal(profile.error.includes("AIza-never-show"), false);
+});
+
+test("reading a token expiry does not clone the whole store", async (t) => {
+  const harness = await createHarness();
+  t.after(harness.cleanup);
+  await harness.store.saveIntegrationCredentials("youtube", { clientId: "client-1", clientSecret: "secret-1" });
+  await harness.store.saveIntegrationAuthorization("youtube", {
+    accessToken: "ya29.token",
+    refreshToken: "1//refresh",
+    tokenExpiresAt: "2030-01-01T00:00:00.000Z"
+  });
+
+  const service = new ConnectionService({ store: harness.store, connectorRegistry: createConnectorRegistry({}), providerService: {} });
+  // getAppState deep-clones every plan, media job, and conversation. It is on
+  // the path of every connector call through credentialsFor, so reaching for it
+  // to read one timestamp made each token fetch clone the entire application.
+  let clones = 0;
+  const real = harness.store.getAppState.bind(harness.store);
+  harness.store.getAppState = (...args) => {
+    clones += 1;
+    return real(...args);
+  };
+
+  const credentials = service.credentialsFor("youtube");
+  assert.equal(credentials.tokenExpiresAt, "2030-01-01T00:00:00.000Z", "the value still has to be correct");
+  assert.equal(clones, 0, "credentialsFor must not clone the store to read a timestamp");
 });

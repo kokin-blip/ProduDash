@@ -10,7 +10,7 @@ The repository is configured for the private `0.1.0-alpha.1` desktop prerelease:
 - a Windows x64 assisted, per-user installer;
 - permanent application ID `com.kokinblip.produdash`;
 - the existing PD mark as the temporary prerelease application icon; and
-- no automatic updates, public publishing, or GitHub Release creation.
+- no automatic updates, no publicly distributed builds, and no GitHub Release creation.
 
 ProduDash packages only owner-approved, checksummed FFmpeg and ffprobe builds from the private Git LFS intake. The current npm static binaries remain development/test tools and are excluded from installers. `npm run check:distribution` intentionally blocks packaging until every native target has its approved binaries, provenance, approval reference, SHA-256 values, and license notice.
 
@@ -41,17 +41,21 @@ See [the internal prerelease guide](docs/prerelease.md) for artifact names, inst
 - A local single-source editor with source/edited preview, SRT/VTT import and transcript corrections, waveform and scene overlays, ordered video/transcript/marker tracks, trim/extend/split/ripple/duplicate/reorder operations, snapping, frame stepping, comments, 100-step undo/redo, and approved multi-segment rendering.
 - Recoverable local brand templates with immutable version snapshots, portable asset packages, project export/import, render-plan v2, branded caption colors/scaling, aspect/layout presets, per-cut fades, timed text/CTA overlays, and validated local logo, music, intro, and outro tracks rendered through FFmpeg.
 - A separate atomic brand-asset library copies supported files into ProduDash-managed storage, serves opaque previews, validates media with FFprobe, and snapshots exact assets into every human-approved render job.
-- A local publishing outbox that attaches completed renders, supports destination-specific copy and time-zone-aware planning changes before approval, summarizes upcoming and past local targets, freezes hash-verified human approval snapshots, exports path-free JSON handoffs, and states clearly that no external publishing occurs.
+- A local publishing outbox that attaches completed renders, supports destination-specific copy and time-zone-aware planning changes before approval, summarizes upcoming and past local targets, freezes hash-verified human approval snapshots, and exports path-free JSON handoffs.
+- YouTube publishing through the official Data API, using an OAuth client you supply: authorization over a loopback redirect with PKCE and no hosted callback, refresh handled automatically through one path, and a required per-destination audience declaration and visibility choice that ProduDash will not answer for you.
+- Uploads that survive interruption. The resumable session is recorded before any bytes leave, so a crash is reconciled with YouTube rather than restarted, and an attempt whose outcome cannot be established is refused and surfaced rather than retried into a duplicate.
+- Publication receipts carrying only the provider's own publication id, a safe error code, and honest retryability, with idempotency keys derived from the approved content hash so a repeated click or a restart mid-dispatch cannot double-post.
 - A derived Shopify analytics report with explicit metric definitions, source freshness, snapshot limitations, 7/30/60-day bounded comparisons, non-causal observations, unavailable profit/conversion/social states, and a PII-free local CSV export.
 
 ## What is not implemented
 
 - Social inbox imports or external message sending.
 - Automatic order creation, payments, refunds, discounts, or fulfillment.
-- TikTok, Instagram, Facebook, YouTube, or Stripe API connectors.
-- External publishing or any unapproved media upload.
+- TikTok, Instagram, Facebook, or Stripe API connectors. Instagram's two authorization routes are modelled but no connector exists, so it can be planned for and exported, never published to.
+- Any unapproved media upload. Publishing happens only for a destination whose approval snapshot a human froze.
+- Scheduled or unattended publishing. A planned time is a local reminder; nothing uploads without someone pressing Publish.
 - Social analytics or Shopify profit/conversion figures without official reporting, cost, and traffic inputs.
-- Hosted accounts, cross-device synchronization, OAuth callbacks, webhooks, or token refresh.
+- Hosted accounts, cross-device synchronization, webhooks, or a hosted OAuth callback. YouTube authorizes over a loopback redirect and needs no hosted service; Facebook and Stripe would.
 - Publicly distributed installers, automatic updates, or production release publishing. Internal installer configuration exists but remains blocked by the approved-media gate.
 - General multi-source editing, speed/freeze effects, advanced audio mixing, animated overlays, model-generated embeddings, and hosted collaboration.
 
@@ -87,6 +91,25 @@ ProduDash fetches shop identity first, then products and orders through the offi
 Credential presence is not connection success. The UI reports `connected`, `degraded`, or `error` only after a real provider request.
 
 Public distribution must replace manual custom-app tokens with a hosted OAuth flow, HMAC verification, least-privilege scopes, webhook verification, and token lifecycle management.
+
+## Connect YouTube
+
+Publishing uses a Google Cloud OAuth client that you own. ProduDash ships no client credentials.
+
+1. In the Google Cloud console, create a project and enable the **YouTube Data API v3**.
+2. Create an OAuth client of type **Desktop app**. ProduDash listens on a loopback redirect, so no hosted callback URL is required and none should be configured.
+3. Configure the consent screen and add yourself as a test user while the project is unverified.
+4. Open **Integrations** in ProduDash, enter the client ID (and the client secret if your client type issues one), and save.
+5. Choose **Authorize**. A browser window opens for Google's consent screen; the grant returns to ProduDash over the loopback listener.
+
+The scopes requested are `youtube.upload` and `youtube.readonly`, and nothing is uploaded until a human approves a plan for the official API path.
+
+Two limits are worth knowing before you rely on this:
+
+- **An unaudited API project has its uploads locked to private by Google**, whatever visibility you choose. ProduDash reports back what YouTube actually applied rather than what was requested, so the receipt will disagree with your choice until the project passes a compliance audit.
+- **Every destination needs an explicit audience declaration.** "Made for kids" is a legal statement by the uploader, so ProduDash refuses to guess it and will not approve a plan until it is answered.
+
+`node scripts/acceptance/youtube.cjs --video ./tiny.mp4` exercises the connector against Google rather than a mock, using `PRODUDASH_YT_CLIENT_ID` or `scripts/acceptance/youtube.local.json`. It uploads a real private video to your channel and does not delete it. It is deliberately excluded from `npm test` and from CI.
 
 ## Configure AI providers
 
@@ -319,7 +342,7 @@ Requirements:
 - npm 10+
 
 ```bash
-cd /Users/kokinmartinez/ProduDash
+cd path/to/produdash
 npm ci
 npm run app
 ```
@@ -339,7 +362,7 @@ npm audit --omit=dev
 npm run check:distribution
 ```
 
-`npm run validate` runs syntax, executable media-tool checks, lint, formatting, unit/integration/renderer tests, real tiny bundled-binary analysis/render tests, and the Electron smoke test. Provider tests use injected clients and encryption fakes; they never require or contact live Shopify, Gemini, OpenAI, Anthropic, or custom endpoints. Live-provider acceptance therefore requires owner-supplied credentials and an explicit media-consent test outside automation.
+`npm run validate` runs syntax, executable media-tool checks, lint, formatting, unit/integration/renderer tests, real tiny bundled-binary analysis/render tests, and the Electron smoke test. Provider tests use injected clients and encryption fakes; they never require or contact live Shopify, Gemini, OpenAI, Anthropic, Google, or custom endpoints. **Every automated test therefore runs against a mock**, including the YouTube connector: nothing in `npm run validate` proves the app can authorize with Google or upload a byte. Live-provider acceptance requires owner-supplied credentials and an explicit media-consent test outside automation — for YouTube that is `scripts/acceptance/youtube.cjs`, described under [Connect YouTube](#connect-youtube).
 
 CI repeats media and Electron validation across Ubuntu, macOS, and Windows. A separate manual prerelease workflow builds natively on macOS arm64, macOS x64, and Windows x64, then checks package contents, launches unpacked and installed artifacts, verifies signing when requested, and produces SHA-256 checksums, a CycloneDX SBOM, and path-free build metadata. It never creates a public release.
 
@@ -356,7 +379,7 @@ Internal installer configuration is implemented. A public production release sti
 - Windows code signing credentials and owner verification of SmartScreen behavior.
 - Linux packaging targets and secure-secret-provider documentation.
 - An updater design and signed update metadata.
-- A hosted backend for OAuth callbacks, app-owned secrets, webhooks, and optional cross-device synchronization.
+- A hosted backend for the OAuth callbacks that need one, app-owned secrets, webhooks, and optional cross-device synchronization. YouTube authorizes over a loopback redirect and needs none; Facebook and Stripe do.
 
 Relevant primary documentation:
 

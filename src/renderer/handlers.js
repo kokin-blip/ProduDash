@@ -986,6 +986,58 @@ async function handleClick(event) {
     return;
   }
 
+  const refreshPublicationButton = event.target.closest("[data-refresh-publication]");
+  if (refreshPublicationButton) {
+    // Keyed by destination as well as plan: both controls render once per
+    // destination, so a plan-only key made the second one a silent no-op --
+    // no request, no error, no spinner.
+    await runAction(
+      `refresh-publication-${refreshPublicationButton.dataset.refreshPublication}-${refreshPublicationButton.dataset.refreshPlatform}`,
+      refreshPublicationButton,
+      () =>
+        api.refreshPublicationStatus(refreshPublicationButton.dataset.refreshPublication, refreshPublicationButton.dataset.refreshPlatform)
+    );
+    return;
+  }
+
+  const discardSessionButton = event.target.closest("[data-discard-session]");
+  if (discardSessionButton) {
+    // The provider already said it cannot tell whether that upload published
+    // anything. Discarding on the user's word is the only way forward, so the
+    // confirmation has to state plainly what they are vouching for.
+    if (
+      !window.confirm(
+        "Only discard this if you have checked the destination and no post from this plan appeared. Discarding lets ProduDash upload again, which would duplicate it if one did."
+      )
+    ) {
+      return;
+    }
+    await runAction(
+      `discard-session-${discardSessionButton.dataset.discardSession}-${discardSessionButton.dataset.discardPlatform}`,
+      discardSessionButton,
+      () => api.discardUploadSession(discardSessionButton.dataset.discardSession, discardSessionButton.dataset.discardPlatform)
+    );
+    return;
+  }
+
+  const dispatchPostButton = event.target.closest("[data-dispatch-post]");
+  if (dispatchPostButton) {
+    // Publishing sends media to a real account, so it needs its own explicit
+    // confirmation even though the plan was already approved.
+    if (
+      !window.confirm("Publish this approved plan to every connected destination? This uploads the rendered video to your own account.")
+    ) {
+      return;
+    }
+    await runAction(
+      `dispatch-post-${dispatchPostButton.dataset.dispatchPost}`,
+      dispatchPostButton,
+      () => api.dispatchPostPlan(dispatchPostButton.dataset.dispatchPost),
+      { celebrate: true }
+    );
+    return;
+  }
+
   const cancelPostButton = event.target.closest("[data-cancel-post]");
   if (cancelPostButton) {
     if (!window.confirm("Cancel this local post plan? Rendered media and exported files will not be deleted.")) return;
@@ -1004,10 +1056,44 @@ async function handleClick(event) {
     return;
   }
 
+  const authorizeIntegrationButton = event.target.closest("[data-authorize-integration]");
+  if (authorizeIntegrationButton) {
+    const integrationId = authorizeIntegrationButton.dataset.authorizeIntegration;
+    // Authorization opens the system browser and then waits for the callback,
+    // so it can take as long as the person takes. runAction already blocks a
+    // second click on the same key while it is in flight.
+    await runAction(`authorize-${integrationId}`, authorizeIntegrationButton, () => api.authorizeIntegration(integrationId), {
+      refreshOnError: true
+    });
+    return;
+  }
+
+  const disconnectIntegrationButton = event.target.closest("[data-disconnect-integration]");
+  if (disconnectIntegrationButton) {
+    const integrationId = disconnectIntegrationButton.dataset.disconnectIntegration;
+    if (
+      !window.confirm(
+        "Disconnect this authorization? ProduDash revokes its access at the provider. Your saved application configuration is kept so you can reauthorize."
+      )
+    ) {
+      return;
+    }
+    await runAction(`disconnect-${integrationId}`, disconnectIntegrationButton, () => api.disconnectIntegration(integrationId), {
+      refreshOnError: true
+    });
+    return;
+  }
+
   const removeCredentialsButton = event.target.closest("[data-remove-credentials]");
   if (removeCredentialsButton) {
     const integrationId = removeCredentialsButton.dataset.removeCredentials;
-    if (!window.confirm("Remove these credentials? Imported snapshots will remain but will be marked disconnected.")) return;
+    if (
+      !window.confirm(
+        "Remove all configuration and authorization for this platform? Imported snapshots remain but will be marked disconnected."
+      )
+    ) {
+      return;
+    }
     await runAction(`remove-${integrationId}`, removeCredentialsButton, () => api.removeIntegrationCredentials(integrationId));
     return;
   }
@@ -2177,11 +2263,24 @@ async function handleSubmit(event) {
     event.preventDefault();
     const submitter = event.submitter;
     const scheduleValue = form.elements.scheduledFor.value;
-    const packages = [...form.querySelectorAll(".post-package-editor")].map((editor) => ({
-      platformId: editor.elements.platformId.value,
-      title: editor.elements.platformTitle.value,
-      caption: editor.elements.platformCaption.value
-    }));
+    const packages = [...form.querySelectorAll(".post-package-editor")].map((editor) => {
+      // Provider-required choices are namespaced so they survive alongside the
+      // copy fields without the handler knowing which platform declared them.
+      const options = {};
+      for (const select of editor.querySelectorAll('select[name^="option:"]')) {
+        const key = select.name.slice("option:".length);
+        // An untouched required choice stays unset rather than becoming a value
+        // ProduDash picked; approval refuses the plan until it is made.
+        if (select.value === "") continue;
+        options[key] = select.value;
+      }
+      return {
+        platformId: editor.elements.platformId.value,
+        title: editor.elements.platformTitle.value,
+        caption: editor.elements.platformCaption.value,
+        options: Object.keys(options).length ? options : undefined
+      };
+    });
     await runAction(
       `update-post-${form.dataset.postDraftForm}`,
       submitter,

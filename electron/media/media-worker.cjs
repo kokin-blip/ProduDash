@@ -171,6 +171,34 @@ async function inspectSource(sourcePath, ffprobePath, context) {
   };
 }
 
+// Checks a clip ProduDash just produced, which is a different question from
+// whether a source is worth clipping.
+//
+// This used to call inspectSource, whose rule is that anything under
+// MIN_CLIP_DURATION is unusable. Keyframe alignment routinely costs a few
+// hundredths of a second, so a clip requested at exactly the minimum could land
+// just under it -- and the job then failed with SOURCE_TOO_SHORT, blaming a
+// source that was perfectly fine, and refusing the retry that would have
+// worked. What matters here is only that a real, playable video came out.
+async function inspectRenderedClip(clipPath, ffprobePath, context) {
+  const result = await runTool(ffprobePath, ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", clipPath], context, {
+    errorCode: "RENDER_OUTPUT_UNREADABLE",
+    errorMessage: "The rendered clip could not be inspected."
+  });
+  let output;
+  try {
+    output = JSON.parse(result.stdout);
+  } catch {
+    throw new AppError("RENDER_OUTPUT_UNREADABLE", "FFprobe returned invalid metadata for the rendered clip.");
+  }
+  const video = (Array.isArray(output.streams) ? output.streams : []).find((stream) => stream.codec_type === "video");
+  const duration = Number(output.format?.duration ?? video?.duration);
+  if (!video || !Number.isFinite(duration) || duration <= 0) {
+    throw new AppError("RENDER_OUTPUT_EMPTY", "The rendered clip contains no playable video.");
+  }
+  return { duration };
+}
+
 function parseSilence(stderr) {
   const starts = [...String(stderr).matchAll(/silence_start:\s*([0-9.]+)/g)].map((match) => Number(match[1]));
   const ends = [...String(stderr).matchAll(/silence_end:\s*([0-9.]+)/g)].map((match) => Number(match[1]));
@@ -1010,8 +1038,18 @@ async function renderJob(job, context, binaries) {
   if (!fs.existsSync(metadataPath) || !fs.existsSync(analysisPath)) {
     throw new AppError("DURABLE_ARTIFACT_MISSING", "Validated analysis artifacts are missing. Retry analysis before rendering.");
   }
-  const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
-  const analysis = JSON.parse(fs.readFileSync(analysisPath, "utf8"));
+  // Guarded the way analyzeJob already guards its own cached read. A truncated
+  // file -- power loss mid-write, or a temp folder inside a directory the user
+  // can move -- otherwise threw a raw SyntaxError that surfaced as a generic
+  // retryable failure, and every retry hit the same read again.
+  let metadata;
+  let analysis;
+  try {
+    metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+    analysis = JSON.parse(fs.readFileSync(analysisPath, "utf8"));
+  } catch {
+    throw new AppError("DURABLE_ARTIFACT_MISSING", "Validated analysis artifacts are unreadable. Retry analysis before rendering.");
+  }
   const publicCandidates = Array.isArray(job.candidates) && job.candidates.length ? job.candidates : analysis.candidates;
   const selected = job.selectedCandidateIds.map((id) => publicCandidates.find((candidate) => candidate.id === id));
   if (selected.some((candidate) => !candidate)) {
@@ -1131,7 +1169,7 @@ async function renderJob(job, context, binaries) {
           metadata
         });
       }
-      await inspectSource(partialVideoPath, binaries.ffprobePath, context);
+      await inspectRenderedClip(partialVideoPath, binaries.ffprobePath, context);
       await fs.promises.rename(partialVideoPath, finalVideoPath);
     }
     recordArtifact({ kind: "video", name: path.basename(finalVideoPath), path: finalVideoPath });

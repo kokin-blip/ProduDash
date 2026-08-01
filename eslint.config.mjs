@@ -3,6 +3,7 @@ const nodeGlobals = {
   AbortController: "readonly",
   Buffer: "readonly",
   URL: "readonly",
+  URLSearchParams: "readonly",
   clearTimeout: "readonly",
   console: "readonly",
   fetch: "readonly",
@@ -56,7 +57,7 @@ export default [
     }
   },
   {
-    files: ["test/renderer.test.cjs", "smoke/**/*.cjs"],
+    files: ["test/renderer.test.cjs", "test/integrations-actions.test.cjs", "smoke/**/*.cjs"],
     languageOptions: {
       globals: browserGlobals
     }

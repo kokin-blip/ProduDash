@@ -65,8 +65,11 @@ jobs:
         include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       PRODUDASH_SIGNING_MODE: ${{ inputs.signing_mode }}
-      CSC_LINK: ${{ matrix.target == 'mac' && secrets.MAC_CSC_LINK || secrets.WIN_CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ matrix.target == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || secrets.WIN_CSC_KEY_PASSWORD }}
+      # Selected by target rather than with `a && b || c`: that idiom falls
+      # through to the third operand whenever the second is empty, so an unset
+      # Mac secret silently handed the Windows certificate to the macOS legs.
+      CSC_LINK: ${{ matrix.target == 'mac' && secrets.MAC_CSC_LINK || '' }}${{ matrix.target == 'win' && secrets.WIN_CSC_LINK || '' }}
+      CSC_KEY_PASSWORD: ${{ matrix.target == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || '' }}${{ matrix.target == 'win' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

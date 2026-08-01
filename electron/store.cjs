@@ -6,9 +6,21 @@ const { AppError } = require("./errors.cjs");
 const { clone, loadRecoverableState } = require("./state-schema.cjs");
 const { writeJsonAtomic } = require("./atomic-json.cjs");
 const { buildAnalyticsReport } = require("./analytics-report.cjs");
+const { findPlatform, getPlatform } = require("./platforms/registry.cjs");
+const { buildPlatformCatalog } = require("./platforms/catalog.cjs");
+const { DISPATCHABLE_STATUSES, POST_PLAN_STATUSES, assertTransition, canTransition } = require("./publishing/post-status.cjs");
+const { RECEIPT_STATUSES, isAlreadyPublished, normalizeReceipt } = require("./publishing/receipt.cjs");
 const {
+  CONNECTION_STATES,
+  TOKEN_VAULT_KEYS,
+  createAuthorizationRecord,
+  deriveConnectionState,
+  normalizeAuthorizationRecord
+} = require("./platforms/authorization.cjs");
+const {
+  assertPublishingOptionsComplete,
   boundedString,
-  normalizeShopifyDomain,
+  normalizePublicCredentialValue,
   requireId,
   requireKnownIntegration,
   validateClipPayload,
@@ -67,7 +79,9 @@ function publishingApprovalSnapshot(plan, mode, mediaSnapshot) {
   };
   const hash = crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
   return {
-    version: 1,
+    // v2 adds per-destination publishing options to the payload. v1 snapshots
+    // remain valid and are verified against their own shape.
+    version: 2,
     hash,
     mode,
     approvedAt,
@@ -102,6 +116,9 @@ class ProduDashStore {
     this.userDataPath = userDataPath;
     this.filePath = path.join(userDataPath, "produdash-state.json");
     this.credentialVault = options.credentialVault;
+    // Supplied by main.cjs from app.getVersion(). Derived, not persisted: it
+    // describes the running build, not the user's data.
+    this.appVersion = options.appVersion || null;
     const loaded = loadRecoverableState(this.filePath);
     this.state = loaded.state;
     this.notices = loaded.notices;
@@ -116,7 +133,20 @@ class ProduDashStore {
   }
 
   getAppState() {
-    return { ...clone(this.state), systemNotices: clone(this.notices) };
+    const state = clone(this.state);
+    return { ...state, systemNotices: clone(this.notices), platformCatalog: buildPlatformCatalog(state), appVersion: this.appVersion };
+  }
+
+  // The public token expiry, read without cloning the store.
+  //
+  // getAppState() deep-clones every plan, media job, and conversation, which is
+  // roughly two hundred times the cost of everything else it does. That is fine
+  // for rendering, but this value is needed on every connector call, so going
+  // through getAppState() for it made each token fetch clone the whole app.
+  // The value is a string, so returning it directly exposes nothing mutable.
+  getTokenExpiry(integrationId) {
+    const integration = this.state.integrations.find((item) => item.id === integrationId);
+    return integration?.authorization?.tokenExpiresAt || null;
   }
 
   getBusiness(businessId) {
@@ -163,10 +193,7 @@ class ProduDashStore {
         for (const field of setting.fields.filter((item) => !item.sensitive)) {
           if (!publicValues[field.key] && typeof vaultValues[field.key] === "string" && vaultValues[field.key]) {
             try {
-              publicValues[field.key] =
-                setting.id === "shopify" && field.key === "storeDomain"
-                  ? normalizeShopifyDomain(vaultValues[field.key])
-                  : vaultValues[field.key];
+              publicValues[field.key] = normalizePublicCredentialValue(setting.id, field.key, vaultValues[field.key]);
               publicMetadataMoved = true;
             } catch {
               continue;
@@ -187,6 +214,15 @@ class ProduDashStore {
         });
       }
       this.state.credentialSettings = settings;
+      // Token presence is derived from the vault, never stored twice. The
+      // record says only whether a token exists, not what it is.
+      for (const integration of this.state.integrations) {
+        const secretKeys = new Set(this.credentialVault.keys(integration.id));
+        const authorization = normalizeAuthorizationRecord(integration.authorization);
+        authorization.hasAccessToken = secretKeys.has(TOKEN_VAULT_KEYS.ACCESS);
+        authorization.hasRefreshToken = secretKeys.has(TOKEN_VAULT_KEYS.REFRESH);
+        integration.authorization = authorization;
+      }
       for (const profile of this.state.aiProviders) {
         const keys = this.credentialVault.keys(profile.id);
         profile.credentialStatus = keys.length ? "stored" : "missing";
@@ -199,7 +235,9 @@ class ProduDashStore {
 
   async saveIntegrationCredentials(integrationId, values) {
     requireKnownIntegration(integrationId);
-    if (integrationId !== "shopify") {
+    // Accepting credentials for a platform with no connector behind it would
+    // leave the user with secrets on disk that nothing can ever verify.
+    if (!getPlatform(integrationId).capabilities.hasLiveConnector) {
       throw new AppError("INTEGRATION_UNAVAILABLE", "This provider connector is planned and does not accept credentials yet.");
     }
     if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
@@ -216,13 +254,8 @@ class ProduDashStore {
         const submitted = values[field.key];
         if (submitted === undefined || submitted === "") continue;
         const value = boundedString(submitted, { label: field.label, min: 1, max: field.sensitive ? 4096 : 253 });
-        if (integrationId === "shopify" && field.key === "storeDomain") {
-          publicValues[field.key] = normalizeShopifyDomain(value);
-        } else if (field.sensitive) {
-          secrets[field.key] = value;
-        } else {
-          publicValues[field.key] = value;
-        }
+        if (field.sensitive) secrets[field.key] = value;
+        else publicValues[field.key] = normalizePublicCredentialValue(integrationId, field.key, value);
       }
 
       if (Object.keys(secrets).length) await this.credentialVault.save(integrationId, secrets);
@@ -453,12 +486,16 @@ class ProduDashStore {
       setting.configuredFields = [];
       setting.status = "missing";
       setting.updatedAt = new Date().toISOString();
+      const platform = getPlatform(integrationId);
       const integration = integrationById(this.state, integrationId);
-      integration.status = integration.id === "stripe" ? "planned" : "disconnected";
+      integration.status = platform.defaultStatus;
       integration.lastSync = "Not connected";
       integration.error = null;
-      if (integrationId === "shopify") {
-        for (const business of this.state.businesses.filter((item) => item.source === "shopify"))
+      // Removing credentials removes the tokens too, so nothing about the old
+      // authorization remains true.
+      integration.authorization = createAuthorizationRecord();
+      if (platform.capabilities.ownsBusinessRecords) {
+        for (const business of this.state.businesses.filter((item) => item.source === integrationId))
           business.connectionStatus = "disconnected";
       }
       this.audit("credentials", `Removed secure credentials for ${setting.name}; imported snapshots were retained.`);
@@ -517,23 +554,100 @@ class ProduDashStore {
       integration.lastSync = result.lastSync || new Date().toISOString();
       integration.error = result.error || null;
       if (result.detail) integration.detail = result.detail;
+      integration.authorization = this.stampVerification(integration, result.status);
       this.audit("connection", result.auditDetail || `${integration.name} connection updated to ${result.status}.`);
       this.persist();
       return this.getAppState();
     });
   }
 
-  async applyShopifySync(snapshot) {
+  // Records when a provider request last actually succeeded. Only a real
+  // connected or degraded result counts -- an error must not refresh it.
+  stampVerification(integration, status) {
+    const authorization = normalizeAuthorizationRecord(integration.authorization);
+    if (status === "connected" || status === "degraded") authorization.lastVerifiedAt = new Date().toISOString();
+    return authorization;
+  }
+
+  // Persists tokens to the vault and the matching public metadata to state.
+  // Storing an authorization is deliberately NOT the same as verifying a
+  // connection: the integration status is untouched here and only moves after
+  // a real provider request succeeds.
+  async saveIntegrationAuthorization(integrationId, { accessToken, refreshToken, ...metadata } = {}) {
+    requireKnownIntegration(integrationId);
+    if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
+    if (!getPlatform(integrationId).capabilities.hasLiveConnector) {
+      throw new AppError("INTEGRATION_UNAVAILABLE", "This provider connector is planned and cannot be authorized yet.");
+    }
+    const secrets = {};
+    if (accessToken) secrets[TOKEN_VAULT_KEYS.ACCESS] = boundedString(accessToken, { label: "Access token", min: 1, max: 4096 });
+    if (refreshToken) secrets[TOKEN_VAULT_KEYS.REFRESH] = boundedString(refreshToken, { label: "Refresh token", min: 1, max: 4096 });
+    if (Object.keys(secrets).length) await this.credentialVault.save(integrationId, secrets);
+
     return this.enqueueMutation(async () => {
-      const integration = integrationById(this.state, "shopify");
-      const existing = this.state.businesses.find((business) => business.shopifyShopId === snapshot.business.shopifyShopId);
+      const integration = integrationById(this.state, integrationId);
+      const secretKeys = new Set(this.credentialVault.keys(integrationId));
+      const authorization = normalizeAuthorizationRecord({
+        ...normalizeAuthorizationRecord(integration.authorization),
+        ...metadata
+      });
+      authorization.hasAccessToken = secretKeys.has(TOKEN_VAULT_KEYS.ACCESS);
+      authorization.hasRefreshToken = secretKeys.has(TOKEN_VAULT_KEYS.REFRESH);
+      integration.authorization = authorization;
+      this.audit("authorization", `Stored authorization metadata for ${integration.name}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  // Clears the tokens and the authorization record without discarding the
+  // user's own application configuration, so they can reauthorize without
+  // re-entering their client id and secret.
+  async clearIntegrationAuthorization(integrationId) {
+    requireKnownIntegration(integrationId);
+    if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
+    const remaining = { ...this.credentialVault.get(integrationId) };
+    delete remaining[TOKEN_VAULT_KEYS.ACCESS];
+    delete remaining[TOKEN_VAULT_KEYS.REFRESH];
+    await this.credentialVault.replace(integrationId, remaining);
+    return this.enqueueMutation(async () => {
+      const platform = getPlatform(integrationId);
+      const integration = integrationById(this.state, integrationId);
+      integration.authorization = createAuthorizationRecord();
+      integration.status = platform.defaultStatus;
+      integration.lastSync = "Not connected";
+      integration.error = null;
+      this.audit("authorization", `Removed stored authorization for ${integration.name}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  // Applies a connection result that carried a business snapshot. Only platforms
+  // declaring ownsBusinessRecords produce one; everything else goes through
+  // setIntegrationResult instead.
+  async applyConnectorSnapshot(integrationId, snapshot) {
+    const platform = getPlatform(integrationId);
+    if (!platform.capabilities.ownsBusinessRecords) {
+      throw new AppError("INTEGRATION_UNAVAILABLE", `${platform.displayName} does not import business records.`);
+    }
+    return this.enqueueMutation(async () => {
+      const integration = integrationById(this.state, integrationId);
+      // Business ids are derived deterministically from the provider's own
+      // account id, so matching on id is equivalent to matching the raw
+      // provider key while staying platform-neutral.
+      const existing = this.state.businesses.find((business) => business.source === integrationId && business.id === snapshot.business.id);
       if (existing) Object.assign(existing, snapshot.business);
       else this.state.businesses.unshift(snapshot.business);
       integration.status = snapshot.status;
       integration.lastSync = snapshot.syncedAt;
       integration.error = snapshot.error || null;
+      integration.authorization = this.stampVerification(integration, snapshot.status);
       this.state.selectedBusinessId = snapshot.business.id;
-      this.audit("shopify_sync", `Synchronized ${snapshot.business.name} through the official Shopify Admin API.`);
+      this.audit(
+        `${integrationId}_sync`,
+        snapshot.auditDetail || `Synchronized ${snapshot.business.name} through the official ${platform.displayName} API.`
+      );
       this.persist();
       return this.getAppState();
     });
@@ -763,6 +877,7 @@ class ProduDashStore {
         },
         approvalSnapshot: null,
         exportReceipt: null,
+        publicationReceipts: [],
         canceledAt: null,
         status: "needs_approval",
         policyGate: "Human approval is required before manual export or any future official API publishing path.",
@@ -814,11 +929,29 @@ class ProduDashStore {
       const targetStatus = mode === "manual_export" ? "approved_for_manual_export" : "approved_for_official_api";
       if (plan.status === targetStatus) return this.getAppState();
       if (plan.status !== "needs_approval") throw new AppError("INVALID_TRANSITION", "This post plan cannot enter that approval path.");
+      // Plan completeness is checked before connection readiness so someone
+      // with an unfinished plan is told that first, rather than connecting an
+      // account and only then discovering a second problem.
+      //
+      // Both modes, deliberately: the approved choices travel into the exported
+      // package too, so a manual upload carries the same recorded declaration
+      // as an API one.
+      assertPublishingOptionsComplete(plan.platformPackages);
       if (mode === "official_api") {
         if (!plan.platforms.length) throw new AppError("INVALID_INPUT", "Select at least one publishing destination.");
-        const ready = plan.platforms.every((platformId) =>
-          this.state.integrations.some((item) => item.id === platformId && item.status === "connected")
-        );
+        // Asked of deriveConnectionState rather than of the raw status field.
+        // The raw field says only what the last verification returned, so an
+        // authorization missing a required scope, or a grant with nothing left
+        // to refresh from, still reads "connected" -- and the approval snapshot
+        // is immutable, so the problem would surface at dispatch on a plan that
+        // can no longer be edited. The catalog already computes the real answer.
+        const ready = plan.platforms.every((platformId) => {
+          const platform = findPlatform(platformId);
+          if (!platform) return false;
+          const integration = this.state.integrations.find((item) => item.id === platformId);
+          const setting = this.state.credentialSettings.find((item) => item.id === platformId);
+          return deriveConnectionState({ platform, integration, setting }) === CONNECTION_STATES.CONNECTED;
+        });
         if (!ready) throw new AppError("INTEGRATION_NOT_READY", "Every publishing destination must be genuinely connected.");
       }
       const mediaSnapshot = publishingMediaSnapshot(this.state, plan.mediaJobId);
@@ -853,6 +986,118 @@ class ProduDashStore {
     });
   }
 
+  requirePostPlan(planId) {
+    const plan = this.state.postQueue.find((item) => item.id === planId);
+    if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
+    return plan;
+  }
+
+  // Moves an approved plan into dispatch. Retrying a failed dispatch is allowed
+  // and safe: the idempotency keys in the approval snapshot are what prevent a
+  // second upload of the same approved content.
+  async beginPostPlanDispatch(planId) {
+    requireId(planId, "Post plan");
+    return this.enqueueMutation(async () => {
+      const plan = this.requirePostPlan(planId);
+      if (!DISPATCHABLE_STATUSES.has(plan.status)) {
+        throw new AppError("INVALID_TRANSITION", "Approve this plan for official API publishing first.");
+      }
+      if (!plan.approvalSnapshot) throw new AppError("INVALID_TRANSITION", "This plan has no approval snapshot.");
+      assertTransition(plan.status, POST_PLAN_STATUSES.DISPATCHING);
+      plan.status = POST_PLAN_STATUSES.DISPATCHING;
+      this.audit("publisher", `Started official API publishing for ${plan.title}.`);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  // Receipts are keyed by idempotency key, so re-recording an attempt updates
+  // the existing receipt rather than accumulating duplicates.
+  async recordPublicationReceipt(planId, receipt) {
+    requireId(planId, "Post plan");
+    const normalized = normalizeReceipt(receipt);
+    if (!normalized || normalized.planId !== planId) {
+      throw new AppError("INVALID_INPUT", "The publication receipt is invalid.");
+    }
+    return this.enqueueMutation(async () => {
+      const plan = this.requirePostPlan(planId);
+      const index = plan.publicationReceipts.findIndex((item) => item.idempotencyKey === normalized.idempotencyKey);
+      if (index >= 0) plan.publicationReceipts[index] = normalized;
+      else plan.publicationReceipts.push(normalized);
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  // A plan is published only when every approved destination produced a
+  // publication; anything else is a truthful dispatch failure.
+  async completePostPlanDispatch(planId) {
+    requireId(planId, "Post plan");
+    return this.enqueueMutation(async () => {
+      const plan = this.requirePostPlan(planId);
+      if (plan.status !== POST_PLAN_STATUSES.DISPATCHING) return this.getAppState();
+      const expected = plan.approvalSnapshot?.destinations || [];
+      const published = expected.every((destination) =>
+        plan.publicationReceipts.some((receipt) => receipt.idempotencyKey === destination.idempotencyKey && isAlreadyPublished(receipt))
+      );
+      const target = published ? POST_PLAN_STATUSES.PUBLISHED : POST_PLAN_STATUSES.DISPATCH_FAILED;
+      assertTransition(plan.status, target);
+      plan.status = target;
+      if (published) plan.publishedAt = new Date().toISOString();
+      // The audit log is the compliance record, so it must not assert more than
+      // happened. Every destination was delivered, but a provider still
+      // finalizing has not confirmed anything, and it can still reject.
+      const finalizing = plan.publicationReceipts.some((receipt) => receipt.status === RECEIPT_STATUSES.PROCESSING);
+      this.audit(
+        "publisher",
+        published
+          ? finalizing
+            ? `Uploaded ${plan.title} to every approved destination; at least one provider is still finalizing it.`
+            : `Published ${plan.title} to every approved destination.`
+          : `Official API publishing did not complete for ${plan.title}.`
+      );
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
+  // Rescues plans left mid-dispatch, mirroring interruptActiveMediaJobs.
+  //
+  // beginPostPlanDispatch writes `dispatching` to disk, and TRANSITIONS allows
+  // only PUBLISHED or DISPATCH_FAILED out of it. So quitting mid-upload, losing
+  // power, or throwing outside the per-destination try/catch stranded the plan
+  // permanently: dispatch refused it, cancel refused it, and the UI offered no
+  // control at all -- only the text saying publishing was in progress.
+  //
+  // Receipts already record what actually reached the provider, so nothing is
+  // assumed here beyond the fact that this run is over.
+  async recoverInterruptedDispatches() {
+    return this.enqueueMutation(async () => {
+      let changed = false;
+      for (const plan of this.state.postQueue) {
+        if (plan.status !== POST_PLAN_STATUSES.DISPATCHING) continue;
+        plan.status = POST_PLAN_STATUSES.DISPATCH_FAILED;
+        changed = true;
+        this.audit("publisher", `Publishing for ${plan.title} was interrupted before it finished.`);
+      }
+      if (changed) this.persist();
+      return this.getAppState();
+    });
+  }
+
+  // Records something that happened to a plan after dispatch finished. The
+  // audit log is the compliance record, so a provider changing its mind about a
+  // publication has to land there too.
+  async recordPublishingOutcome(planId, detail) {
+    requireId(planId, "Post plan");
+    return this.enqueueMutation(async () => {
+      this.requirePostPlan(planId);
+      this.audit("publisher", boundedString(detail, { label: "Publishing outcome", min: 1, max: 300 }));
+      this.persist();
+      return this.getAppState();
+    });
+  }
+
   getPostExportPackage(planId) {
     requireId(planId, "Post plan");
     const plan = this.state.postQueue.find((item) => item.id === planId);
@@ -876,7 +1121,10 @@ class ProduDashStore {
       const plan = this.state.postQueue.find((item) => item.id === planId);
       if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
       if (plan.status === "canceled") return this.getAppState();
-      if (!["needs_approval", "approved_for_manual_export", "approved_for_official_api"].includes(plan.status)) {
+      // Asked of the state machine rather than re-derived here. A hand-copied
+      // list drifted from it before: it omitted dispatch_failed, so the Cancel
+      // button the renderer offers on a failed dispatch always threw.
+      if (!canTransition(plan.status, POST_PLAN_STATUSES.CANCELED)) {
         throw new AppError("INVALID_TRANSITION", "This post plan can no longer be canceled.");
       }
       plan.status = "canceled";

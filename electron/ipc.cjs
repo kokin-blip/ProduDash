@@ -9,6 +9,7 @@ const { rebaseTranscript } = require("./projects/render-plan.cjs");
 const { assertPortableDocument, normalizeTemplateSettings } = require("./projects/template-store.cjs");
 const { scanLocalVoiceCompatibility } = require("./ai/local-voice-compatibility.cjs");
 const { analyticsReportCsv } = require("./analytics-report.cjs");
+const { hasCapability } = require("./platforms/registry.cjs");
 
 function createTrustedSender(appUrl) {
   return (event) => {
@@ -31,6 +32,8 @@ function createTrustedSender(appUrl) {
 function createHandlers({
   store,
   connections,
+  connectorRegistry,
+  publishing,
   providers,
   mediaLibrary,
   projects,
@@ -128,6 +131,9 @@ function createHandlers({
         if (projects) await projects.clearPreparation();
         if (brandAssets) await brandAssets.clearGeneratedVoiceovers();
         if (advisor) await advisor.clearHistory();
+        // Reset keeps credentials but discards every plan, so nothing would be
+        // left that can name these records again.
+        if (publishing) await publishing.releaseAllSessions();
         return await store.resetDashboardData();
       } finally {
         mediaJobs?.resume?.();
@@ -149,7 +155,7 @@ function createHandlers({
     "produdash:saveIntegrationCredentials": async (_event, payload) => {
       const state = await store.saveIntegrationCredentials(payload?.integrationId, payload?.values);
       const setting = state.credentialSettings.find((item) => item.id === payload?.integrationId);
-      if (setting?.status === "stored" && payload.integrationId === "shopify") {
+      if (setting?.status === "stored" && hasCapability(payload?.integrationId, "autoVerifyOnSave")) {
         return connections.refreshIntegration(payload.integrationId);
       }
       return state;
@@ -416,7 +422,33 @@ function createHandlers({
     "produdash:approvePostPlan": async (_event, payload) => store.approvePostPlan(payload?.planId, payload?.mode),
     "produdash:exportPostPackage": async (event, payload) => exportPostPackage(event, payload?.planId),
     "produdash:exportAnalyticsReport": async (event, payload) => exportAnalyticsReport(event, payload?.businessId, payload?.rangeDays),
-    "produdash:cancelPostPlan": async (_event, payload) => store.cancelPostPlan(payload?.planId)
+    "produdash:cancelPostPlan": async (_event, payload) => {
+      const state = await store.cancelPostPlan(payload?.planId);
+      // Cancelled after the store agreed to it, so a refused cancel leaves the
+      // session intact. The plan keeps its snapshot, so the destinations are
+      // still readable here -- this is the last moment they are.
+      if (publishing) await publishing.releaseSessionsForPlan(payload?.planId);
+      return state;
+    },
+    "produdash:dispatchPostPlan": async (_event, payload) => {
+      if (!publishing) throw new AppError("PUBLISHING_UNSUPPORTED", "Official API publishing is unavailable.");
+      return publishing.dispatch(payload?.planId);
+    },
+    "produdash:refreshPublicationStatus": async (_event, payload) => {
+      if (!publishing) throw new AppError("PUBLISHING_UNSUPPORTED", "Official API publishing is unavailable.");
+      return publishing.refreshPublicationStatus(payload?.planId, payload?.platformId);
+    },
+    "produdash:discardUploadSession": async (_event, payload) => {
+      if (!publishing) throw new AppError("PUBLISHING_UNSUPPORTED", "Official API publishing is unavailable.");
+      return publishing.discardUploadSession(payload?.planId, payload?.platformId);
+    },
+    "produdash:authorizeIntegration": async (_event, payload) => connections.authorizeIntegration(payload?.integrationId),
+    "produdash:disconnectIntegration": async (_event, payload) => connections.disconnectIntegration(payload?.integrationId),
+    "produdash:getAuthorizationInstructions": async (_event, payload) => {
+      const connector = connectorRegistry?.find(payload?.integrationId);
+      if (!connector) throw new AppError("INTEGRATION_UNAVAILABLE", "That integration has no connector yet.");
+      return connector.getAuthorizationInstructions();
+    }
   };
 
   return Object.fromEntries(
@@ -435,7 +467,21 @@ function createHandlers({
   );
 }
 
-function registerIpc({ store, connections, providers, mediaLibrary, projects, templates, brandAssets, mediaJobs, advisor, appUrl, shell }) {
+function registerIpc({
+  store,
+  connections,
+  connectorRegistry,
+  publishing,
+  providers,
+  mediaLibrary,
+  projects,
+  templates,
+  brandAssets,
+  mediaJobs,
+  advisor,
+  appUrl,
+  shell
+}) {
   const folderDialogOptions = {
     title: "Add folders to Clip Library",
     properties: ["openDirectory", "multiSelections"],
@@ -548,10 +594,21 @@ function registerIpc({ store, connections, providers, mediaLibrary, projects, te
     if (result.canceled) return null;
     const selectedPath = result.filePaths[0];
     const stat = await fs.promises.stat(selectedPath);
-    if (!stat.isFile() || stat.size > 400_000_000) {
+    // A brand template is a small settings document. The old ceiling was 400 MB,
+    // which JSON.parse would turn into a multi-second freeze of the main process
+    // -- taking any in-flight render with it -- or an out-of-memory crash. The
+    // transcript importer nearby already caps at 2 MB.
+    if (!stat.isFile() || stat.size > 4_000_000) {
       throw new AppError("TEMPLATE_TOO_LARGE", "The selected brand template is too large.");
     }
-    const document = JSON.parse(await fs.promises.readFile(selectedPath, "utf8"));
+    let document;
+    try {
+      document = JSON.parse(await fs.promises.readFile(selectedPath, "utf8"));
+    } catch {
+      // Unguarded, a malformed file surfaced as a generic internal error that
+      // said nothing about which file or why.
+      throw new AppError("TEMPLATE_UNREADABLE", "The selected brand template is not valid JSON.");
+    }
     if (
       !document ||
       typeof document !== "object" ||
@@ -757,6 +814,8 @@ function registerIpc({ store, connections, providers, mediaLibrary, projects, te
   const handlers = createHandlers({
     store,
     connections,
+    connectorRegistry,
+    publishing,
     providers,
     mediaLibrary,
     projects,

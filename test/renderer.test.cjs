@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const { buildPlatformCatalog } = require("../electron/platforms/catalog.cjs");
 const { JSDOM } = require("jsdom");
 const { pathToFileURL } = require("node:url");
 
@@ -53,7 +54,7 @@ async function setupRenderer() {
 }
 
 function baseState(overrides = {}) {
-  return {
+  const state = {
     schemaVersion: 7,
     businesses: [],
     conversations: [],
@@ -92,6 +93,9 @@ function baseState(overrides = {}) {
     systemNotices: [],
     ...overrides
   };
+  // Derived with the same main-process code the real app uses, so renderer
+  // tests cannot drift from deriveConnectionState.
+  return { ...state, platformCatalog: buildPlatformCatalog(state) };
 }
 
 function partialBusiness(overrides = {}) {
@@ -410,6 +414,38 @@ test("keyed setup status badges animate only when their real value changes", asy
   assert.equal(document.querySelector('[data-status-key="setup-shopify"]').classList.contains("status-changed"), false);
 });
 
+test("each connection state renders a badge tone that matches how bad it is", async () => {
+  const renderer = await setupRenderer();
+  const badgeToneFor = (youtube) => {
+    const state = {
+      integrations: [{ id: "youtube", name: "YouTube", status: "disconnected", lastSync: "Never", ...youtube }],
+      credentialSettings: [{ id: "youtube", name: "YouTube", status: "stored", fields: [] }]
+    };
+    renderer.setAppState(baseState({ ...state, platformCatalog: buildPlatformCatalog(state) }));
+    renderer.ui.activeSection = "integrations";
+    renderer.renderApp();
+    return document.querySelector('[data-status-key="integration-youtube"]').className;
+  };
+
+  const authorized = { hasAccessToken: true, hasRefreshToken: true, grantedScopes: [] };
+  // A healthy connection and a partly-failed one must not look the same.
+  assert.match(badgeToneFor({ status: "connected", authorization: authorized }), /success/);
+  assert.match(badgeToneFor({ status: "degraded", authorization: authorized }), /warning/);
+  // A failed refresh keeps its danger tone.
+  assert.match(badgeToneFor({ status: "error", authorization: authorized }), /danger/);
+  // A grant with nothing left to refresh from is genuinely broken, and saying
+  // so in neutral grey made it indistinguishable from a healthy connection.
+  assert.match(
+    badgeToneFor({
+      status: "connected",
+      authorization: { hasAccessToken: true, hasRefreshToken: false, tokenExpiresAt: "2020-01-01T00:00:00.000Z", grantedScopes: [] }
+    }),
+    /danger/
+  );
+  // Awaiting authorization is an expected next step, not a failure.
+  assert.match(badgeToneFor({ status: "disconnected", authorization: { hasAccessToken: false, grantedScopes: [] } }), /warning/);
+});
+
 test("integration forms expose busy state and planned providers never accept credentials", async () => {
   const renderer = await setupRenderer();
   renderer.setAppState(
@@ -606,7 +642,13 @@ test("Studio creates deterministic local jobs while preserving legacy plans as n
   renderer.renderApp();
   assert.ok(document.querySelector("[data-post-form]"));
   assert.equal(document.querySelector('[name="mediaJobId"] option:last-child').value, "mediajob-ready");
-  assert.match(document.querySelector("#viewRoot").textContent, /does not connect accounts or publish/i);
+  // Capability-aware copy: publishing is real for connected platforms, and
+  // export-only for those without a connector. It must not claim either that
+  // ProduDash never publishes or that every platform works.
+  const publishingIntro = document.querySelector("#viewRoot").textContent;
+  assert.match(publishingIntro, /publish through connected, implemented platform APIs after explicit approval/i);
+  assert.match(publishingIntro, /without a connector remain export-only/i);
+  assert.doesNotMatch(publishingIntro, /does not connect accounts or publish/i);
 });
 
 test("Publishing renders immutable local export packages, schedule context, and cancellation without fake live state", async () => {
@@ -646,6 +688,257 @@ test("Publishing renders immutable local export packages, schedule context, and 
   assert.equal(document.querySelector(".studio-item img"), null);
   assert.equal(window.postPwned, undefined);
   assert.doesNotMatch(document.querySelector("#viewRoot").textContent, /published successfully/i);
+});
+
+test("Publishing offers a discard control only for an upload whose outcome is unknown", async () => {
+  const renderer = await setupRenderer();
+  const plan = (receipt) => ({
+    id: "post-1",
+    title: "Launch",
+    caption: "Approved copy",
+    platforms: ["youtube"],
+    status: "dispatch_failed",
+    schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+    mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
+    approvalSnapshot: { hash: "a".repeat(64) },
+    exportReceipt: null,
+    publicationReceipts: [
+      {
+        platformId: "youtube",
+        idempotencyKey: "b".repeat(64),
+        status: "failed",
+        providerPublicationId: null,
+        attempts: [{ startedAt: "2026-07-30T00:00:00.000Z", endedAt: "2026-07-30T00:01:00.000Z", outcome: "failed" }],
+        hasResumableSession: false,
+        ...receipt
+      }
+    ]
+  });
+
+  const show = (receipt) => {
+    renderer.setAppState(baseState({ creatorPlatforms: [{ id: "youtube", name: "YouTube Shorts" }], postQueue: [plan(receipt)] }));
+    renderer.ui.activeSection = "studio";
+    renderer.ui.studioTab = "publishing";
+    renderer.renderApp();
+  };
+
+  // An ordinary retryable failure must not offer to discard anything -- there
+  // is nothing ambiguous to resolve.
+  show({ errorCode: "YOUTUBE_UPLOAD_INTERRUPTED", retryable: true });
+  assert.equal(document.querySelector("[data-discard-session]"), null);
+
+  show({ errorCode: "UPLOAD_SESSION_UNRESOLVED", retryable: false });
+  const discard = document.querySelector("[data-discard-session='post-1']");
+  assert.ok(discard, "an unresolved upload needs the explicit way out");
+  assert.equal(discard.dataset.discardPlatform, "youtube");
+  // The receipt must say plainly that retrying is not the answer here.
+  const record = document.querySelector(".publication-receipts").textContent;
+  assert.match(record, /not retryable/);
+  assert.match(record, /Check YouTube Shorts before retrying/);
+
+  // Once discarded, the warning and the control must both go. Leaving them
+  // would make the action look like it did nothing and invite a second discard.
+  show({ errorCode: "UPLOAD_SESSION_DISCARDED", retryable: true });
+  assert.equal(document.querySelector("[data-discard-session]"), null);
+  assert.doesNotMatch(document.querySelector(".publication-receipts").textContent, /could not be accounted for/);
+});
+
+test("Publishing explains a failure in words, and never swallows an unmapped code", async () => {
+  const renderer = await setupRenderer();
+  const show = (receipt) => {
+    renderer.setAppState(
+      baseState({
+        creatorPlatforms: [{ id: "youtube", name: "YouTube Shorts" }],
+        postQueue: [
+          {
+            id: "post-1",
+            title: "Launch",
+            caption: "Approved copy",
+            platforms: ["youtube"],
+            status: "dispatch_failed",
+            schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+            mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
+            approvalSnapshot: { hash: "a".repeat(64) },
+            exportReceipt: null,
+            publicationReceipts: [
+              {
+                platformId: "youtube",
+                idempotencyKey: "b".repeat(64),
+                status: "failed",
+                providerPublicationId: null,
+                attempts: [{ startedAt: "2026-07-30T00:00:00.000Z", endedAt: "2026-07-30T00:01:00.000Z", outcome: "failed" }],
+                hasResumableSession: false,
+                ...receipt
+              }
+            ]
+          }
+        ]
+      })
+    );
+    renderer.ui.activeSection = "studio";
+    renderer.ui.studioTab = "publishing";
+    renderer.renderApp();
+    return document.querySelector(".publication-receipts").textContent;
+  };
+
+  // Receipts carry a code and never a provider message, which is what keeps
+  // tokens and paths out of them -- but it meant users read the code itself.
+  assert.match(show({ errorCode: "YOUTUBE_RATE_LIMITED", retryable: true }), /rate limiting/);
+  assert.doesNotMatch(show({ errorCode: "YOUTUBE_RATE_LIMITED", retryable: true }), /YOUTUBE_RATE_LIMITED/);
+  // An unmapped code is ugly rather than invisible.
+  assert.match(show({ errorCode: "SOME_FUTURE_CODE", retryable: true }), /SOME_FUTURE_CODE/);
+});
+
+test("Publishing withholds Retry from a destination that cannot be retried", async () => {
+  const renderer = await setupRenderer();
+  const show = (receipt) => {
+    renderer.setAppState(
+      baseState({
+        creatorPlatforms: [{ id: "youtube", name: "YouTube Shorts" }],
+        postQueue: [
+          {
+            id: "post-1",
+            title: "Launch",
+            caption: "Approved copy",
+            platforms: ["youtube"],
+            status: "dispatch_failed",
+            schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+            mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
+            approvalSnapshot: {
+              hash: "a".repeat(64),
+              destinations: [{ platformId: "youtube", idempotencyKey: "b".repeat(64) }]
+            },
+            exportReceipt: null,
+            publicationReceipts: [
+              {
+                platformId: "youtube",
+                idempotencyKey: "b".repeat(64),
+                status: "failed",
+                providerPublicationId: null,
+                attempts: [],
+                hasResumableSession: false,
+                ...receipt
+              }
+            ]
+          }
+        ]
+      })
+    );
+    renderer.ui.activeSection = "studio";
+    renderer.ui.studioTab = "publishing";
+    renderer.renderApp();
+  };
+
+  show({ errorCode: "YOUTUBE_NETWORK_ERROR", retryable: true });
+  assert.ok(document.querySelector("[data-dispatch-post='post-1']"), "a retryable failure still offers Retry");
+
+  // Clicking Retry on a non-retryable destination cannot help, and each click
+  // appended an attempt that pushed the real early history out of the record.
+  show({ errorCode: "UPLOAD_SESSION_UNRESOLVED", retryable: false });
+  assert.equal(document.querySelector("[data-dispatch-post='post-1']"), null);
+});
+
+test("Publishing offers a status check only while the provider is still finalizing", async () => {
+  const renderer = await setupRenderer();
+  const show = (receipt) => {
+    renderer.setAppState(
+      baseState({
+        creatorPlatforms: [{ id: "youtube", name: "YouTube Shorts" }],
+        postQueue: [
+          {
+            id: "post-1",
+            title: "Launch",
+            caption: "Approved copy",
+            platforms: ["youtube"],
+            status: "published",
+            schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+            mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
+            approvalSnapshot: { hash: "a".repeat(64) },
+            exportReceipt: null,
+            publicationReceipts: [
+              {
+                platformId: "youtube",
+                idempotencyKey: "b".repeat(64),
+                providerPublicationId: "video-1",
+                attempts: [],
+                errorCode: null,
+                retryable: false,
+                hasResumableSession: false,
+                ...receipt
+              }
+            ]
+          }
+        ]
+      })
+    );
+    renderer.ui.activeSection = "studio";
+    renderer.ui.studioTab = "publishing";
+    renderer.renderApp();
+  };
+
+  show({ status: "processing" });
+  const button = document.querySelector("[data-refresh-publication='post-1']");
+  assert.ok(button, "a destination the provider is still finalizing can be re-asked");
+  assert.equal(button.dataset.refreshPlatform, "youtube");
+  // And it must not claim the video is live yet.
+  assert.match(document.querySelector(".publication-receipts").textContent, /still finalizing/);
+
+  show({ status: "published" });
+  assert.equal(document.querySelector("[data-refresh-publication]"), null, "nothing left to ask once it is published");
+});
+
+test("Publishing renders a control for every option the provider requires", async () => {
+  // Built from the real catalog rather than a hand-written fixture on purpose.
+  // A literal here would keep passing while buildPlatformEntry dropped the
+  // field, which is exactly how these controls came to be missing entirely:
+  // validation demanded answers no on-screen control could give, so no YouTube
+  // plan could be approved at all.
+  const catalog = buildPlatformCatalog({ credentialSettings: [], integrations: [] });
+  const youtube = catalog.find((entry) => entry.id === "youtube");
+  assert.ok(youtube.publishingOptions, "the catalog must carry the registry's publishing options");
+
+  const renderer = await setupRenderer();
+  renderer.setAppState(
+    baseState({
+      platformCatalog: catalog,
+      creatorPlatforms: [{ id: "youtube", name: "YouTube Shorts" }],
+      postQueue: [
+        {
+          id: "post-pending",
+          title: "Pending plan",
+          caption: "Shared copy",
+          platforms: ["youtube"],
+          platformPackages: [
+            {
+              platformId: "youtube",
+              title: "YouTube version",
+              caption: "YouTube copy",
+              options: { selfDeclaredMadeForKids: null, privacyStatus: "private" }
+            }
+          ],
+          status: "needs_approval",
+          schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+          mediaSnapshot: null,
+          approvalSnapshot: null,
+          exportReceipt: null
+        }
+      ]
+    })
+  );
+  renderer.ui.activeSection = "studio";
+  renderer.ui.studioTab = "publishing";
+  renderer.renderApp();
+
+  // Every option the registry declares needs a control, or approval is asking
+  // for something the person has no way to supply.
+  for (const key of Object.keys(youtube.publishingOptions)) {
+    assert.ok(document.querySelector(`select[name="option:${key}"]`), `no control rendered for ${key}`);
+  }
+  // The audience declaration has no safe default, so it must render unanswered
+  // and required rather than quietly preselecting a legal statement.
+  const audience = document.querySelector('select[name="option:selfDeclaredMadeForKids"]');
+  assert.equal(audience.hasAttribute("required"), true);
+  assert.equal(audience.querySelector("option[selected]").value, "");
 });
 
 test("Publishing shows editable destination drafts and a truthful local schedule summary before approval", async () => {
@@ -1596,4 +1889,157 @@ test("Juanito reacts once to genuine media transitions and removes completed rea
     Date.now = originalNow;
     window.matchMedia = originalMatchMedia;
   }
+});
+
+test("Publishing says which destinations it cannot actually publish to", async () => {
+  // Every publish destination is offered, but only some have a connector.
+  // Picking one that does not silently removed the approve-for-publishing
+  // button later, with nothing on screen explaining why.
+  const catalog = buildPlatformCatalog({ credentialSettings: [], integrations: [] });
+  const renderer = await setupRenderer();
+  renderer.setAppState(
+    baseState({
+      platformCatalog: catalog,
+      creatorPlatforms: [
+        { id: "youtube", name: "YouTube Shorts" },
+        { id: "instagram", name: "Instagram Reels" }
+      ],
+      postQueue: []
+    })
+  );
+  renderer.ui.activeSection = "studio";
+  renderer.ui.studioTab = "publishing";
+  renderer.renderApp();
+
+  const youtube = document.querySelector("[data-destination='youtube']").textContent;
+  const instagram = document.querySelector("[data-destination='instagram']").textContent;
+  assert.doesNotMatch(youtube, /export only/, "YouTube has a connector and can be published to");
+  assert.match(instagram, /export only/, "Instagram has none, and the checkbox has to say so");
+});
+
+test("the sidebar names the running build", async () => {
+  // Without this there is no in-app surface for the version at all: a tester
+  // holding an installer could not say which build they were running without
+  // inspecting the filename or a sidecar metadata file.
+  const renderer = await setupRenderer();
+  renderer.setAppState(baseState({ appVersion: "0.1.0-alpha.1" }));
+  renderer.renderApp();
+  assert.match(document.querySelector(".sidebar-footer span:last-child").textContent, /v0\.1\.0-alpha\.1/);
+
+  // A build that reports no version says nothing rather than "vundefined".
+  renderer.setAppState(baseState({ appVersion: null }));
+  renderer.renderApp();
+  assert.equal(document.querySelector(".sidebar-footer span:last-child").textContent, "Official APIs only");
+});
+
+test("Publishing keeps Retry available while any destination can still make progress", async () => {
+  const renderer = await setupRenderer();
+  const show = (receipts) => {
+    renderer.setAppState(
+      baseState({
+        creatorPlatforms: [
+          { id: "youtube", name: "YouTube Shorts" },
+          { id: "instagram", name: "Instagram Reels" }
+        ],
+        postQueue: [
+          {
+            id: "post-1",
+            title: "Launch",
+            caption: "Approved copy",
+            platforms: ["youtube", "instagram"],
+            status: "dispatch_failed",
+            schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+            mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
+            approvalSnapshot: {
+              hash: "a".repeat(64),
+              destinations: [
+                { platformId: "youtube", idempotencyKey: "0".repeat(64) },
+                { platformId: "instagram", idempotencyKey: "1".repeat(64) }
+              ]
+            },
+            exportReceipt: null,
+            publicationReceipts: receipts.map((receipt, index) => ({
+              platformId: index === 0 ? "youtube" : "instagram",
+              idempotencyKey: String(index).repeat(64),
+              status: "failed",
+              providerPublicationId: null,
+              attempts: [],
+              hasResumableSession: false,
+              ...receipt
+            }))
+          }
+        ]
+      })
+    );
+    renderer.ui.activeSection = "studio";
+    renderer.ui.studioTab = "publishing";
+    renderer.renderApp();
+  };
+
+  // One destination is permanently blocked, the other failed transiently and is
+  // resumable. Withholding the plan-level control for the first stranded the
+  // second, whose session record is deliberately kept for exactly this case.
+  show([
+    { errorCode: "YOUTUBE_FORBIDDEN", retryable: false },
+    { errorCode: "YOUTUBE_NETWORK_ERROR", retryable: true }
+  ]);
+  assert.ok(document.querySelector("[data-dispatch-post='post-1']"), "a resumable sibling must still be reachable");
+
+  // Only when nothing can make progress does the control go.
+  show([
+    { errorCode: "YOUTUBE_FORBIDDEN", retryable: false },
+    { errorCode: "UPLOAD_SESSION_UNRESOLVED", retryable: false }
+  ]);
+  assert.equal(document.querySelector("[data-dispatch-post='post-1']"), null);
+});
+
+test("Publishing keeps Retry available for a destination that was never attempted", async () => {
+  // Receipts are written lazily, so a run interrupted after the first
+  // destination failed leaves the second with no receipt at all. Judging by
+  // receipts alone declared the plan blocked because of the first, while
+  // dispatch would have skipped it and published the second.
+  const renderer = await setupRenderer();
+  renderer.setAppState(
+    baseState({
+      creatorPlatforms: [
+        { id: "youtube", name: "YouTube Shorts" },
+        { id: "instagram", name: "Instagram Reels" }
+      ],
+      postQueue: [
+        {
+          id: "post-1",
+          title: "Launch",
+          caption: "Approved copy",
+          platforms: ["youtube", "instagram"],
+          status: "dispatch_failed",
+          schedule: { mode: "unscheduled", scheduledFor: null, timeZone: "America/Phoenix" },
+          mediaSnapshot: { videos: [{ name: "clip.mp4" }], outputFolderName: "out" },
+          approvalSnapshot: {
+            hash: "a".repeat(64),
+            destinations: [
+              { platformId: "youtube", idempotencyKey: "0".repeat(64) },
+              { platformId: "instagram", idempotencyKey: "1".repeat(64) }
+            ]
+          },
+          exportReceipt: null,
+          publicationReceipts: [
+            {
+              platformId: "youtube",
+              idempotencyKey: "0".repeat(64),
+              status: "failed",
+              providerPublicationId: null,
+              errorCode: "UPLOAD_SESSION_UNRESOLVED",
+              retryable: false,
+              attempts: [],
+              hasResumableSession: false
+            }
+          ]
+        }
+      ]
+    })
+  );
+  renderer.ui.activeSection = "studio";
+  renderer.ui.studioTab = "publishing";
+  renderer.renderApp();
+  assert.ok(document.querySelector("[data-dispatch-post='post-1']"), "the unattempted destination is still reachable");
 });

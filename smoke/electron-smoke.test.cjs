@@ -7,6 +7,8 @@ const { spawnSync } = require("node:child_process");
 const test = require("node:test");
 const { _electron: electron } = require("playwright");
 const { getMediaBinaries } = require("../electron/media/binaries.cjs");
+const { buildPlatformCatalog } = require("../electron/platforms/catalog.cjs");
+const { createAuthorizationRecord } = require("../electron/platforms/authorization.cjs");
 
 test("Electron starts securely and shows the connection-first workflow", { timeout: 90_000 }, async (t) => {
   const projectRoot = path.join(__dirname, "..");
@@ -251,14 +253,11 @@ test("Electron starts securely and shows the connection-first workflow", { timeo
   assert.equal(await page.locator("[data-post-form]").count(), 1);
   await page.click('[data-section="integrations"]');
 
-  await page.locator("#viewRoot details.disclosure:not(.danger-zone) > summary").click();
-  assert.equal(await page.locator("#viewRoot details.disclosure:not(.danger-zone)").getAttribute("open"), "");
-  assert.match(
-    await page.locator("#viewRoot details.disclosure:not(.danger-zone) .disclosure-content").textContent(),
-    /Official connections only/
-  );
-  await page.locator("#viewRoot details.disclosure:not(.danger-zone) > summary").click();
-  assert.equal(await page.locator("#viewRoot details.disclosure:not(.danger-zone)").getAttribute("open"), null);
+  await page.locator("#viewRoot details.compliance-panel > summary").click();
+  assert.equal(await page.locator("#viewRoot details.compliance-panel").getAttribute("open"), "");
+  assert.match(await page.locator("#viewRoot details.compliance-panel .disclosure-content").textContent(), /Official connections only/);
+  await page.locator("#viewRoot details.compliance-panel > summary").click();
+  assert.equal(await page.locator("#viewRoot details.compliance-panel").getAttribute("open"), null);
   await page.locator("details.danger-zone > summary").click();
   assert.equal(await page.locator("details.danger-zone").getAttribute("open"), "");
   await page.locator("details.danger-zone [data-delete-all]").waitFor({ state: "visible" });
@@ -594,7 +593,13 @@ function createLogoFixture(filePath) {
 }
 
 async function renderConnectedFixture(page) {
-  await page.evaluate(async () => {
+  // The derived catalog is produced by the same main-process builder the real
+  // app uses, so this fixture cannot drift from deriveConnectionState.
+  const platformCatalog = buildPlatformCatalog({
+    integrations: [{ id: "shopify", name: "Shopify", status: "connected", authorization: createAuthorizationRecord() }],
+    credentialSettings: [{ id: "shopify", name: "Shopify", status: "stored", fields: [] }]
+  });
+  await page.evaluate(async (platformCatalog) => {
     const state = await import("./src/renderer/state.js");
     const render = await import("./src/renderer/render.js");
     const fixture = {
@@ -699,7 +704,8 @@ async function renderConnectedFixture(page) {
       clipperJobs: [],
       postQueue: [],
       auditLog: [{ id: "audit-1", at: new Date().toISOString(), type: "shopify_sync", detail: "Shopify snapshot refreshed." }],
-      systemNotices: []
+      systemNotices: [],
+      platformCatalog
     };
     state.setAppState(fixture);
     state.ui.activeSection = "overview";
@@ -707,5 +713,5 @@ async function renderConnectedFixture(page) {
     state.ui.pending.clear();
     render.renderApp();
     document.activeElement.blur();
-  });
+  }, platformCatalog);
 }

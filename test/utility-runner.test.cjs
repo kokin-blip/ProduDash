@@ -42,3 +42,40 @@ test("worker environment excludes provider credentials", () => {
     TEMP: "tmp"
   });
 });
+
+test("a worker killed for ignoring a cancel is reported as canceled, not as a crash", async () => {
+  class FakeChild extends EventEmitter {
+    postMessage() {}
+    kill() {
+      this.killed = true;
+      // A real child exits once killed.
+      this.emit("exit");
+    }
+  }
+  const child = new FakeChild();
+  const runner = new MediaUtilityRunner({ utilityProcess: { fork: () => child }, environment: {} });
+  const handle = runner.start({ id: "job-1" });
+  child.emit("spawn");
+
+  handle.cancel();
+  // The worker never acknowledges, so the grace period expires and it is killed.
+  child.kill();
+
+  // Rejecting here made the user's own cancel surface as "Media job needs
+  // attention" with a worker-crash message. finish() already knows what to do
+  // with a canceled result.
+  assert.deepEqual(await handle.result, { type: "canceled" });
+});
+
+test("a worker that dies on its own is still reported as interrupted", async () => {
+  class FakeChild extends EventEmitter {
+    postMessage() {}
+    kill() {}
+  }
+  const child = new FakeChild();
+  const runner = new MediaUtilityRunner({ utilityProcess: { fork: () => child }, environment: {} });
+  const handle = runner.start({ id: "job-1" });
+  child.emit("spawn");
+  child.emit("exit");
+  await assert.rejects(() => handle.result, { code: "MEDIA_WORKER_INTERRUPTED" });
+});

@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const { getPlatform } = require("../electron/platforms/registry.cjs");
 const { createHarness } = require("./helpers.cjs");
 const { validateState } = require("../electron/state-schema.cjs");
 
@@ -104,7 +105,29 @@ test("manual export requires approval and repeated transitions are idempotent", 
   assert.equal(duplicateState.postQueue[0].id, planId);
   assert.equal(state.postQueue[0].schedule.timeZone, "UTC");
   assert.equal(state.postQueue[0].schedule.mode, "planned_local_only");
-  assert.deepEqual(state.postQueue[0].platformPackages, [{ platformId: "youtube", title: "Launch post", caption: "New launch" }]);
+  assert.deepEqual(state.postQueue[0].platformPackages, [
+    {
+      platformId: "youtube",
+      title: "Launch post",
+      caption: "New launch",
+      // Seeded from the registry: visibility has a safe default, the audience
+      // declaration deliberately does not.
+      options: { selfDeclaredMadeForKids: null, privacyStatus: "private" }
+    }
+  ]);
+  await assert.rejects(() => harness.store.approvePostPlan(planId, "manual_export"), { code: "PUBLISHING_OPTION_REQUIRED" });
+  state = await harness.store.updatePostPlanDraft(planId, {
+    platformPackages: [
+      {
+        platformId: "youtube",
+        title: "Launch post",
+        caption: "New launch",
+        options: { selfDeclaredMadeForKids: false, privacyStatus: "private" }
+      }
+    ],
+    scheduledFor: "2026-08-01T18:00:00Z",
+    timeZone: "UTC"
+  });
   await assert.rejects(
     () => harness.store.markPostExported(planId),
     (error) => error.code === "INVALID_TRANSITION"
@@ -177,6 +200,22 @@ test("publishing packages snapshot completed media, reject bad schedules, and ca
   const auditCount = state.auditLog.length;
   state = await harness.store.cancelPostPlan(planId);
   assert.equal(state.auditLog.length, auditCount);
+  // The cancelable set is asked of post-status.cjs rather than re-derived here.
+  // A hand-copied list omitted dispatch_failed, so the Cancel button the
+  // renderer offers on a failed dispatch always threw -- and a plan that could
+  // not be retried could not be escaped either.
+  const failed = await harness.store.createPostPlan({
+    mediaJobId: "mediajob-publish",
+    title: "Failed dispatch",
+    caption: "Approved copy",
+    platforms: ["instagram"]
+  });
+  const failedId = failed.postQueue[1].id;
+  harness.store.state.postQueue[1].status = "dispatch_failed";
+  assert.equal((await harness.store.cancelPostPlan(failedId)).postQueue[1].status, "canceled");
+  // Terminal statuses must stay terminal; loosening the guard must not leak.
+  harness.store.state.postQueue[1].status = "published";
+  await assert.rejects(harness.store.cancelPostPlan(failedId), /no longer be canceled/);
   await assert.rejects(
     harness.store.createPostPlan({
       title: "Bad zone",
@@ -256,6 +295,19 @@ test("destination copy and local schedules are editable only before publishing a
       }),
     { code: "INVALID_INPUT" }
   );
+  state = await harness.store.updatePostPlanDraft(planId, {
+    platformPackages: [
+      { platformId: "instagram", title: "Instagram launch", caption: "Short destination copy" },
+      {
+        platformId: "youtube",
+        title: "YouTube launch",
+        caption: "Long-form destination copy",
+        options: { selfDeclaredMadeForKids: false, privacyStatus: "private" }
+      }
+    ],
+    scheduledFor: "2026-12-10T19:30:00.000Z",
+    timeZone: "America/Phoenix"
+  });
   state = await harness.store.approvePostPlan(planId, "manual_export");
   const approvedPlan = state.postQueue.find((item) => item.id === planId);
   assert.equal(approvedPlan.approvalSnapshot.payload.platformPackages[0].title, "Instagram launch");
@@ -280,11 +332,28 @@ test("official API approval verifies genuine connection readiness", async (t) =>
     platforms: ["youtube"]
   });
   const planId = state.postQueue[0].id;
+  // Plan completeness is checked before connection readiness, so the required
+  // choices are made first to isolate the readiness gate under test.
+  await harness.store.updatePostPlanDraft(planId, {
+    platformPackages: [
+      { platformId: "youtube", title: "Official plan", caption: "", options: { selfDeclaredMadeForKids: true, privacyStatus: "unlisted" } }
+    ]
+  });
   await assert.rejects(
     () => harness.store.approvePostPlan(planId, "official_api"),
     (error) => error.code === "INTEGRATION_NOT_READY"
   );
-  harness.store.state.integrations.find((item) => item.id === "youtube").status = "connected";
+  // A genuine connection, not a poked status field: readiness is now derived
+  // from stored configuration and a real authorization, so setting the status
+  // alone no longer passes -- which is the point of the gate.
+  await harness.store.saveIntegrationCredentials("youtube", { clientId: "client-1", clientSecret: "secret-1" });
+  await harness.store.saveIntegrationAuthorization("youtube", {
+    accessToken: "ya29.token",
+    refreshToken: "1//refresh",
+    grantedScopes: [...getPlatform("youtube").scopes],
+    selectedAccount: { id: "UC-channel", name: "Channel" }
+  });
+  await harness.store.setIntegrationResult("youtube", { status: "connected" });
   state = await harness.store.approvePostPlan(planId, "official_api");
   assert.equal(state.postQueue[0].status, "approved_for_official_api");
 });

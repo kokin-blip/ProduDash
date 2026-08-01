@@ -3,9 +3,14 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { AppError } = require("./errors.cjs");
 const { createInitialState } = require("./initial-state.cjs");
+const { CREATOR_PLATFORM_IDS } = require("./platforms/registry.cjs");
+const { normalizeAuthorizationRecord, validateAuthorizationRecord } = require("./platforms/authorization.cjs");
+const { STATUS_VALUES: POST_PLAN_STATUS_VALUES } = require("./publishing/post-status.cjs");
+const { normalizeReceipt, validateReceipt } = require("./publishing/receipt.cjs");
+const { seedPublishingOptions } = require("./validation.cjs");
 const { preserveFile, readJson, writeJsonAtomic } = require("./atomic-json.cjs");
 
-const CURRENT_SCHEMA_VERSION = 7;
+const { CURRENT_SCHEMA_VERSION, MINIMUM_SUPPORTED_SCHEMA_VERSION } = require("./schema-version.cjs");
 
 function clone(value) {
   return structuredClone(value);
@@ -38,7 +43,13 @@ function withDefaults(state) {
     ...initial,
     ...state,
     schemaVersion: CURRENT_SCHEMA_VERSION,
-    integrations: mergeCatalog(initial.integrations, state.integrations),
+    // mergeCatalog spreads the persisted entry over the initial one, so a record
+    // saved before the authorization field existed would keep no authorization
+    // at all. Backfill it here as well as in the migration.
+    integrations: mergeCatalog(initial.integrations, state.integrations).map((integration) => ({
+      ...integration,
+      authorization: normalizeAuthorizationRecord(integration.authorization)
+    })),
     credentialSettings: mergeCatalog(initial.credentialSettings, state.credentialSettings).map((setting) => ({
       ...setting,
       fields: initial.credentialSettings.find((item) => item.id === setting.id)?.fields || [],
@@ -92,13 +103,19 @@ function withDefaults(state) {
             ...plan,
             mediaJobId: typeof plan.mediaJobId === "string" ? plan.mediaJobId : null,
             contentHash: typeof plan.contentHash === "string" && /^[a-f0-9]{64}$/.test(plan.contentHash) ? plan.contentHash : null,
-            platformPackages: Array.isArray(plan.platformPackages)
+            platformPackages: (Array.isArray(plan.platformPackages)
               ? plan.platformPackages
               : platforms.map((platformId) => ({
                   platformId,
                   title: typeof plan.title === "string" ? plan.title : "",
                   caption: typeof plan.caption === "string" ? plan.caption : ""
-                })),
+                }))
+            ).map((item) => ({
+              ...item,
+              // Backfilled here as well as in the migration, because
+              // mergeCatalog-style defaults never reach nested packages.
+              options: item?.options === undefined ? seedPublishingOptions(item?.platformId) : item.options
+            })),
             schedule:
               plan.schedule && typeof plan.schedule === "object" && !Array.isArray(plan.schedule)
                 ? plan.schedule
@@ -110,6 +127,9 @@ function withDefaults(state) {
             mediaSnapshot: plan.mediaSnapshot && typeof plan.mediaSnapshot === "object" ? plan.mediaSnapshot : null,
             approvalSnapshot: plan.approvalSnapshot && typeof plan.approvalSnapshot === "object" ? plan.approvalSnapshot : null,
             exportReceipt: plan.exportReceipt && typeof plan.exportReceipt === "object" ? plan.exportReceipt : null,
+            publicationReceipts: Array.isArray(plan.publicationReceipts)
+              ? plan.publicationReceipts.map(normalizeReceipt).filter(Boolean)
+              : [],
             canceledAt: typeof plan.canceledAt === "string" ? plan.canceledAt : null
           };
         })
@@ -125,7 +145,7 @@ function migrateState(input) {
   if (version > CURRENT_SCHEMA_VERSION) {
     throw new AppError("FUTURE_SCHEMA", "This ProduDash data was created by a newer app version. Update ProduDash before continuing.");
   }
-  if (version < 2 || !Number.isInteger(version)) {
+  if (version < MINIMUM_SUPPORTED_SCHEMA_VERSION || !Number.isInteger(version)) {
     throw new AppError("UNSUPPORTED_SCHEMA", "This legacy ProduDash state cannot be migrated automatically.");
   }
   let state = clone(input);
@@ -202,7 +222,107 @@ function migrateState(input) {
       voiceLikeness: { acceptance: null, voices: [] }
     };
   }
+  if (state.schemaVersion === 7) {
+    // Give every integration a public authorization record. Defaults come
+    // first so an existing record is preserved rather than reset -- unlike the
+    // v5->v6 and v6->v7 steps above, which are safe only because their version
+    // gates prevent re-entry.
+    state = {
+      ...state,
+      schemaVersion: 8,
+      integrations: Array.isArray(state.integrations)
+        ? state.integrations.map((integration) => ({
+            ...integration,
+            authorization: normalizeAuthorizationRecord(integration?.authorization)
+          }))
+        : []
+    };
+  }
+  if (state.schemaVersion === 8) {
+    // Give every post plan a publication receipt list. Defaults first, so an
+    // existing list survives.
+    state = {
+      ...state,
+      schemaVersion: 9,
+      postQueue: Array.isArray(state.postQueue)
+        ? state.postQueue.map((plan) => ({
+            ...plan,
+            publicationReceipts: Array.isArray(plan?.publicationReceipts)
+              ? plan.publicationReceipts.map(normalizeReceipt).filter(Boolean)
+              : []
+          }))
+        : []
+    };
+  }
+  if (state.schemaVersion === 9) {
+    // Seed per-destination publishing options. Options with no safe default
+    // stay null, so an existing plan is visibly incomplete rather than being
+    // given an invented audience declaration. Its approval snapshot keeps
+    // version 1 and is still verified against the v1 payload shape.
+    state = {
+      ...state,
+      schemaVersion: 10,
+      postQueue: Array.isArray(state.postQueue)
+        ? state.postQueue.map((plan) => ({
+            ...plan,
+            platformPackages: Array.isArray(plan?.platformPackages)
+              ? plan.platformPackages.map((item) => ({
+                  ...item,
+                  options: item?.options === undefined ? seedPublishingOptions(item?.platformId) : item.options
+                }))
+              : []
+          }))
+        : []
+    };
+  }
   return withDefaults(state);
+}
+
+// v1 predates per-destination publishing options; v2 includes them. Both must
+// keep validating, so the payload used to recompute a snapshot's hash is
+// reconstructed in the shape that snapshot was created with.
+const SUPPORTED_APPROVAL_VERSIONS = new Set([1, 2]);
+
+function approvalPayloadForVersion(plan, version) {
+  const platformPackages =
+    version === 1
+      ? // Key order matters: JSON.stringify feeds the hash.
+        plan.platformPackages.map((item) => ({ platformId: item.platformId, title: item.title, caption: item.caption }))
+      : plan.platformPackages;
+  return {
+    planId: plan.id,
+    title: plan.title,
+    caption: plan.caption,
+    platformPackages,
+    schedule: plan.schedule,
+    media: plan.mediaSnapshot
+  };
+}
+
+// Structure only, deliberately.
+//
+// This used to require a saved plan's option keys to exactly equal the live
+// registry's, and to reject any value outside the registry's current choices.
+// The registry is code; a saved plan is data the user already has, and it
+// outlives any particular set of definitions. So a purely additive release --
+// one new YouTube option, one retired enum value -- made every existing plan
+// fail validateState. That is not a contained failure: loadRecoverableState
+// preserves the file, tries the backup, fails there identically because it has
+// the same shape, and falls back to createInitialState(). The user opens an
+// empty app, having lost the visible history of every business, media job and
+// post plan to a change that only added a field.
+//
+// The option values are still checked where checking is safe: on write by
+// validatePostPlanDraft, at approval by assertPublishingOptionsComplete, and at
+// dispatch by the connector. Refusing there is recoverable. Refusing here is
+// not, so here only asks whether this is a plausible options record at all.
+//
+// Approved plans are the reason this is validation rather than normalization:
+// their platformPackages are hashed into the approval snapshot, so rewriting
+// them on load would break the hash and cause exactly the reset it prevents.
+function validatePublishingOptions(platformId, options) {
+  if (options === null || options === undefined) return true;
+  return typeof options === "object" && !Array.isArray(options);
 }
 
 function validateState(state) {
@@ -227,6 +347,12 @@ function validateState(state) {
     if (state[collection].some((item) => !item || typeof item !== "object" || Array.isArray(item))) {
       throw new AppError("INVALID_STATE", `The saved ${collection} collection is invalid.`);
     }
+  }
+  // Public authorization metadata must stay public: validateAuthorizationRecord
+  // rejects any string field whose name ends in "token", so an edited state file
+  // cannot park a real token in renderer-visible state.
+  if (state.integrations.some((integration) => !validateAuthorizationRecord(integration.authorization))) {
+    throw new AppError("INVALID_STATE", "The saved integration authorization data is invalid.");
   }
   if (!state.aiWorkloads || typeof state.aiWorkloads !== "object" || Array.isArray(state.aiWorkloads)) {
     throw new AppError("INVALID_STATE", "The saved AI workload assignments are invalid.");
@@ -514,7 +640,7 @@ function validateState(state) {
     }
   }
   const postPlanIds = new Set();
-  const postStatuses = new Set(["needs_approval", "approved_for_manual_export", "approved_for_official_api", "export_ready", "canceled"]);
+  const postStatuses = POST_PLAN_STATUS_VALUES;
   for (const plan of state.postQueue) {
     if (
       typeof plan.id !== "string" ||
@@ -526,7 +652,7 @@ function validateState(state) {
       typeof plan.caption !== "string" ||
       plan.caption.length > 2200 ||
       !Array.isArray(plan.platforms) ||
-      plan.platforms.some((platformId) => !["tiktok", "instagram", "youtube"].includes(platformId)) ||
+      plan.platforms.some((platformId) => !CREATOR_PLATFORM_IDS.has(platformId)) ||
       !postStatuses.has(plan.status) ||
       (plan.contentHash !== null && !/^[a-f0-9]{64}$/.test(plan.contentHash)) ||
       (plan.mediaJobId !== null && (typeof plan.mediaJobId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(plan.mediaJobId))) ||
@@ -553,7 +679,8 @@ function validateState(state) {
         item.title.length < 1 ||
         item.title.length > 120 ||
         typeof item.caption !== "string" ||
-        item.caption.length > 2200
+        item.caption.length > 2200 ||
+        !validatePublishingOptions(item.platformId, item.options)
       ) {
         throw new AppError("INVALID_STATE", "The saved platform publishing packages are invalid.");
       }
@@ -593,18 +720,16 @@ function validateState(state) {
       throw new AppError("INVALID_STATE", "The saved publishing media snapshot is invalid.");
     }
     if (plan.approvalSnapshot !== null) {
-      const expectedPayload = {
-        planId: plan.id,
-        title: plan.title,
-        caption: plan.caption,
-        platformPackages: plan.platformPackages,
-        schedule: plan.schedule,
-        media: plan.mediaSnapshot
-      };
+      // Snapshots are versioned because the payload shape grew. A v1 snapshot
+      // predates per-destination publishing options, so its hash must be
+      // recomputed from the v1 shape -- otherwise every already-approved plan
+      // would fail INVALID_STATE and the app would refuse to boot.
+      const version = plan.approvalSnapshot?.version;
+      const expectedPayload = approvalPayloadForVersion(plan, version);
       const expectedHash = crypto.createHash("sha256").update(JSON.stringify(expectedPayload)).digest("hex");
       if (
         !plan.approvalSnapshot ||
-        plan.approvalSnapshot.version !== 1 ||
+        !SUPPORTED_APPROVAL_VERSIONS.has(version) ||
         plan.approvalSnapshot.hash !== expectedHash ||
         !["manual_export", "official_api"].includes(plan.approvalSnapshot.mode) ||
         typeof plan.approvalSnapshot.approvedAt !== "string" ||
@@ -626,6 +751,14 @@ function validateState(state) {
         (plan.exportReceipt.snapshotHash !== null && !/^[a-f0-9]{64}$/.test(plan.exportReceipt.snapshotHash)))
     ) {
       throw new AppError("INVALID_STATE", "The saved publishing export receipt is invalid.");
+    }
+    // Publication receipts must stay free of tokens, secrets, and absolute
+    // paths, and must belong to this plan.
+    if (
+      !Array.isArray(plan.publicationReceipts) ||
+      plan.publicationReceipts.some((receipt) => !validateReceipt(receipt) || receipt.planId !== plan.id)
+    ) {
+      throw new AppError("INVALID_STATE", "The saved publication receipts are invalid.");
     }
   }
   if (

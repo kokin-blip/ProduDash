@@ -1,5 +1,5 @@
 import { escapeHtml, formatDate, statusLabel } from "../format.js";
-import { asArray, integrationReady, isPending, ui } from "../state.js";
+import { asArray, integrationReady, isPending, platformEntry, ui } from "../state.js";
 import { renderStatusBadge } from "./shared.js";
 import { renderCandidateReview } from "./candidate-review.js";
 import { renderProjects } from "./projects.js";
@@ -17,7 +17,7 @@ export function renderStudio() {
   return `
     <div class="inline-message neutral planning-banner">
       <strong>Local media workspace</strong>
-      <span>ProduDash processes media locally by default. A cloud analysis mode uploads only the categories named in a separate per-job consent; publishing still requires a future official connector.</span>
+      <span>ProduDash processes media locally by default. A cloud analysis mode uploads only the categories named in a separate per-job consent; publishing requires a connected platform and explicit approval.</span>
     </div>
     <div class="studio-tabs" role="tablist" aria-label="Content Studio">
       ${STUDIO_TABS.map(
@@ -483,9 +483,9 @@ function thumbnailChoiceLabel(thumbnail) {
 
 function renderThumbnailPlatformPreview(job, thumbnail) {
   if (!thumbnail) return "";
-  const platformIds = asArray(job.settings?.platforms).filter((id) => ["tiktok", "instagram", "youtube"].includes(id));
-  if (!platformIds.length) return "";
   const names = new Map(asArray(ui.appState.creatorPlatforms).map((platform) => [platform.id, platform.name]));
+  const platformIds = asArray(job.settings?.platforms).filter((id) => names.has(id));
+  if (!platformIds.length) return "";
   return `
     <div class="thumbnail-platform-review">
       <div><strong>Platform framing check</strong><span>Approximate edge-clearance preview only—not an official publishing preview.</span></div>
@@ -599,8 +599,8 @@ function renderPublishing() {
   const completed = posts.filter((plan) => plan.status === "export_ready").length;
   return `
     <div class="inline-message neutral">
-      <strong>Local publishing outbox</strong>
-      <span>ProduDash can prepare, approve, plan, and export safe post packages. It does not connect accounts or publish in this phase.</span>
+      <strong>Publishing outbox</strong>
+      <span>ProduDash can publish through connected, implemented platform APIs after explicit approval. Platforms without a connector remain export-only.</span>
     </div>
     <section class="studio-grid single-workflow">
       <article class="panel">
@@ -671,12 +671,20 @@ function renderPlatformChecks() {
     <fieldset class="platform-checks">
       <legend>Destinations</legend>
       ${ui.appState.creatorPlatforms
-        .map(
-          (platform) => `
-            <label><input name="platforms" type="checkbox" value="${escapeHtml(platform.id)}" /><span>${escapeHtml(platform.name)}</span></label>
-          `
-        )
+        .map((platform) => {
+          // Every publish destination is offered, but only some can be
+          // published to. Saying so here is the difference between an informed
+          // choice and picking a destination that silently removes the
+          // approve-for-publishing button later with no explanation.
+          const live = platformEntry(platform.id)?.hasLiveConnector;
+          return `
+            <label data-destination="${escapeHtml(platform.id)}"><input name="platforms" type="checkbox" value="${escapeHtml(
+              platform.id
+            )}" /><span>${escapeHtml(platform.name)}${live ? "" : " · export only"}</span></label>
+          `;
+        })
         .join("")}
+      <small class="compact-note">Destinations marked export only have no connector yet. They can be planned and exported for a manual upload, but ProduDash cannot publish to them.</small>
     </fieldset>
   `;
 }
@@ -692,11 +700,159 @@ function renderClipJob(job) {
   `;
 }
 
+// Shows what actually happened per destination. Never claims a publication the
+// provider did not confirm, and never renders anything but a safe error code.
+function receiptsOf(plan) {
+  return asArray(plan.publicationReceipts);
+}
+
+// Human wording for the codes a receipt can carry.
+//
+// Receipts store a code and never a provider message, which is what keeps
+// tokens and paths out of them -- but it meant the code itself was rendered, so
+// a failure read "Failed · APPROVAL_PREDATES_REQUIRED_OPTIONS". Anything not
+// listed here still shows its raw code rather than being swallowed, so a new
+// one is merely ugly instead of invisible.
+const RECEIPT_ERROR_COPY = {
+  UPLOAD_SESSION_UNRESOLVED: "An earlier upload could not be accounted for",
+  UPLOAD_SESSION_DISCARDED: "Earlier upload discarded at your request",
+  APPROVAL_PREDATES_REQUIRED_OPTIONS: "This approval predates required publishing choices",
+  PROVIDER_REJECTED_PUBLICATION: "The provider rejected the upload after accepting it",
+  MEDIA_JOB_NOT_READY: "This plan has no rendered video",
+  MEDIA_FILE_MISSING: "The rendered video could not be found",
+  PUBLISHING_UNSUPPORTED: "This destination cannot publish from ProduDash",
+  SECURE_STORAGE_UNAVAILABLE: "Secure storage is unavailable",
+  REAUTHORIZATION_REQUIRED: "Reauthorize this destination to continue",
+  INTEGRATION_UNAVAILABLE: "This destination has no live connector",
+  PUBLISH_FAILED: "The upload did not complete",
+  YOUTUBE_AUTH_FAILED: "YouTube rejected the stored authorization",
+  YOUTUBE_FORBIDDEN: "YouTube refused this request",
+  YOUTUBE_RATE_LIMITED: "YouTube is rate limiting uploads",
+  YOUTUBE_SERVER_ERROR: "YouTube had a server error",
+  YOUTUBE_REQUEST_REJECTED: "YouTube rejected the request",
+  YOUTUBE_TIMEOUT: "YouTube did not respond in time",
+  YOUTUBE_NETWORK_ERROR: "The connection to YouTube failed",
+  YOUTUBE_NOT_AUTHORIZED: "Authorize YouTube before publishing",
+  YOUTUBE_NO_ACCESS_TOKEN: "No YouTube access token is stored",
+  YOUTUBE_NO_REFRESH_TOKEN: "No YouTube refresh token is stored",
+  YOUTUBE_NO_UPLOAD_SESSION: "YouTube did not open an upload session",
+  YOUTUBE_AUDIENCE_DECLARATION_REQUIRED: "The audience declaration is missing",
+  YOUTUBE_MEDIA_UNREADABLE: "The rendered video could not be read",
+  YOUTUBE_UPLOAD_OFFSET_INVALID: "The resume position was out of bounds",
+  YOUTUBE_UPLOAD_CANCELED: "The upload was canceled",
+  YOUTUBE_UPLOAD_INTERRUPTED: "The upload was interrupted",
+  YOUTUBE_UPLOAD_COMMIT_PENDING: "YouTube has the whole video and is finalizing it",
+  YOUTUBE_NO_VIDEO_ID: "YouTube did not return a video id",
+  YOUTUBE_VIDEO_NOT_FOUND: "YouTube no longer reports that video",
+  YOUTUBE_STATUS_UNAVAILABLE: "The publication status could not be read",
+  CONNECTOR_NOT_CONFIGURED: "This destination is not configured"
+};
+
+function receiptErrorText(errorCode) {
+  if (!errorCode) return "Unknown error";
+  return RECEIPT_ERROR_COPY[errorCode] || errorCode;
+}
+
+function renderPublicationReceipts(planId, receipts) {
+  if (!receipts.length) return "";
+  return `
+    <div class="publication-receipts">
+      <strong>Publication record</strong>
+      ${receipts
+        .map((receipt) => {
+          const outcome =
+            receipt.status === "published" && receipt.providerPublicationId
+              ? `Published · ${escapeHtml(receipt.providerPublicationId)}`
+              : receipt.status === "processing" && receipt.providerPublicationId
+                ? `Uploaded · ${escapeHtml(receipt.providerPublicationId)} · the provider is still finalizing it`
+                : receipt.status === "failed"
+                  ? `Failed · ${escapeHtml(receiptErrorText(receipt.errorCode))}${
+                      receipt.retryable ? " · retry available" : " · not retryable"
+                    }`
+                  : escapeHtml(statusLabel(receipt.status));
+          // A processing destination is the one case where asking the provider
+          // again changes anything, so the control appears only there.
+          const refreshable = receipt.status === "processing" && receipt.providerPublicationId;
+          const attempts = asArray(receipt.attempts);
+          const last = attempts[attempts.length - 1];
+          // The provider could not say whether the earlier attempt published
+          // anything, so ProduDash will not guess. Only the person who can look
+          // at the destination is able to settle it.
+          const unresolved = receipt.status === "failed" && receipt.errorCode === "UPLOAD_SESSION_UNRESOLVED";
+          // Offered for every blocked destination, not only the unresolved one:
+          // a blocked receipt with no way to clear it is a dead end, and there
+          // are several ways to reach one. Never offered once a publication
+          // exists -- that id is what stops a retry duplicating the video.
+          const discardable = receipt.status === "failed" && receipt.retryable === false && !receipt.providerPublicationId;
+          return `<div class="publication-receipt">
+            <span>${escapeHtml(platformName(receipt.platformId))}</span>
+            <span>${outcome}</span>
+            <small>${escapeHtml(
+              `${attempts.length} attempt${attempts.length === 1 ? "" : "s"}${last?.endedAt ? ` · last ${formatDate(last.endedAt)}` : ""}`
+            )}</small>
+            ${
+              refreshable
+                ? `<button class="ghost-button small" type="button" data-refresh-publication="${escapeHtml(
+                    planId
+                  )}" data-refresh-platform="${escapeHtml(receipt.platformId)}" data-pending-label="Checking…">Check status</button>`
+                : ""
+            }
+            ${
+              discardable && !unresolved
+                ? `<button class="ghost-button small" type="button" data-discard-session="${escapeHtml(
+                    planId
+                  )}" data-discard-platform="${escapeHtml(receipt.platformId)}" data-pending-label="Clearing…">Clear and allow another attempt</button>`
+                : ""
+            }
+            ${
+              unresolved
+                ? `<small class="compact-note">An earlier upload could not be accounted for. Check ${escapeHtml(
+                    platformName(receipt.platformId)
+                  )} before retrying.</small>
+                   <button class="ghost-button small" type="button" data-discard-session="${escapeHtml(planId)}" data-discard-platform="${escapeHtml(
+                     receipt.platformId
+                   )}" data-pending-label="Discarding…">Discard and allow a new upload</button>`
+                : ""
+            }
+          </div>`;
+        })
+        .join("")}
+    </div>`;
+}
+
 function renderPostPlan(plan) {
   const platforms = asArray(plan.platforms);
   const officialReady = platforms.length > 0 && platforms.every((platform) => integrationReady(platform));
-  const canCancel = ["needs_approval", "approved_for_manual_export", "approved_for_official_api"].includes(plan.status);
+  // Mirrors electron/publishing/post-status.cjs. A dispatch in flight cannot be
+  // canceled locally, and published plans are terminal.
+  const canCancel = ["needs_approval", "approved_for_manual_export", "approved_for_official_api", "dispatch_failed"].includes(plan.status);
   const editable = plan.status === "needs_approval";
+  // A destination the dispatcher marked non-retryable is not made retryable by
+  // clicking again. Offering the button anyway meant every click appended an
+  // attempt that pushed the genuine early history out of the capped array,
+  // destroying the record of what actually happened.
+  //
+  // Judged across the plan rather than per receipt, because the control is
+  // plan-level: it is withheld only when no destination could still make
+  // progress. Blocking on `some` stranded a sibling destination that had failed
+  // transiently and was perfectly resumable.
+  //
+  // Walked over the approved destinations, not over the receipts. Receipts are
+  // written lazily, so a destination interrupted before its first attempt has
+  // none -- and judging by receipts alone declared the plan blocked because of
+  // a sibling's failure while dispatch would happily have published it.
+  const approvedDestinations = asArray(plan.approvalSnapshot?.destinations);
+  const canProgress = (destination) => {
+    const receipt = receiptsOf(plan).find((item) => item.idempotencyKey === destination.idempotencyKey);
+    // Never attempted, so dispatch would try it.
+    if (!receipt) return true;
+    // Already has a publication: finished, not blocked.
+    if (receipt.providerPublicationId) return false;
+    return receipt.status !== "failed" || receipt.retryable !== false;
+  };
+  const blocked = approvedDestinations.length > 0 && !approvedDestinations.some(canProgress);
+  const canDispatch = ["approved_for_official_api", "dispatch_failed"].includes(plan.status) && Boolean(plan.approvalSnapshot) && !blocked;
+  const receipts = asArray(plan.publicationReceipts);
   const packages = platforms.map(
     (platformId) =>
       asArray(plan.platformPackages).find((item) => item.platformId === platformId) || {
@@ -765,6 +921,18 @@ function renderPostPlan(plan) {
             : ""
         }
         ${
+          canDispatch
+            ? `<button class="primary-button small" type="button" data-dispatch-post="${escapeHtml(plan.id)}" data-pending-label="Publishing…">${
+                plan.status === "dispatch_failed" ? "Retry publishing" : "Publish to approved destinations"
+              }</button>`
+            : ""
+        }
+        ${
+          plan.status === "dispatching"
+            ? `<span class="compact-note">Publishing in progress. Do not close ProduDash until it finishes.</span>`
+            : ""
+        }
+        ${
           canCancel
             ? `<button class="text-button danger-text" type="button" data-cancel-post="${escapeHtml(
                 plan.id
@@ -772,8 +940,40 @@ function renderPostPlan(plan) {
             : ""
         }
       </div>
+      ${renderPublicationReceipts(plan.id, receipts)}
     </div>
   `;
+}
+
+// Per-destination choices the provider requires, rendered from the registry
+// definitions carried on the platform catalog. An option with no registry
+// default renders with no preselection, so the person has to actually choose.
+function renderPublishingOptionFields(item) {
+  const definitions = platformEntry(item.platformId)?.publishingOptions;
+  if (!definitions) return "";
+  return Object.entries(definitions)
+    .map(([key, definition]) => {
+      const current = item.options?.[key];
+      const unset = current === undefined || current === null;
+      return `
+        <label class="publishing-option" data-publishing-option="${escapeHtml(key)}">
+          <span>${escapeHtml(definition.label)}${definition.default === null ? " (required)" : ""}</span>
+          <select name="option:${escapeHtml(key)}" ${unset && definition.default === null ? "required" : ""}>
+            ${definition.default === null ? `<option value="" ${unset ? "selected" : ""} disabled>Choose…</option>` : ""}
+            ${definition.choices
+              .map(
+                (choice) =>
+                  `<option value="${escapeHtml(String(choice.value))}" ${
+                    String(choice.value) === String(current) ? "selected" : ""
+                  }>${escapeHtml(choice.label)}</option>`
+              )
+              .join("")}
+          </select>
+          <small>${escapeHtml(definition.help)}</small>
+        </label>
+      `;
+    })
+    .join("");
 }
 
 function renderPostDraftForm(plan, packages) {
@@ -794,6 +994,7 @@ function renderPostDraftForm(plan, packages) {
                       <label><span>Caption</span><textarea name="platformCaption" maxlength="2200">${escapeHtml(
                         item.caption
                       )}</textarea></label>
+                      ${renderPublishingOptionFields(item)}
                     </fieldset>
                   `
                 )
@@ -811,6 +1012,19 @@ function renderPostDraftForm(plan, packages) {
   `;
 }
 
+// The choices frozen into the approval, shown on a locked plan so the approved
+// audience and visibility stay visible after editing is closed.
+function renderApprovedOptions(item) {
+  const definitions = platformEntry(item.platformId)?.publishingOptions;
+  if (!definitions || !item.options) return "";
+  const parts = Object.entries(definitions).map(([key, definition]) => {
+    const value = item.options[key];
+    const choice = definition.choices.find((option) => String(option.value) === String(value));
+    return `${definition.label}: ${choice ? choice.label : "not chosen"}`;
+  });
+  return `<small class="approved-options" data-approved-options="${escapeHtml(item.platformId)}">${escapeHtml(parts.join(" · "))}</small>`;
+}
+
 function renderPostPackages(packages) {
   if (!packages.length) return `<p class="compact-note">No destination copy is attached.</p>`;
   return `
@@ -822,6 +1036,7 @@ function renderPostPackages(packages) {
               <strong>${escapeHtml(platformName(item.platformId))}</strong>
               <span>${escapeHtml(item.title)}</span>
               <small>${escapeHtml(item.caption || "No caption.")}</small>
+              ${renderApprovedOptions(item)}
             </div>
           `
         )

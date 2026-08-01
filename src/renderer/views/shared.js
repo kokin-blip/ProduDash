@@ -1,9 +1,13 @@
 import { escapeHtml, statusLabel, statusTone } from "../format.js";
 import { credentialStored, providerCredentialsStored, resolveWorkload, ui, workloadReady } from "../state.js";
 
-export function renderStatusBadge(value, label = statusLabel(value), key = "") {
+// `tone` may be given explicitly by callers whose vocabulary statusTone does
+// not share. Inferring it from the slug means a new set of status values
+// silently renders neutral until someone remembers to extend statusTone, which
+// is how every connection state came to look identical.
+export function renderStatusBadge(value, label = statusLabel(value), key = "", tone = statusTone(value)) {
   const statusAttributes = key ? ` data-status-key="${escapeHtml(key)}" data-status-value="${escapeHtml(value || "unknown")}"` : "";
-  return `<span class="status-badge ${statusTone(value)}"${statusAttributes}><span aria-hidden="true"></span>${escapeHtml(label)}</span>`;
+  return `<span class="status-badge ${escapeHtml(tone)}"${statusAttributes}><span aria-hidden="true"></span>${escapeHtml(label)}</span>`;
 }
 
 export function renderStatusMessages() {
@@ -138,7 +142,7 @@ function renderSetupStep({
 
 export function renderCompliancePanel(title = "Security and workflow boundaries") {
   return `
-    <details class="disclosure">
+    <details class="disclosure compliance-panel">
       <summary>
         <span>
           <strong>${escapeHtml(title)}</strong>

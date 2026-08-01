@@ -166,6 +166,12 @@ class MediaJobService {
     this.onEvent = onEvent;
     this.outputSelections = new Map();
     this.active = null;
+    // The job schedule() has committed to but start() has not finished wiring
+    // up. `active` cannot cover this: it needs the runner handle, which does not
+    // exist until two awaits later, and a cancel arriving in between was
+    // silently dropped while the render carried on to completion.
+    this.claimed = null;
+    this.cancelRequested = new Set();
     this.scheduling = false;
     this.clearing = false;
   }
@@ -666,14 +672,21 @@ class MediaJobService {
     const job = this.store.getMediaJob(jobId);
     if (job.status === "canceled") return this.store.getAppState();
     if (job.status === "completed") throw new AppError("MEDIA_JOB_TRANSITION_INVALID", "A completed media job cannot be canceled.");
-    if (this.active?.jobId === jobId) {
-      const state = await this.store.updateMediaJobSummary(jobId, {
+    if (this.active?.jobId === jobId || this.claimed === jobId) {
+      // Recorded before the await, not after. A job that finished while the
+      // status write was queued would otherwise have had start()'s cleanup run
+      // first, leaving this entry behind on an idle job -- and the next run for
+      // the same id would cancel itself immediately.
+      //
+      // Recorded as well as acted on, because a job that is claimed but still
+      // starting has no handle yet; start() applies this once it has one.
+      this.cancelRequested.add(jobId);
+      this.active?.handle?.cancel();
+      return this.store.updateMediaJobSummary(jobId, {
         status: "canceling",
         stage: "canceling",
         error: null
       });
-      this.active.handle.cancel();
-      return state;
     }
     if (!["queued", "render_queued", "awaiting_review", "failed", "interrupted"].includes(job.status)) {
       throw new AppError("MEDIA_JOB_TRANSITION_INVALID", "This media job cannot be canceled from its current state.");
@@ -685,6 +698,39 @@ class MediaJobService {
     );
   }
 
+  // Rendering reuses the validated analysis artifacts in the job's temp folder.
+  // Once candidates were approved, retry always went back to rendering -- so if
+  // those artifacts were gone or truncated, every retry failed on the same read,
+  // forever. The error even said "Retry analysis before rendering", which no
+  // path could do. Checking here is what makes that instruction true.
+  // "readable", "unreadable", or "unknown".
+  //
+  // The distinction matters because retry() discards the user's approved
+  // candidate selections when it falls back to analysis. A bare catch treated
+  // secure storage being unavailable, or a momentary EACCES, exactly like a
+  // truncated file -- silently destroying those selections over a condition
+  // that would have cleared by itself.
+  analysisArtifactState(jobId) {
+    let tempPath;
+    try {
+      ({ tempPath } = this.getPrivatePaths(jobId));
+    } catch {
+      return "unknown";
+    }
+    for (const name of ["metadata.json", "analysis.json"]) {
+      const file = path.join(tempPath, name);
+      if (!fs.existsSync(file)) return "unreadable";
+      try {
+        JSON.parse(fs.readFileSync(file, "utf8"));
+      } catch (error) {
+        // Filesystem errors carry a code; a parse failure does not.
+        if (error?.code) return "unknown";
+        return "unreadable";
+      }
+    }
+    return "readable";
+  }
+
   async retry(jobId) {
     const job = this.store.getMediaJob(jobId);
     if (!RETRYABLE_STATUSES.has(job.status)) {
@@ -693,11 +739,26 @@ class MediaJobService {
     if (!job.retryable && job.status !== "canceled") {
       throw new AppError("MEDIA_JOB_NOT_RETRYABLE", "This media job cannot be retried with its current source and settings.");
     }
-    const nextStatus = job.selectedCandidateIds.length ? "render_queued" : "queued";
+    // Only a positive finding that the artifacts are gone sends an approved job
+    // back to analysis. If we could not tell, the render is re-queued: it may
+    // fail again, but it keeps the selections the user made.
+    const artifacts = job.selectedCandidateIds.length ? this.analysisArtifactState(jobId) : "unreadable";
+    const resumable = artifacts !== "unreadable";
     const state = await this.store.updateMediaJobSummary(
       jobId,
-      { status: nextStatus, stage: "queued", error: null, retryable: false, thumbnailSelections: [] },
-      `Retried media job: ${job.title}.`
+      {
+        status: resumable ? "render_queued" : "queued",
+        stage: "queued",
+        error: null,
+        retryable: false,
+        thumbnailSelections: [],
+        // Analysis regenerates candidates, so selections made against the old
+        // ones would refer to nothing.
+        ...(resumable ? {} : { selectedCandidateIds: [] })
+      },
+      job.selectedCandidateIds.length && !resumable
+        ? `Retried media job from analysis after its validated artifacts were lost, discarding approved clips: ${job.title}.`
+        : `Retried media job: ${job.title}.`
     );
     this.schedule();
     return state;
@@ -844,16 +905,20 @@ class MediaJobService {
   }
 
   schedule() {
-    if (this.scheduling || this.active || this.clearing) return;
+    if (this.scheduling || this.active || this.claimed || this.clearing) return;
     this.scheduling = true;
     Promise.resolve()
       .then(async () => {
-        if (this.active || this.clearing) return;
+        if (this.active || this.claimed || this.clearing) return;
         const state = this.store.getAppState();
         const next = state.mediaJobs
           .filter((job) => job.status === "queued" || job.status === "render_queued")
           .sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt))[0];
-        if (next) await this.start(next);
+        if (!next) return;
+        // Claimed here, with no await in between, so a cancel can never arrive
+        // while this job looks unclaimed to cancel().
+        this.claimed = next.id;
+        await this.start(next);
       })
       .finally(() => {
         this.scheduling = false;
@@ -909,16 +974,27 @@ class MediaJobService {
           if (message.stage === lastStage && bucket === lastBucket) return;
           lastStage = message.stage;
           lastBucket = bucket;
-          void this.store.updateMediaJobSummary(job.id, {
-            stage: message.stage,
-            progress: message.progress
-          });
+          // Deliberately not awaited -- progress must not throttle the worker --
+          // but a rejection still needs an owner. updateMediaJobSummary throws
+          // MEDIA_JOB_NOT_FOUND if the job was cleared mid-run, and an unhandled
+          // rejection there takes down the whole main process. Losing one
+          // progress tick for a job that no longer exists costs nothing.
+          this.store
+            .updateMediaJobSummary(job.id, {
+              stage: message.stage,
+              progress: message.progress
+            })
+            .catch(() => {});
         }
       );
       const finished = new Promise((resolve) => {
         resolveFinished = resolve;
       });
       this.active = { jobId: job.id, handle, finished };
+      // A cancel that arrived while this job was starting had no handle to act
+      // on. Applying it here is what stops the run continuing to completion
+      // after the user has already cancelled it.
+      if (this.cancelRequested.has(job.id)) handle.cancel();
       let result;
       try {
         result = await handle.result;
@@ -952,6 +1028,8 @@ class MediaJobService {
       if (typeof stopOutputAccess === "function") stopOutputAccess();
       if (typeof stopSourceAccess === "function") stopSourceAccess();
       if (resolveFinished) resolveFinished();
+      this.cancelRequested.delete(job.id);
+      this.claimed = null;
       this.active = null;
     }
   }
@@ -980,7 +1058,12 @@ class MediaJobService {
       }
     }
     if (result.type === "awaiting_review" && (job.settings.analysisMode || "local_heuristics") !== "local_heuristics") {
-      if (!this.analysisService) {
+      if (this.cancelRequested.has(jobId)) {
+        // Cancelled while the local pass was finishing. Starting a cloud call
+        // now would send this person's media to a provider after they had
+        // already stopped the job.
+        result = { type: "canceled" };
+      } else if (!this.analysisService) {
         result = {
           type: "error",
           error: { code: "ANALYSIS_MODE_UNAVAILABLE", message: "The selected cloud analysis mode is unavailable." },
@@ -989,6 +1072,14 @@ class MediaJobService {
       } else {
         try {
           result = await this.analysisService.analyze({ job, paths: this.getPrivatePaths(jobId), localResult: result });
+          // The request itself cannot be called back: analyze() takes no signal,
+          // and threading one through the provider and transcription chain is a
+          // much larger change than this. But a cancel during it used to do
+          // nothing at all -- the runner had already gone terminal, so
+          // handle.cancel() was a no-op, and the job reappeared as
+          // awaiting_review or sat in "canceling", which has no action left in
+          // the UI. It now ends where the user put it.
+          if (this.cancelRequested.has(jobId)) result = { type: "canceled" };
         } catch (error) {
           result = {
             type: "error",

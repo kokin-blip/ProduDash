@@ -4,7 +4,11 @@ ProduDash is validated as a local development MVP and is configured for a privat
 
 ## Automated validation
 
-The regular validation workflow runs clean installation, syntax checks, linting, formatting, production dependency audit, unit/integration/renderer tests, real tiny-media tests, and Electron smoke coverage on Ubuntu, macOS, and Windows.
+The regular validation workflow runs clean installation, syntax checks, linting, formatting, and a production dependency audit on Ubuntu, plus unit/integration/renderer tests, real tiny-media tests, and Electron smoke coverage on Ubuntu, macOS, and Windows.
+
+Two gaps in that workflow are deliberate and worth stating rather than discovering. `npm run check:package-config` runs in `npm run validate` and in the manual prerelease workflow, but in no CI job. And the dependency audit is scoped with `--omit=dev`, so advisories against build-only tooling are not gated on; `electron-builder` currently carries high-severity advisories in its transitive tree that cannot be resolved without downgrading it several major versions.
+
+Every automated test runs against injected clients. No test authorizes with a provider or uploads anything, so automated validation says nothing about whether the live connectors work.
 
 The manual prerelease workflow uses native hosts:
 
@@ -40,9 +44,11 @@ macOS signed builds enable hardened runtime with only Electron’s JIT and unsig
 
 There is no updater, update feed, public publishing provider, release tag automation, or rollback service in this alpha.
 
-## Live and public features remain blocked
+## One live connector, the rest still blocked
 
-ProduDash does not claim live TikTok, Meta/Instagram, YouTube, Stripe, cross-device collaboration, webhook delivery, or public API availability. Those require approved platform applications, a hosted HTTPS OAuth/webhook service, tenant-aware storage and key custody, deployment ownership, monitoring, incident response, live acceptance tests, and a separate release decision.
+YouTube publishing is live. A build produced today can upload to a real channel using an OAuth client the owner supplies, authorized over a loopback redirect that needs no hosted service. That capability is gated on human approval of an immutable snapshot, but it is real, and it is the first thing in ProduDash that sends a user's media off their machine.
+
+ProduDash does not claim live TikTok, Meta/Instagram, Stripe, cross-device collaboration, webhook delivery, or public API availability. Those require approved platform applications, a hosted HTTPS OAuth/webhook service, tenant-aware storage and key custody, deployment ownership, monitoring, incident response, live acceptance tests, and a separate release decision.
 
 ProduDash never substitutes scraping, browser automation, fake connection states, or mock provider output for missing official connectors.
 
@@ -56,5 +62,11 @@ Before generating the first immutable internal installer set:
 4. Inspect the generated application icon and Analytics navigation glyph.
 5. Review packaged-app screenshots and smoke logs.
 6. Verify checksums, SBOM, package-content audit, and build metadata.
+7. Accept the live YouTube connector against Google, because no automated test can. Run `scripts/acceptance/youtube.cjs` with an owner-supplied OAuth client and record, here, the date, the channel used, and the answers to:
+   - Did Google return a refresh token for this client type? The connector's whole design assumes it does; if it does not, every publish needs a fresh browser authorization and that assumption must be corrected rather than worked around.
+   - Did a private upload complete, and did the receipt record the id YouTube actually returned?
+   - Did YouTube apply the requested visibility, or force private because the API project is unaudited?
+
+   Status: **not yet run.** The refresh-token behaviour above is currently an assumption, not an observation.
 
 Before any public release, additionally complete the privacy, terms, synthetic-media, retention, accessibility, support, incident-response, updater, signing, and jurisdiction-specific reviews described in the product roadmap.

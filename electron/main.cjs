@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, Menu, protocol, safeStorage, session, shell,
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { createConnectors } = require("./connectors.cjs");
+const { PublishingDispatchService } = require("./publishing/dispatch-service.cjs");
 const { ConnectionService } = require("./connections.cjs");
 const { CredentialVault, createSafeStorageAdapter } = require("./credential-vault.cjs");
 const { AppError } = require("./errors.cjs");
@@ -91,7 +92,7 @@ if (hasSingleInstanceLock) {
       session.defaultSession.setPermissionCheckHandler(() => false);
 
       const credentialVault = new CredentialVault(app.getPath("userData"), createSafeStorageAdapter(safeStorage));
-      const store = new ProduDashStore(app.getPath("userData"), { credentialVault });
+      const store = new ProduDashStore(app.getPath("userData"), { credentialVault, appVersion: app.getVersion() });
       try {
         await store.initialize();
       } catch (error) {
@@ -105,7 +106,8 @@ if (hasSingleInstanceLock) {
           throw error;
         }
       }
-      const connectors = createConnectors();
+      // Authorization opens in the user's real browser, never an embedded view.
+      const connectors = createConnectors({ openExternal: (url) => shell.openExternal(url) });
       const providerRegistry = new ProviderRegistry([
         new GeminiProviderAdapter({ connector: connectors.gemini }),
         new OpenAIProviderAdapter(),
@@ -176,9 +178,37 @@ if (hasSingleInstanceLock) {
         }
       });
       store.notices.push(...advisorHistory.getNotices());
-      const connections = new ConnectionService({ store, shopify: connectors.shopify, providerService: providers });
+      const connections = new ConnectionService({
+        store,
+        connectorRegistry: connectors.connectorRegistry,
+        providerService: providers
+      });
+      const publishing = new PublishingDispatchService({
+        store,
+        connectorRegistry: connectors.connectorRegistry,
+        connections,
+        mediaJobs,
+        credentialVault: store.credentialVault
+      });
+      // Rescues any plan left mid-dispatch by a previous run, the way
+      // MediaJobService already does for media jobs.
+      await publishing.initialize();
       protocol.handle("produdash-media", createMediaProtocolHandler(mediaLibrary, brandAssets, mediaJobs));
-      registerIpc({ store, connections, providers, mediaLibrary, projects, templates, brandAssets, mediaJobs, advisor, appUrl, shell });
+      registerIpc({
+        store,
+        connections,
+        connectorRegistry: connectors.connectorRegistry,
+        publishing,
+        providers,
+        mediaLibrary,
+        projects,
+        templates,
+        brandAssets,
+        mediaJobs,
+        advisor,
+        appUrl,
+        shell
+      });
       await mediaJobs.initialize();
       Menu.setApplicationMenu(null);
       createWindow();

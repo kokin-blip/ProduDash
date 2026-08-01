@@ -82,7 +82,10 @@ test("missing encrypted vault is restored from its protected backup", async (t) 
   fs.unlinkSync(path.join(directory, "produdash-credentials.enc.json"));
   const recovered = new CredentialVault(directory, fakeEncryption());
   const notices = await recovered.initialize();
-  assert.equal(recovered.get("gemini").apiKey, "AIza-first-key");
+  // The backup holds the current credentials, not the previous generation.
+  // This assertion used to expect "AIza-first-key", which was the leak stated
+  // as a guarantee: it meant a rotated key stayed readable on disk forever.
+  assert.equal(recovered.get("gemini").apiKey, "AIza-second-key");
   assert.ok(notices.some((notice) => notice.code === "CREDENTIALS_RECOVERED"));
 });
 
@@ -125,4 +128,155 @@ test("planned integrations reject credentials until a real connector exists", as
     (error) => error.code === "INTEGRATION_UNAVAILABLE"
   );
   assert.equal(JSON.stringify(harness.vault.get("stripe")).includes("sk_live_not_saved"), false);
+});
+
+test("disconnecting an integration leaves no recoverable token in the backup", async (t) => {
+  const harness = await createHarness();
+  t.after(harness.cleanup);
+  await harness.store.saveIntegrationCredentials("youtube", { clientId: "client-1", clientSecret: "secret-1" });
+  await harness.store.saveIntegrationAuthorization("youtube", {
+    accessToken: "ya29.access-secret",
+    refreshToken: "1//refresh-secret",
+    selectedAccount: { id: "UC-channel", name: "Channel" }
+  });
+  await harness.store.clearIntegrationAuthorization("youtube");
+
+  // Checked through the backup rather than the live vault. writeJsonAtomic
+  // copies the current file into `.bak` before replacing it, so a revoked token
+  // can survive there while the vault itself looks correctly cleaned -- and the
+  // backup is what someone with disk access actually reads.
+  fs.unlinkSync(path.join(harness.directory, "produdash-credentials.enc.json"));
+  const recovered = new CredentialVault(harness.directory, fakeEncryption());
+  await recovered.initialize();
+  const values = recovered.get("youtube");
+  assert.equal(values.oauthAccessToken, undefined, "a disconnected access token must not be recoverable");
+  assert.equal(values.oauthRefreshToken, undefined, "a disconnected refresh token must not be recoverable");
+  // The user's own app configuration is not a revoked grant and stays put.
+  // (clientId is not sensitive, so it lives in app state rather than the vault.)
+  assert.equal(values.clientSecret, "secret-1");
+});
+
+test("rotating a secret leaves the previous value unrecoverable", async (t) => {
+  const directory = createDirectory();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const vault = new CredentialVault(directory, fakeEncryption());
+  await vault.initialize();
+  await vault.save("gemini", { apiKey: "AIza-compromised" });
+  await vault.save("gemini", { apiKey: "AIza-rotated" });
+
+  fs.unlinkSync(path.join(directory, "produdash-credentials.enc.json"));
+  const recovered = new CredentialVault(directory, fakeEncryption());
+  await recovered.initialize();
+  assert.equal(recovered.get("gemini").apiKey, "AIza-rotated");
+});
+
+test("delete-all removes the vault copies a recovery leaves behind", async (t) => {
+  const directory = createDirectory();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const vault = new CredentialVault(directory, fakeEncryption());
+  await vault.initialize();
+  await vault.save("youtube", { oauthRefreshToken: "1//refresh-secret" });
+
+  // Drive the real recovery path. A vault can fail to decode without being
+  // damaged -- a reinstalled OS or a changed keychain leaves the ciphertext
+  // perfectly intact and simply unreadable here -- and recovery sets those
+  // copies aside rather than deleting them.
+  const filePath = path.join(directory, "produdash-credentials.enc.json");
+  fs.writeFileSync(filePath, JSON.stringify({ version: 1, ciphertext: "not-decryptable" }));
+  fs.writeFileSync(`${filePath}.bak`, JSON.stringify({ version: 1, ciphertext: "not-decryptable" }));
+  const broken = new CredentialVault(directory, fakeEncryption());
+  await assert.rejects(() => broken.initialize(), { code: "CREDENTIAL_VAULT_INVALID" });
+  assert.ok(
+    fs.readdirSync(directory).some((entry) => entry.includes(".recovery-")),
+    "the recovery path must have preserved something for this test to mean anything"
+  );
+
+  await vault.clearAll();
+  assert.deepEqual(
+    fs.readdirSync(directory).filter((entry) => entry.startsWith("produdash-credentials")),
+    [],
+    "deleting all local data must leave no copy of the credential vault behind"
+  );
+});
+
+test("a legacy credentials file that cannot be migrated does not brick startup", async (t) => {
+  const directory = createDirectory();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const legacyPath = path.join(directory, "produdash-credentials.json");
+  fs.writeFileSync(legacyPath, "{ not valid json", { mode: 0o600 });
+
+  // Throwing here reaches main.cjs, which shows a fatal dialog and quits. The
+  // file is still there on the next launch, so it fails identically forever and
+  // the user cannot reach the UI to clear it -- the app is unlaunchable.
+  const vault = new CredentialVault(directory, fakeEncryption());
+  const notices = await vault.initialize();
+  assert.ok(
+    notices.some((notice) => notice.code === "LEGACY_CREDENTIALS_UNREADABLE"),
+    "the user has to be told their old credentials were not migrated"
+  );
+  assert.equal(fs.existsSync(legacyPath), false, "the unreadable file is set aside so the next launch is clean");
+  assert.ok(
+    fs.readdirSync(directory).some((entry) => entry.startsWith("produdash-credentials.json.")),
+    "and it is kept rather than destroyed -- it is the user's only copy"
+  );
+
+  // The app is usable: credentials can be entered again.
+  await vault.save("gemini", { apiKey: "AIza-new" });
+  assert.equal(vault.get("gemini").apiKey, "AIza-new");
+
+  // A second launch sees no legacy file at all.
+  const relaunched = new CredentialVault(directory, fakeEncryption());
+  await relaunched.initialize();
+  assert.equal(relaunched.get("gemini").apiKey, "AIza-new");
+});
+
+test("delete-all removes a preserved legacy credentials file", async (t) => {
+  const directory = createDirectory();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(directory, "produdash-credentials.json"), "{ not valid json", { mode: 0o600 });
+  const vault = new CredentialVault(directory, fakeEncryption());
+  await vault.initialize();
+
+  // The preserved copy is plaintext, so leaving it behind after "delete all
+  // local data" is worse than the encrypted sidecars.
+  await vault.clearAll();
+  assert.deepEqual(
+    fs.readdirSync(directory).filter((entry) => entry.startsWith("produdash-credentials")),
+    []
+  );
+});
+
+test("a legacy credentials file that is momentarily unreadable is kept for the next launch", async (t) => {
+  // preserveFile renames, and migrateLegacy returns early once the path is gone,
+  // so treating a locked file as corruption would discard the user's only copy
+  // of their credentials because a virus scanner held it open for a second.
+  const directory = createDirectory();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const legacyPath = path.join(directory, "produdash-credentials.json");
+  fs.writeFileSync(legacyPath, JSON.stringify({ gemini: { apiKey: "AIza-still-needed" } }), { mode: 0o600 });
+
+  const realReadFile = fs.readFileSync;
+  let locked = true;
+  fs.readFileSync = (target, ...rest) => {
+    if (locked && String(target) === legacyPath) {
+      const error = new Error("EBUSY: resource busy or locked");
+      error.code = "EBUSY";
+      throw error;
+    }
+    return realReadFile(target, ...rest);
+  };
+  t.after(() => {
+    fs.readFileSync = realReadFile;
+  });
+
+  const blocked = new CredentialVault(directory, fakeEncryption());
+  const notices = await blocked.initialize();
+  assert.ok(notices.some((notice) => notice.code === "LEGACY_CREDENTIALS_UNAVAILABLE"));
+  assert.equal(fs.existsSync(legacyPath), true, "a lock is not corruption -- the file has to survive it");
+
+  // The lock clears, and the next launch migrates normally.
+  locked = false;
+  const later = new CredentialVault(directory, fakeEncryption());
+  await later.initialize();
+  assert.equal(later.get("gemini").apiKey, "AIza-still-needed");
 });
