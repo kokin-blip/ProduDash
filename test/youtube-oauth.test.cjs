@@ -550,3 +550,25 @@ test("a session that dies mid-send is reported as gone, not as a bad request", a
     );
   }
 });
+
+// Opening a session and probing for the resume offset used to call the
+// transport directly, so neither carried the timeout every other call has. A
+// connection that hung on either one stalled the whole dispatch with nothing to
+// cancel it. uploadBytes is deliberately excluded: a large file legitimately
+// outlasts any ceiling worth setting.
+test("a hung session open or resume probe times out instead of stalling forever", async () => {
+  const hang = (_url, options) =>
+    new Promise((_resolve, reject) => {
+      options.signal.addEventListener("abort", () => {
+        const aborted = new Error("The operation was aborted.");
+        aborted.name = "AbortError";
+        reject(aborted);
+      });
+    });
+  const connector = new YouTubeConnector({ transport: hang, timeoutMs: 10 });
+
+  await assert.rejects(() => connector.createUploadSession({ accessToken: "at", metadata: {}, contentLength: 8, contentType: "video/*" }), {
+    code: "YOUTUBE_TIMEOUT"
+  });
+  await assert.rejects(() => connector.probeUploadOffset("https://upload.example/session", "at", 8), { code: "YOUTUBE_TIMEOUT" });
+});

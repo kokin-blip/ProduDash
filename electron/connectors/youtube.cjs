@@ -132,20 +132,18 @@ class YouTubeConnector {
     return { valid: true, missing: [] };
   }
 
-  async request(url, options = {}) {
+  // The timeout ceiling, for callers that need the raw response rather than
+  // parsed JSON. createUploadSession reads a header and probeUploadOffset reads
+  // a status, and both used to call this.transport directly -- so neither had a
+  // timeout, and a hung connection stalled a dispatch indefinitely with no way
+  // out. They are short control-plane round-trips, unlike uploadBytes, which
+  // deliberately keeps no ceiling because a large file legitimately takes longer
+  // than any timeout worth setting.
+  async requestRaw(url, options = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await this.transport(url, { ...options, signal: controller.signal });
-      if (!response.ok) throw safeGoogleError(response.status, options);
-      // Google's revocation endpoint answers a successful revoke with 200 and an
-      // empty body. Calling response.json() on that throws, and the throw is
-      // indistinguishable here from a transport failure -- so a revocation that
-      // genuinely succeeded was reported as "could not reach YouTube", and the
-      // local cleanup that follows a disconnect never ran. The integration kept
-      // showing a connection whose token Google had already destroyed.
-      if (options.expectNoContent) return null;
-      return await response.json();
+      return await this.transport(url, { ...options, signal: controller.signal });
     } catch (error) {
       if (error instanceof ConnectorError) throw error;
       if (error?.name === "AbortError") {
@@ -159,6 +157,32 @@ class YouTubeConnector {
       });
     } finally {
       clearTimeout(timeout);
+    }
+  }
+
+  async request(url, options = {}) {
+    const response = await this.requestRaw(url, options);
+    try {
+      if (!response.ok) throw safeGoogleError(response.status, options);
+      // Google's revocation endpoint answers a successful revoke with 200 and an
+      // empty body. Calling response.json() on that throws, and the throw is
+      // indistinguishable here from a transport failure -- so a revocation that
+      // genuinely succeeded was reported as "could not reach YouTube", and the
+      // local cleanup that follows a disconnect never ran. The integration kept
+      // showing a connection whose token Google had already destroyed.
+      if (options.expectNoContent) return null;
+      return await response.json();
+    } catch (error) {
+      if (error instanceof ConnectorError) throw error;
+      // Only an unreadable body reaches here now -- the transport's own
+      // failures, timeout included, are already mapped in requestRaw. Reported
+      // the same way it was when the parse sat inside the transport try, so an
+      // unreadable response stays indistinguishable from an unreachable host
+      // rather than escaping the connector as a raw SyntaxError.
+      throw connectorError(CONNECTOR_ERROR_CATEGORIES.NETWORK, "YOUTUBE_NETWORK_ERROR", "ProduDash could not reach YouTube.", {
+        platformId: this.id,
+        cause: error
+      });
     }
   }
 
@@ -325,7 +349,7 @@ class YouTubeConnector {
     const url = new URL(UPLOAD_ENDPOINT);
     url.searchParams.set("uploadType", "resumable");
     url.searchParams.set("part", "snippet,status");
-    const response = await this.transport(url.toString(), {
+    const response = await this.requestRaw(url.toString(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -348,7 +372,7 @@ class YouTubeConnector {
   // Asks Google how many bytes it already holds, so an interrupted upload
   // resumes instead of restarting.
   async probeUploadOffset(uploadUri, accessToken, contentLength) {
-    const response = await this.transport(uploadUri, {
+    const response = await this.requestRaw(uploadUri, {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${accessToken}`,
