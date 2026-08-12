@@ -54,7 +54,7 @@ function writeApprovedMedia(directory, overrides = {}) {
 }
 
 test("prerelease identity and builder configuration are fixed and non-publishing", () => {
-  assert.equal(packageMetadata.version, "0.1.0-alpha.1");
+  assert.equal(packageMetadata.version, "0.1.0-alpha.2");
   assert.equal(builderConfiguration.appId, "com.kokinblip.produdash");
   assert.equal(builderConfiguration.productName, "ProduDash");
   assert.equal(builderConfiguration.publish, null);
@@ -71,7 +71,7 @@ test("prerelease identity and builder configuration are fixed and non-publishing
   assert.equal(releaseProfile("signed", "darwin").testerFacing, true);
   assert.equal(
     macArtifactName(packageMetadata.version, "arm64", "dmg", "signed"),
-    "ProduDash-0.1.0-alpha.1-mac-arm64-signed-notarized.dmg"
+    "ProduDash-0.1.0-alpha.2-mac-arm64-signed-notarized.dmg"
   );
   assert.match(builderConfiguration.win.artifactName, /win-\$\{arch\}-setup/);
   assert.ok(builderConfiguration.files.includes("!node_modules/ffmpeg-static/**/*"));

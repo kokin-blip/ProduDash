@@ -106,7 +106,7 @@ jobs:
         name: Upload tester-facing signed and notarized DMG
         uses: actions/upload-artifact@v4
         with:
-          name: ProduDash-0.1.0-alpha.1-mac-${{ matrix.arch }}-signed-notarized
+          name: ProduDash-0.1.0-alpha.2-mac-${{ matrix.arch }}-signed-notarized
           path: |
             dist/*-signed-notarized.dmg
             dist/*-checksums.txt
@@ -118,7 +118,7 @@ jobs:
         name: Upload internal macOS ZIP verification archive
         uses: actions/upload-artifact@v4
         with:
-          name: ProduDash-0.1.0-alpha.1-mac-${{ matrix.arch }}-${{ inputs.signing_mode }}-internal-archive-do-not-distribute
+          name: ProduDash-0.1.0-alpha.2-mac-${{ matrix.arch }}-${{ inputs.signing_mode }}-internal-archive-do-not-distribute
           path: dist/*.zip
           if-no-files-found: error
           retention-days: 14
@@ -126,7 +126,7 @@ jobs:
         name: Upload local-only unsigned macOS package
         uses: actions/upload-artifact@v4
         with:
-          name: ProduDash-0.1.0-alpha.1-mac-${{ matrix.arch }}-local-only-unsigned
+          name: ProduDash-0.1.0-alpha.2-mac-${{ matrix.arch }}-local-only-unsigned
           path: |
             dist/*-local-unsigned.dmg
             dist/*-checksums.txt
@@ -138,7 +138,7 @@ jobs:
         name: Upload Windows package
         uses: actions/upload-artifact@v4
         with:
-          name: ProduDash-0.1.0-alpha.1-win-${{ matrix.arch }}-${{ inputs.signing_mode }}
+          name: ProduDash-0.1.0-alpha.2-win-${{ matrix.arch }}-${{ inputs.signing_mode }}
           path: |
             dist/*.exe
             dist/*-checksums.txt

@@ -1,6 +1,6 @@
 # ProduDash release readiness
 
-ProduDash is validated as a local development MVP and is configured for a private `0.1.0-alpha.1` macOS/Windows prerelease. Packaging remains fail-closed until the owner supplies approved FFmpeg and ffprobe files for every native target.
+ProduDash is validated as a local development MVP and is configured for a private `0.1.0-alpha.2` macOS/Windows prerelease. Packaging remains fail-closed until the owner supplies approved FFmpeg and ffprobe files for every native target.
 
 ## Automated validation
 

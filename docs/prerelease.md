@@ -1,4 +1,4 @@
-# ProduDash `0.1.0-alpha.1` internal prerelease
+# ProduDash `0.1.0-alpha.2` internal prerelease
 
 This guide covers the private macOS and Windows alpha. It does not authorize publishing, tagging, uploading, or public distribution.
 
@@ -6,9 +6,9 @@ This guide covers the private macOS and Windows alpha. It does not authorize pub
 
 | Platform | Architecture        | Artifacts                                                |
 | -------- | ------------------- | -------------------------------------------------------- |
-| macOS    | Apple silicon arm64 | `ProduDash-0.1.0-alpha.1-mac-arm64-signed-notarized.dmg` |
-| macOS    | Intel x64           | `ProduDash-0.1.0-alpha.1-mac-x64-signed-notarized.dmg`   |
-| Windows  | x64                 | `ProduDash-0.1.0-alpha.1-win-x64-setup.exe`              |
+| macOS    | Apple silicon arm64 | `ProduDash-0.1.0-alpha.2-mac-arm64-signed-notarized.dmg` |
+| macOS    | Intel x64           | `ProduDash-0.1.0-alpha.2-mac-x64-signed-notarized.dmg`   |
+| Windows  | x64                 | `ProduDash-0.1.0-alpha.2-win-x64-setup.exe`              |
 
 The application ID is `com.kokinblip.produdash`. The approved PD mark is the temporary alpha icon. No automatic updater or publishing provider is present. Signed and notarized DMGs are the only macOS artifacts intended for another person to test. macOS ZIPs are retained only as internal verification archives.
 
@@ -196,18 +196,18 @@ Credentials remain encrypted through Electron `safeStorage` and are never includ
 
 ## Verifying an artifact
 
-Compare the artifact with `ProduDash-0.1.0-alpha.1-checksums.txt`.
+Compare the artifact with `ProduDash-0.1.0-alpha.2-checksums.txt`.
 
 macOS:
 
 ```bash
-shasum -a 256 ProduDash-0.1.0-alpha.1-mac-arm64-signed-notarized.dmg
+shasum -a 256 ProduDash-0.1.0-alpha.2-mac-arm64-signed-notarized.dmg
 ```
 
 Windows PowerShell:
 
 ```powershell
-Get-FileHash .\ProduDash-0.1.0-alpha.1-win-x64-setup.exe -Algorithm SHA256
+Get-FileHash .\ProduDash-0.1.0-alpha.2-win-x64-setup.exe -Algorithm SHA256
 ```
 
 Signed macOS artifacts must pass `codesign`, Gatekeeper assessment, nested architecture checks, and stapler validation. Signed Windows installers must report a valid Authenticode signature. The generated CycloneDX SBOM and path-free build metadata should be retained with the matching immutable artifacts.
@@ -215,7 +215,7 @@ Signed macOS artifacts must pass `codesign`, Gatekeeper assessment, nested archi
 For a failed macOS test, preserve the original downloaded file and run the path-safe diagnostic without removing quarantine or modifying the app:
 
 ```bash
-npm run diagnose:mac -- "/path/to/ProduDash-0.1.0-alpha.1-mac-arm64-signed-notarized.dmg" EXPECTED_SHA256
+npm run diagnose:mac -- "/path/to/ProduDash-0.1.0-alpha.2-mac-arm64-signed-notarized.dmg" EXPECTED_SHA256
 ```
 
 The report includes only the artifact basename, checksum result, quarantine state, signature/notarization results, Team ID, authority, and observed architectures. It does not emit the tester's filesystem path.
