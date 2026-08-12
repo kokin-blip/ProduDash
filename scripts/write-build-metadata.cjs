@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const packageMetadata = require("../package.json");
+const { assertArtifactDigest, macArtifactName, releaseProfile } = require("./release-profile.cjs");
 
 const root = path.join(__dirname, "..");
 const distDirectory = path.join(root, "dist");
@@ -21,6 +22,24 @@ const artifacts = fs
     };
   });
 if (!artifacts.length) throw new Error("No prerelease artifacts were produced.");
+
+const signingMode = process.env.PRODUDASH_SIGNING_MODE || "unsigned";
+const profile = releaseProfile(signingMode, process.platform);
+const verificationPath = path.join(distDirectory, ".produdash-signature-verification.json");
+const verification = JSON.parse(fs.readFileSync(verificationPath, "utf8"));
+if (verification.signingMode !== signingMode || verification.releaseProfile !== profile.id) {
+  throw new Error("Signature verification does not match this build profile.");
+}
+if (profile.notarizationRequired) {
+  if (verification.signatureStatus !== "verified-developer-id" || verification.notarizationStatus !== "verified-stapled") {
+    throw new Error("External macOS metadata requires verified Developer ID signing and stapled notarization.");
+  }
+  for (const verifiedArtifact of verification.artifacts || []) {
+    const artifact = artifacts.find(({ name }) => name === verifiedArtifact.name);
+    if (!artifact) throw new Error(`Verified artifact is missing: ${verifiedArtifact.name}.`);
+    assertArtifactDigest(artifact.sha256, verifiedArtifact.sha256);
+  }
+}
 
 const prefix = `ProduDash-${packageMetadata.version}`;
 fs.writeFileSync(
@@ -54,7 +73,15 @@ fs.writeFileSync(
       revision: revision.stdout.trim(),
       platform: process.platform,
       architecture: process.arch,
-      signingMode: process.env.PRODUDASH_SIGNING_MODE || "unsigned",
+      signingMode,
+      releaseProfile: profile.id,
+      testerFacing: profile.testerFacing,
+      signatureStatus: verification.signatureStatus,
+      notarizationStatus: verification.notarizationStatus,
+      canonicalTesterArtifact:
+        process.platform === "darwin" && profile.testerFacing
+          ? macArtifactName(packageMetadata.version, process.arch, "dmg", signingMode)
+          : null,
       generatedAt: new Date().toISOString(),
       artifacts
     },

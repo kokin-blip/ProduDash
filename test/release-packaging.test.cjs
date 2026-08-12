@@ -10,6 +10,15 @@ const builderConfiguration = require("../electron-builder.config.cjs");
 const { loadApprovedMediaManifest } = require("../electron/media/binaries.cjs");
 const { workerEnvironment } = require("../electron/media/utility-runner.cjs");
 const { auditPackage, resolveResourcesDirectory } = require("../scripts/package-audit.cjs");
+const {
+  assertArchitectureInspections,
+  assertArtifactDigest,
+  assertNotarizationInspection,
+  assertSignatureInspection,
+  findMacApplication,
+  macArtifactName,
+  releaseProfile
+} = require("../scripts/release-profile.cjs");
 const { createDirectory } = require("./helpers.cjs");
 
 function hash(value) {
@@ -45,16 +54,25 @@ function writeApprovedMedia(directory, overrides = {}) {
 }
 
 test("prerelease identity and builder configuration are fixed and non-publishing", () => {
-  assert.equal(packageMetadata.version, "0.1.0-alpha.1");
+  assert.equal(packageMetadata.version, "0.1.0-alpha.2");
   assert.equal(builderConfiguration.appId, "com.kokinblip.produdash");
   assert.equal(builderConfiguration.productName, "ProduDash");
   assert.equal(builderConfiguration.publish, null);
+  assert.equal(builderConfiguration.forceCodeSigning, false);
   assert.equal(builderConfiguration.asar, true);
   assert.deepEqual(builderConfiguration.asarUnpack, ["electron/ai/python/*.py"]);
   assert.equal(builderConfiguration.nsis.oneClick, false);
   assert.equal(builderConfiguration.nsis.perMachine, false);
   assert.equal(builderConfiguration.nsis.deleteAppDataOnUninstall, false);
   assert.match(builderConfiguration.mac.artifactName, /mac-\$\{arch\}/);
+  assert.match(builderConfiguration.mac.artifactName, /local-unsigned/);
+  assert.equal(builderConfiguration.extraMetadata.releaseProfile, releaseProfile("unsigned", process.platform).id);
+  assert.equal(releaseProfile("unsigned", "darwin").testerFacing, false);
+  assert.equal(releaseProfile("signed", "darwin").testerFacing, true);
+  assert.equal(
+    macArtifactName(packageMetadata.version, "arm64", "dmg", "signed"),
+    "ProduDash-0.1.0-alpha.2-mac-arm64-signed-notarized.dmg"
+  );
   assert.match(builderConfiguration.win.artifactName, /win-\$\{arch\}-setup/);
   assert.ok(builderConfiguration.files.includes("!node_modules/ffmpeg-static/**/*"));
   assert.ok(builderConfiguration.files.includes("!node_modules/protobufjs/scripts/**/*"));
@@ -72,6 +90,80 @@ test("signed packaging fails closed when platform credentials are absent", () =>
   });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Signed darwin builds require/);
+});
+
+test("signed macOS packaging is externally classified and forces code signing", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      "const c=require('./electron-builder.config.cjs');process.stdout.write(JSON.stringify({force:c.forceCodeSigning,name:c.mac.artifactName,profile:c.extraMetadata.releaseProfile,testerFacing:c.extraMetadata.testerFacing}))"
+    ],
+    {
+      cwd: path.join(__dirname, ".."),
+      encoding: "utf8",
+      env: {
+        PATH: process.env.PATH,
+        PRODUDASH_SIGNING_MODE: "signed",
+        PRODUDASH_TARGET_PLATFORM: "darwin",
+        CSC_LINK: "certificate",
+        CSC_KEY_PASSWORD: "password",
+        APPLE_API_KEY: "AuthKey.p8",
+        APPLE_API_KEY_ID: "KEYID",
+        APPLE_API_ISSUER: "ISSUER",
+        APPLE_TEAM_ID: "TEAMID"
+      }
+    }
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    force: true,
+    name: "ProduDash-${version}-mac-${arch}-signed-notarized.${ext}",
+    profile: "external-signed-notarized",
+    testerFacing: true
+  });
+});
+
+test("macOS artifact discovery supports Electron Builder Intel and Apple silicon layouts", (t) => {
+  const directory = createDirectory("produdash-mac-layout-");
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(directory, "mac", "ProduDash.app"), { recursive: true });
+  assert.equal(findMacApplication(directory, "x64"), path.join(directory, "mac", "ProduDash.app"));
+  fs.mkdirSync(path.join(directory, "mac-arm64", "ProduDash.app"), { recursive: true });
+  assert.equal(findMacApplication(directory, "arm64"), path.join(directory, "mac-arm64", "ProduDash.app"));
+  fs.mkdirSync(path.join(directory, "mac-x64", "ProduDash.app"), { recursive: true });
+  assert.throws(() => findMacApplication(directory, "x64"), /Multiple unpacked/);
+});
+
+test("macOS release evidence rejects broken signatures, wrong architectures, missing tickets, and bad checksums", () => {
+  const validSignature = {
+    label: "Contents/MacOS/ProduDash",
+    valid: true,
+    adHoc: false,
+    teamId: "TEAM123",
+    authorities: ["Developer ID Application: ProduDash (TEAM123)"]
+  };
+  assert.doesNotThrow(() => assertSignatureInspection(validSignature, "TEAM123"));
+  assert.throws(() => assertSignatureInspection({ ...validSignature, valid: false }, "TEAM123"), /invalid code signature/);
+  assert.throws(() => assertSignatureInspection({ ...validSignature, adHoc: true }, "TEAM123"), /ad-hoc/);
+  assert.throws(() => assertSignatureInspection({ ...validSignature, teamId: "OTHER" }, "TEAM123"), /Team ID/);
+  assert.doesNotThrow(() => assertArchitectureInspections([{ label: "ffmpeg", architectures: ["arm64"] }], "arm64"));
+  assert.throws(() => assertArchitectureInspections([{ label: "ffmpeg", architectures: ["x64"] }], "arm64"), /expected arm64/);
+  assert.doesNotThrow(() => assertNotarizationInspection({ appTicketValid: true, dmgTicketValid: true, gatekeeperAccepted: true }));
+  assert.throws(
+    () => assertNotarizationInspection({ appTicketValid: false, dmgTicketValid: true, gatekeeperAccepted: true }),
+    /application notarization ticket/
+  );
+  assert.doesNotThrow(() => assertArtifactDigest("a".repeat(64), "a".repeat(64)));
+  assert.throws(() => assertArtifactDigest("b".repeat(64), "a".repeat(64)), /does not match/);
+});
+
+test("prerelease workflow defaults to signed macOS delivery and separates tester DMGs from internal ZIPs", () => {
+  const workflow = fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "prerelease.yml"), "utf8");
+  assert.match(workflow, /signing_mode:[\s\S]*default: signed/);
+  assert.match(workflow, /Upload tester-facing signed and notarized DMG/);
+  assert.match(workflow, /internal-archive-do-not-distribute/);
+  assert.ok(workflow.indexOf("npm run verify:signatures") < workflow.indexOf("npm run write:build-metadata"));
 });
 
 test("approved media manifests require provenance, notices, hashes, platform, and architecture", (t) => {

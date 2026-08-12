@@ -4,6 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const packageMetadata = require("../package.json");
+const { findMacApplication, macArtifactName } = require("./release-profile.cjs");
 
 const root = path.join(__dirname, "..");
 const dist = path.join(root, "dist");
@@ -24,13 +25,13 @@ function smoke(executablePath, extraEnvironment = {}) {
 
 try {
   if (process.platform === "darwin") {
-    const prefix = `ProduDash-${packageMetadata.version}-mac-${process.arch}`;
-    const dmgPath = path.join(dist, `${prefix}.dmg`);
-    const zipPath = path.join(dist, `${prefix}.zip`);
+    const signingMode = process.env.PRODUDASH_SIGNING_MODE || "unsigned";
+    const dmgPath = path.join(dist, macArtifactName(packageMetadata.version, process.arch, "dmg", signingMode));
+    const zipPath = path.join(dist, macArtifactName(packageMetadata.version, process.arch, "zip", signingMode));
     assert.equal(fs.statSync(dmgPath, { throwIfNoEntry: false })?.isFile(), true, "macOS DMG is missing.");
     assert.equal(fs.statSync(zipPath, { throwIfNoEntry: false })?.isFile(), true, "macOS ZIP is missing.");
 
-    const unpackedExecutable = path.join(dist, `mac-${process.arch}`, "ProduDash.app", "Contents", "MacOS", "ProduDash");
+    const unpackedExecutable = path.join(findMacApplication(dist, process.arch), "Contents", "MacOS", "ProduDash");
     smoke(unpackedExecutable);
 
     const zipDirectory = path.join(temporary, "zip");

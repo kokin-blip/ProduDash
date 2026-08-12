@@ -1922,9 +1922,9 @@ test("the sidebar names the running build", async () => {
   // holding an installer could not say which build they were running without
   // inspecting the filename or a sidecar metadata file.
   const renderer = await setupRenderer();
-  renderer.setAppState(baseState({ appVersion: "0.1.0-alpha.1" }));
+  renderer.setAppState(baseState({ appVersion: "0.1.0-alpha.2" }));
   renderer.renderApp();
-  assert.match(document.querySelector(".sidebar-footer span:last-child").textContent, /v0\.1\.0-alpha\.1/);
+  assert.match(document.querySelector(".sidebar-footer span:last-child").textContent, /v0\.1\.0-alpha\.2/);
 
   // A build that reports no version says nothing rather than "vundefined".
   renderer.setAppState(baseState({ appVersion: null }));

@@ -27,4 +27,3 @@ const builderArgs = [path.join(root, "node_modules", "electron-builder", "out", 
 builderArgs.push(path.join(root, "electron-builder.config.cjs"), requested === "mac" ? "--mac" : "--win");
 builderArgs.push(process.arch === "arm64" ? "--arm64" : "--x64");
 run(process.execPath, builderArgs);
-run(process.execPath, [path.join(__dirname, "write-build-metadata.cjs")]);

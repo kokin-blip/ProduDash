@@ -1,6 +1,6 @@
 const path = require("node:path");
+const { SIGNING_MODES, releaseProfile } = require("./scripts/release-profile.cjs");
 
-const SIGNING_MODES = new Set(["unsigned", "signed"]);
 const signingMode = process.env.PRODUDASH_SIGNING_MODE || "unsigned";
 const targetPlatform = process.env.PRODUDASH_TARGET_PLATFORM || process.platform;
 
@@ -20,6 +20,8 @@ requireEnvironment(["CSC_LINK", "CSC_KEY_PASSWORD", "APPLE_API_KEY", "APPLE_API_
 requireEnvironment(["CSC_LINK", "CSC_KEY_PASSWORD"], "win32");
 
 const signed = signingMode === "signed";
+const targetReleaseProfile = releaseProfile(signingMode, targetPlatform);
+const macReleaseProfile = releaseProfile(signingMode, "darwin");
 const resourcePlatform = targetPlatform === "darwin" ? "mac" : targetPlatform === "win32" ? "win" : targetPlatform;
 
 module.exports = {
@@ -57,9 +59,10 @@ module.exports = {
   ],
   npmRebuild: false,
   publish: null,
+  forceCodeSigning: signed,
   mac: {
     target: ["dmg", "zip"],
-    artifactName: "ProduDash-${version}-mac-${arch}.${ext}",
+    artifactName: `ProduDash-\${version}-mac-\${arch}-${macReleaseProfile.artifactSuffix}.\${ext}`,
     category: "public.app-category.business",
     icon: "build/icon.icns",
     identity: signed ? undefined : null,
@@ -91,7 +94,9 @@ module.exports = {
   },
   extraMetadata: {
     releaseChannel: "internal-alpha",
-    buildSigningMode: signingMode
+    buildSigningMode: signingMode,
+    releaseProfile: targetReleaseProfile.id,
+    testerFacing: targetReleaseProfile.testerFacing
   },
   afterPack: path.join(__dirname, "scripts", "after-pack-audit.cjs")
 };
