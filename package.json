@@ -20,6 +20,8 @@
     "test:packaged": "node --test smoke/packaged-electron-smoke.test.cjs",
     "verify:artifacts": "node scripts/verify-packaged-artifacts.cjs",
     "verify:signatures": "node scripts/verify-signatures.cjs",
+    "write:build-metadata": "node scripts/write-build-metadata.cjs",
+    "diagnose:mac": "node scripts/diagnose-macos-artifact.cjs",
     "lint": "eslint electron src test smoke scripts electron-builder.config.cjs",
     "format": "prettier --write electron src test smoke scripts .github docs/prerelease.md docs/release-readiness.md package.json README.md index.html electron-builder.config.cjs eslint.config.mjs .prettierrc.json \"vendor/**/*.md\" \"vendor/**/*.json\"",
     "format:check": "prettier --check electron src test smoke scripts .github docs/prerelease.md docs/release-readiness.md package.json README.md index.html electron-builder.config.cjs eslint.config.mjs .prettierrc.json \"vendor/**/*.md\" \"vendor/**/*.json\"",

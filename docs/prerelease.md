@@ -4,13 +4,13 @@ This guide covers the private macOS and Windows alpha. It does not authorize pub
 
 ## Supported artifacts
 
-| Platform | Architecture        | Artifacts                                                                        |
-| -------- | ------------------- | -------------------------------------------------------------------------------- |
-| macOS    | Apple silicon arm64 | `ProduDash-0.1.0-alpha.1-mac-arm64.dmg`, `ProduDash-0.1.0-alpha.1-mac-arm64.zip` |
-| macOS    | Intel x64           | `ProduDash-0.1.0-alpha.1-mac-x64.dmg`, `ProduDash-0.1.0-alpha.1-mac-x64.zip`     |
-| Windows  | x64                 | `ProduDash-0.1.0-alpha.1-win-x64-setup.exe`                                      |
+| Platform | Architecture        | Artifacts                                                |
+| -------- | ------------------- | -------------------------------------------------------- |
+| macOS    | Apple silicon arm64 | `ProduDash-0.1.0-alpha.1-mac-arm64-signed-notarized.dmg` |
+| macOS    | Intel x64           | `ProduDash-0.1.0-alpha.1-mac-x64-signed-notarized.dmg`   |
+| Windows  | x64                 | `ProduDash-0.1.0-alpha.1-win-x64-setup.exe`              |
 
-The application ID is `com.kokinblip.produdash`. The approved PD mark is the temporary alpha icon. No automatic updater or publishing provider is present.
+The application ID is `com.kokinblip.produdash`. The approved PD mark is the temporary alpha icon. No automatic updater or publishing provider is present. Signed and notarized DMGs are the only macOS artifacts intended for another person to test. macOS ZIPs are retained only as internal verification archives.
 
 ## Current release blockers
 
@@ -136,10 +136,10 @@ Use private Git LFS for the executable files. Each directory must contain a comp
 
 ## Building privately
 
-Run the manual **Internal desktop prerelease** workflow. Choose a signing mode:
+Run the manual **Internal desktop prerelease** workflow. Its default is `signed`. Choose a signing mode:
 
-- `unsigned` for a clearly labeled internal build; or
-- `signed` only after configuring all required platform secrets.
+- `signed` for an external macOS test after configuring all required platform secrets; or
+- `unsigned` only for a clearly labeled local build that never leaves the build Mac.
 
 Then choose which platforms to package:
 
@@ -150,7 +150,9 @@ Select a single target when the other platforms still lack approved media
 bundles, so a run is not spent on a target that cannot pass the distribution
 check.
 
-The workflow performs a clean install, complete validation, production dependency audit, distribution check, native packaging, package-content audit, unpacked/DMG/ZIP/installer smoke testing, signature validation, checksums, SBOM generation, and build metadata generation. It retains private workflow artifacts for 14 days and does not create a release.
+The workflow performs a clean install, complete validation, production dependency audit, distribution check, native packaging, package-content audit, unpacked/DMG/ZIP/installer smoke testing, signature and Gatekeeper validation, checksums, SBOM generation, and build metadata generation. Metadata is written only after verification. It retains private workflow artifacts for 14 days and does not create a release.
+
+For macOS, the workflow verifies the unpacked app, ZIP-extracted app, DMG-mounted app, and a copy made from the DMG. Every Mach-O file, including FFmpeg and ffprobe, must have a valid non-ad-hoc Developer ID signature from `APPLE_TEAM_ID` and contain the requested architecture. Every app representation must pass Gatekeeper and stapler validation, and the DMG must carry a valid stapled ticket.
 
 Local native commands are:
 
@@ -177,9 +179,9 @@ Signed Windows builds require:
 - `WIN_CSC_LINK`
 - `WIN_CSC_KEY_PASSWORD`
 
-Missing values stop signed mode. Unsigned mode sets no identity and never claims notarization.
+Missing values stop signed mode. Signed mode also enables Electron Builder's `forceCodeSigning`, so a missing or unusable identity cannot silently produce an unsigned artifact. Unsigned mode sets no identity, uses the `local-unsigned` release profile, and never claims notarization.
 
-Unsigned macOS builds may require the tester to use Finder’s **Open** confirmation. Unsigned Windows builds can display a Microsoft Defender SmartScreen warning. These warnings are expected only for explicitly internal unsigned artifacts and must not be hidden or described as signed.
+Unsigned macOS builds are local-only and must not be sent to testers. Finder overrides, quarantine removal, and ad-hoc re-signing are not release procedures. Unsigned Windows builds can display a Microsoft Defender SmartScreen warning and remain explicitly internal.
 
 ## Data and secure storage
 
@@ -199,7 +201,7 @@ Compare the artifact with `ProduDash-0.1.0-alpha.1-checksums.txt`.
 macOS:
 
 ```bash
-shasum -a 256 ProduDash-0.1.0-alpha.1-mac-arm64.dmg
+shasum -a 256 ProduDash-0.1.0-alpha.1-mac-arm64-signed-notarized.dmg
 ```
 
 Windows PowerShell:
@@ -208,7 +210,17 @@ Windows PowerShell:
 Get-FileHash .\ProduDash-0.1.0-alpha.1-win-x64-setup.exe -Algorithm SHA256
 ```
 
-Signed macOS artifacts must pass `codesign`, Gatekeeper assessment, and stapler validation. Signed Windows installers must report a valid Authenticode signature. The generated CycloneDX SBOM and path-free build metadata should be retained with the matching immutable artifacts.
+Signed macOS artifacts must pass `codesign`, Gatekeeper assessment, nested architecture checks, and stapler validation. Signed Windows installers must report a valid Authenticode signature. The generated CycloneDX SBOM and path-free build metadata should be retained with the matching immutable artifacts.
+
+For a failed macOS test, preserve the original downloaded file and run the path-safe diagnostic without removing quarantine or modifying the app:
+
+```bash
+npm run diagnose:mac -- "/path/to/ProduDash-0.1.0-alpha.1-mac-arm64-signed-notarized.dmg" EXPECTED_SHA256
+```
+
+The report includes only the artifact basename, checksum result, quarantine state, signature/notarization results, Team ID, authority, and observed architectures. It does not emit the tester's filesystem path.
+
+Final acceptance must use a clean Apple-silicon Mac: download the checksum-matched DMG through Chrome, drag ProduDash to Applications, and open it normally. No damaged-app, unidentified-developer, malware-verification, or manual-override dialog is acceptable.
 
 ## Troubleshooting
 
@@ -217,5 +229,6 @@ Signed macOS artifacts must pass `codesign`, Gatekeeper assessment, and stapler 
 - **Media binary exits `0xC0000135` on Windows:** the executable depends on a DLL that is neither bundled nor provided by the operating system. Inspect its imports and rebuild it with that runtime linked statically. Do not copy the missing DLL into the bundle.
 - **Target platform or architecture differs:** run the check on the native target runner.
 - **Secure credential storage unavailable:** connections stay disabled; do not attempt a plaintext fallback.
-- **Unsigned application warning:** confirm the artifact is the intended internal checksum-matched build, or use the signed workflow.
+- **Unsigned application warning:** do not distribute it; rebuild with the signed workflow and use the `signed-notarized` DMG.
+- **Damaged application warning:** retain the downloaded DMG, run `npm run diagnose:mac`, and compare its checksum. Do not clear quarantine or re-sign the tester's copy.
 - **Packaged smoke failure:** keep the workflow logs private, correct the package/runtime issue, and rerun from a clean checkout. Do not bypass the smoke or content audit.

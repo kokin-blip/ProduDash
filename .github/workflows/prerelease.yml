@@ -6,7 +6,7 @@ on:
       signing_mode:
         description: Build signing mode
         required: true
-        default: unsigned
+        default: signed
         type: choice
         options:
           - unsigned
@@ -100,12 +100,46 @@ jobs:
       - run: npm run package:${{ matrix.target }}
       - run: npm run verify:artifacts
       - run: npm run verify:signatures
-      - uses: actions/upload-artifact@v4
+      - run: npm run write:build-metadata
+      - run: node scripts/write-prerelease-summary.cjs
+      - if: matrix.target == 'mac' && inputs.signing_mode == 'signed'
+        name: Upload tester-facing signed and notarized DMG
+        uses: actions/upload-artifact@v4
         with:
-          name: ProduDash-0.1.0-alpha.1-${{ matrix.target }}-${{ matrix.arch }}-${{ inputs.signing_mode }}
+          name: ProduDash-0.1.0-alpha.1-mac-${{ matrix.arch }}-signed-notarized
           path: |
-            dist/*.dmg
-            dist/*.zip
+            dist/*-signed-notarized.dmg
+            dist/*-checksums.txt
+            dist/*-sbom.cdx.json
+            dist/*-build-metadata.json
+          if-no-files-found: error
+          retention-days: 14
+      - if: matrix.target == 'mac'
+        name: Upload internal macOS ZIP verification archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProduDash-0.1.0-alpha.1-mac-${{ matrix.arch }}-${{ inputs.signing_mode }}-internal-archive-do-not-distribute
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
+      - if: matrix.target == 'mac' && inputs.signing_mode == 'unsigned'
+        name: Upload local-only unsigned macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProduDash-0.1.0-alpha.1-mac-${{ matrix.arch }}-local-only-unsigned
+          path: |
+            dist/*-local-unsigned.dmg
+            dist/*-checksums.txt
+            dist/*-sbom.cdx.json
+            dist/*-build-metadata.json
+          if-no-files-found: error
+          retention-days: 14
+      - if: matrix.target == 'win'
+        name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProduDash-0.1.0-alpha.1-win-${{ matrix.arch }}-${{ inputs.signing_mode }}
+          path: |
             dist/*.exe
             dist/*-checksums.txt
             dist/*-sbom.cdx.json

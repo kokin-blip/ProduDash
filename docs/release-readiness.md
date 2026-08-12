@@ -18,7 +18,7 @@ The manual prerelease workflow uses native hosts:
 - `macos-15-intel` for macOS x64; and
 - `windows-latest` for Windows x64.
 
-Each prerelease job repeats the complete validation suite, enforces the approved-media gate, packages with Electron Builder, audits application contents, launches unpacked and installed artifacts with isolated non-ASCII user-data paths, verifies signatures when signed mode is selected, and generates checksums, a CycloneDX SBOM, and path-free build metadata. Private workflow artifacts expire after 14 days. The workflow cannot create a GitHub Release or publish through Electron Builder.
+Each prerelease job repeats the complete validation suite, enforces the approved-media gate, packages with Electron Builder, audits application contents, launches unpacked and installed artifacts with isolated non-ASCII user-data paths, verifies signatures when signed mode is selected, and generates checksums, a CycloneDX SBOM, and path-free build metadata. macOS verification covers unpacked, ZIP-extracted, DMG-mounted, and DMG-copied app bundles; strict nested signatures, Team ID, architecture, Gatekeeper, and stapled tickets must all pass before metadata is written. Private workflow artifacts expire after 14 days. The workflow cannot create a GitHub Release or publish through Electron Builder.
 
 ## Distribution remains blocked
 
@@ -40,9 +40,9 @@ The `win-x64` bundle originally supplied failed this gate. Its binaries matched 
 
 ## Signing and installation
 
-Unsigned mode is explicitly internal and does not claim notarization. Signed macOS mode fails unless the Developer ID certificate, password, App Store Connect API key, issuer, key ID, and team ID exist. Signed Windows mode fails unless its certificate and password exist.
+Unsigned mode is explicitly local-only on macOS, is named `local-unsigned`, and does not claim notarization. It is never a tester artifact. Signed macOS mode is the default external-test profile and fails unless the Developer ID certificate, password, App Store Connect API key, issuer, key ID, and team ID exist. Signed Windows mode fails unless its certificate and password exist.
 
-macOS signed builds enable hardened runtime with only Electron’s JIT and unsigned-executable-memory entitlements, then require code-signature assessment, notarization, and stapling validation. Windows uses an assisted per-user NSIS installer with no administrator requirement, no automatic launch, a Start menu shortcut, and preserved ProduDash user data during repair, upgrade, and uninstall.
+macOS signed builds enable hardened runtime with only Electron’s JIT and unsigned-executable-memory entitlements, force a valid signing identity, then require code-signature assessment, notarization, and stapling validation. The signed and notarized DMG is the only tester-facing macOS artifact; ZIP output is retained as an internal verification archive. Windows uses an assisted per-user NSIS installer with no administrator requirement, no automatic launch, a Start menu shortcut, and preserved ProduDash user data during repair, upgrade, and uninstall.
 
 There is no updater, update feed, public publishing provider, release tag automation, or rollback service in this alpha.
 
@@ -60,11 +60,12 @@ Before generating the first immutable internal installer set:
 
 1. Supply and approve all three native media-tool bundles and notices.
 2. Run the manual native prerelease workflow.
-3. Record whether each artifact is unsigned or signed/notarized.
+3. Distribute only the `signed-notarized` macOS DMG; retain local-unsigned and ZIP artifacts internally.
 4. Inspect the generated application icon and Analytics navigation glyph.
 5. Review packaged-app screenshots and smoke logs.
 6. Verify checksums, SBOM, package-content audit, and build metadata.
-7. Accept the live YouTube connector against Google, because no automated test can. Run `scripts/acceptance/youtube.cjs` with an owner-supplied OAuth client and record, here, the date, the channel used, and the answers to:
+7. Download the DMG through Chrome on a clean target Mac, copy it to Applications, and confirm Gatekeeper opens it without an override.
+8. Accept the live YouTube connector against Google, because no automated test can. Run `scripts/acceptance/youtube.cjs` with an owner-supplied OAuth client and record, here, the date, the channel used, and the answers to:
    - Did Google return a refresh token for this client type? The connector's whole design assumes it does; if it does not, every publish needs a fresh browser authorization and that assumption must be corrected rather than worked around.
    - Did a private upload complete, and did the receipt record the id YouTube actually returned?
    - Did YouTube apply the requested visibility, or force private because the API project is unaudited?
