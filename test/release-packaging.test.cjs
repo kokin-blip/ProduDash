@@ -66,7 +66,7 @@ test("prerelease identity and builder configuration are fixed and non-publishing
   assert.equal(builderConfiguration.nsis.deleteAppDataOnUninstall, false);
   assert.match(builderConfiguration.mac.artifactName, /mac-\$\{arch\}/);
   assert.match(builderConfiguration.mac.artifactName, /local-unsigned/);
-  assert.equal(builderConfiguration.extraMetadata.releaseProfile, "internal-unsigned");
+  assert.equal(builderConfiguration.extraMetadata.releaseProfile, releaseProfile("unsigned", process.platform).id);
   assert.equal(releaseProfile("unsigned", "darwin").testerFacing, false);
   assert.equal(releaseProfile("signed", "darwin").testerFacing, true);
   assert.equal(
