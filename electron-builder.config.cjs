@@ -62,7 +62,7 @@ module.exports = {
     artifactName: "ProduDash-${version}-mac-${arch}.${ext}",
     category: "public.app-category.business",
     icon: "build/icon.icns",
-    identity: signed ? undefined : null,
+    identity: signed ? undefined : "-",
     hardenedRuntime: signed,
     gatekeeperAssess: false,
     entitlements: signed ? "build/entitlements.mac.plist" : undefined,

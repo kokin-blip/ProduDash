@@ -60,6 +60,15 @@ test("prerelease identity and builder configuration are fixed and non-publishing
   assert.ok(builderConfiguration.files.includes("!node_modules/protobufjs/scripts/**/*"));
 });
 
+test("unsigned macOS builds are ad-hoc signed without claiming notarization", () => {
+  // A null identity skips code signing entirely, and the resulting bundle cannot launch once
+  // quarantined: macOS reports only that the application is damaged, with no way to override.
+  assert.equal(builderConfiguration.mac.identity, "-");
+  assert.equal(builderConfiguration.mac.hardenedRuntime, false);
+  assert.equal(builderConfiguration.mac.notarize, false);
+  assert.equal(builderConfiguration.dmg.sign, false);
+});
+
 test("signed packaging fails closed when platform credentials are absent", () => {
   const result = spawnSync(process.execPath, ["-e", "require('./electron-builder.config.cjs')"], {
     cwd: path.join(__dirname, ".."),

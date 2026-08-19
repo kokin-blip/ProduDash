@@ -14,6 +14,16 @@ The repository is configured for the private `0.1.0-alpha.1` desktop prerelease:
 
 ProduDash packages only owner-approved, checksummed FFmpeg and ffprobe builds from the private Git LFS intake. The current npm static binaries remain development/test tools and are excluded from installers. `npm run check:distribution` intentionally blocks packaging until every native target has its approved binaries, provenance, approval reference, SHA-256 values, and license notice.
 
+### Installing the macOS build
+
+Internal macOS artifacts are ad-hoc signed but not notarized, so Gatekeeper blocks the first launch of a downloaded DMG. Open the DMG, drag `ProduDash.app` to `/Applications`, then either open it once and allow it under **System Settings → Privacy & Security → Open Anyway**, or clear the quarantine attribute directly:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/ProduDash.app
+```
+
+This prompt is expected for an unsigned internal build and is not a malware detection. Apple Developer ID signing and notarization remain outstanding for a public release.
+
 See [the internal prerelease guide](docs/prerelease.md) for artifact names, installation behavior, signing, verification, data locations, and the exact release blockers.
 
 ## What works

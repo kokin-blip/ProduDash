@@ -70,9 +70,22 @@ Signed Windows builds require:
 - `WIN_CSC_LINK`
 - `WIN_CSC_KEY_PASSWORD`
 
-Missing values stop signed mode. Unsigned mode sets no identity and never claims notarization.
+Missing values stop signed mode. Unsigned mode uses the ad-hoc identity `-` and never claims notarization.
 
-Unsigned macOS builds may require the tester to use Finder’s **Open** confirmation. Unsigned Windows builds can display a Microsoft Defender SmartScreen warning. These warnings are expected only for explicitly internal unsigned artifacts and must not be hidden or described as signed.
+Unsigned macOS builds must still be ad-hoc signed. An application bundle with no signature at all cannot be launched once it carries the quarantine attribute: macOS reports only that the application is damaged and should be moved to the Trash, and offers no way to continue. An ad-hoc signature keeps that failure recoverable, so `mac.identity` must never be set to `null`.
+
+## Installing an unsigned macOS build
+
+An ad-hoc signed build is not notarized, so Gatekeeper still blocks the first launch of a downloaded artifact. Copy `ProduDash.app` out of the DMG into `/Applications`, then use either route:
+
+- open the application once, then allow it under **System Settings → Privacy & Security → Open Anyway**; or
+- remove the quarantine attribute directly:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/ProduDash.app
+```
+
+macOS 15 and later removed the older Finder right-click **Open** bypass, so the Privacy & Security route replaces it. Unsigned Windows builds can display a Microsoft Defender SmartScreen warning. These warnings are expected only for explicitly internal unsigned artifacts and must not be hidden or described as signed.
 
 ## Data and secure storage
 
@@ -101,7 +114,7 @@ Windows PowerShell:
 Get-FileHash .\ProduDash-0.1.0-alpha.1-win-x64-setup.exe -Algorithm SHA256
 ```
 
-Signed macOS artifacts must pass `codesign`, Gatekeeper assessment, and stapler validation. Signed Windows installers must report a valid Authenticode signature. The generated CycloneDX SBOM and path-free build metadata should be retained with the matching immutable artifacts.
+Signed macOS artifacts must pass `codesign`, Gatekeeper assessment, and stapler validation. Unsigned macOS artifacts must still pass `codesign --verify --deep --strict` and report `Signature=adhoc` with sealed bundle resources; `npm run verify:signatures` enforces this and intentionally skips the Gatekeeper and stapler checks that only a notarized build can pass. Signed Windows installers must report a valid Authenticode signature. The generated CycloneDX SBOM and path-free build metadata should be retained with the matching immutable artifacts.
 
 ## Troubleshooting
 
@@ -110,4 +123,5 @@ Signed macOS artifacts must pass `codesign`, Gatekeeper assessment, and stapler 
 - **Target platform or architecture differs:** run the check on the native target runner.
 - **Secure credential storage unavailable:** connections stay disabled; do not attempt a plaintext fallback.
 - **Unsigned application warning:** confirm the artifact is the intended internal checksum-matched build, or use the signed workflow.
+- **“ProduDash is damaged and can’t be opened”:** this is Gatekeeper, not a corrupt download. Verify the checksum first, then follow [Installing an unsigned macOS build](#installing-an-unsigned-macos-build). If the artifact reports `Sealed Resources=none` under `codesign -dv`, it was packaged without an identity and must be rebuilt rather than worked around on the tester's machine.
 - **Packaged smoke failure:** keep the workflow logs private, correct the package/runtime issue, and rerun from a clean checkout. Do not bypass the smoke or content audit.
