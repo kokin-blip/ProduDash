@@ -63,6 +63,11 @@ module.exports = {
     category: "public.app-category.business",
     icon: "build/icon.icns",
     identity: signed ? undefined : "-",
+    // The approved FFmpeg binaries ship with their own linker ad-hoc signatures and stay
+    // executable without being re-signed. Signing them would rewrite the Mach-O files and change
+    // the SHA-256 values that electron/media/binaries.cjs verifies against manifest.json at
+    // runtime, which disables media support with a download error.
+    signIgnore: ["Contents/Resources/media/(ffmpeg|ffprobe)$"],
     hardenedRuntime: signed,
     gatekeeperAssess: false,
     entitlements: signed ? "build/entitlements.mac.plist" : undefined,

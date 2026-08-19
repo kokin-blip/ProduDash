@@ -60,6 +60,19 @@ test("prerelease identity and builder configuration are fixed and non-publishing
   assert.ok(builderConfiguration.files.includes("!node_modules/protobufjs/scripts/**/*"));
 });
 
+test("macOS signing leaves the approved media binaries byte-identical", () => {
+  // Signing rewrites Mach-O files, so a signed FFmpeg stops matching the SHA-256 in manifest.json
+  // and the packaged app refuses to use it, reporting that the library could not be downloaded.
+  const ignored = [builderConfiguration.mac.signIgnore].flat();
+  const mediaPaths = ["Contents/Resources/media/ffmpeg", "Contents/Resources/media/ffprobe"];
+  for (const mediaPath of mediaPaths) {
+    assert.ok(
+      ignored.some((pattern) => new RegExp(pattern).test(mediaPath)),
+      `${mediaPath} must be excluded from code signing.`
+    );
+  }
+});
+
 test("unsigned macOS builds are ad-hoc signed without claiming notarization", () => {
   // A null identity skips code signing entirely, and the resulting bundle cannot launch once
   // quarantined: macOS reports only that the application is damaged, with no way to override.

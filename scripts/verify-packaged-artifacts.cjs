@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -12,6 +13,19 @@ const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "ProduDash artifact veri
 function run(command, args, environment = process.env) {
   const result = spawnSync(command, args, { cwd: root, env: environment, encoding: "utf8", stdio: "inherit" });
   assert.equal(result.status, 0, `${command} ${args.join(" ")} failed.`);
+}
+
+// The approved media binaries must reach the artifact byte for byte. Code signing rewrites Mach-O
+// files, and a re-signed FFmpeg no longer matches the SHA-256 recorded in manifest.json, so
+// electron/media/binaries.cjs rejects it at runtime and the application reports that the FFmpeg
+// library could not be downloaded. Every other media check runs before signing and cannot see this.
+function assertApprovedMediaSurvivedPackaging(mediaDirectory) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(mediaDirectory, "manifest.json"), "utf8"));
+  for (const [name, entry] of Object.entries(manifest.binaries)) {
+    const filePath = path.join(mediaDirectory, entry.file);
+    const digest = crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+    assert.equal(digest, entry.sha256, `Packaged ${name} no longer matches its approved SHA-256. It was most likely re-signed.`);
+  }
 }
 
 function smoke(executablePath, extraEnvironment = {}) {
@@ -30,7 +44,10 @@ try {
     assert.equal(fs.statSync(dmgPath, { throwIfNoEntry: false })?.isFile(), true, "macOS DMG is missing.");
     assert.equal(fs.statSync(zipPath, { throwIfNoEntry: false })?.isFile(), true, "macOS ZIP is missing.");
 
-    const unpackedExecutable = path.join(dist, `mac-${process.arch}`, "ProduDash.app", "Contents", "MacOS", "ProduDash");
+    const appDirectory = path.join(dist, `mac-${process.arch}`, "ProduDash.app");
+    assertApprovedMediaSurvivedPackaging(path.join(appDirectory, "Contents", "Resources", "media"));
+
+    const unpackedExecutable = path.join(appDirectory, "Contents", "MacOS", "ProduDash");
     smoke(unpackedExecutable);
 
     const zipDirectory = path.join(temporary, "zip");
