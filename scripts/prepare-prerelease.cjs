@@ -16,6 +16,15 @@ const environment = {
   PRODUDASH_TARGET_ARCH: process.arch
 };
 
+if ((process.env.PRODUDASH_SIGNING_MODE || "unsigned") !== "signed") {
+  // Ad-hoc signing must never consult certificate material. The prerelease workflow exports
+  // CSC_LINK and CSC_KEY_PASSWORD from secrets that are empty on unsigned runs, and
+  // electron-builder resolves an empty CSC_LINK as a certificate path, which fails the build
+  // before it ever reaches the ad-hoc identity.
+  delete environment.CSC_LINK;
+  delete environment.CSC_KEY_PASSWORD;
+}
+
 function run(command, args) {
   const result = spawnSync(command, args, { cwd: root, env: environment, encoding: "utf8", stdio: "inherit" });
   assert.equal(result.status, 0, `${command} ${args.join(" ")} failed.`);
