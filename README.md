@@ -4,7 +4,7 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 
 ## Internal desktop prerelease
 
-The repository is configured for the private `0.1.0-alpha.2` desktop prerelease:
+The repository is configured for the private `0.1.0-alpha.3` desktop prerelease:
 
 - macOS arm64 and x64 DMG and ZIP artifacts;
 - a Windows x64 assisted, per-user installer;

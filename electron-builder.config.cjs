@@ -65,7 +65,16 @@ module.exports = {
     artifactName: `ProduDash-\${version}-mac-\${arch}-${macReleaseProfile.artifactSuffix}.\${ext}`,
     category: "public.app-category.business",
     icon: "build/icon.icns",
-    identity: signed ? undefined : null,
+    // A null identity skips code signing entirely, and the resulting bundle cannot be launched once
+    // it carries the quarantine attribute: macOS reports only that the application is damaged and
+    // offers no override. Ad-hoc signing keeps an internal build openable through the standard
+    // Privacy & Security approval. It is not a substitute for Developer ID signing.
+    identity: signed ? undefined : "-",
+    // The approved FFmpeg binaries ship with their own linker ad-hoc signatures and stay executable
+    // without being re-signed. Signing rewrites Mach-O files, which would change the SHA-256 values
+    // that electron/media/binaries.cjs verifies against manifest.json at runtime and disable media
+    // support in the packaged app.
+    signIgnore: ["Contents/Resources/media/(ffmpeg|ffprobe)$"],
     hardenedRuntime: signed,
     gatekeeperAssess: false,
     entitlements: signed ? "build/entitlements.mac.plist" : undefined,

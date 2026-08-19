@@ -30,8 +30,20 @@ function writeStamp(data) {
 
 if (signingMode !== "signed") {
   assert.equal(profile.testerFacing, false, "An unsigned artifact must never be classified as tester-facing.");
-  writeStamp({ signatureStatus: "not-applicable-local-only", notarizationStatus: "not-applicable" });
-  process.stdout.write("Local unsigned build: not eligible for external macOS testing.\n");
+  if (process.platform === "darwin") {
+    // An unsigned macOS build is still ad-hoc signed. A bundle with no complete signature cannot be
+    // launched once quarantined: macOS reports only that the application is damaged. Gatekeeper and
+    // stapler checks are intentionally skipped because no ad-hoc build can pass them.
+    const application = findMacApplication(dist, process.arch);
+    const verification = execute("codesign", ["--verify", "--deep", "--strict", "--verbose=2", application]);
+    assert.equal(verification.status, 0, `The ad-hoc signature is not valid: ${verification.output}`);
+    const description = execute("codesign", ["-dv", "--verbose=4", application]);
+    assert.equal(description.status, 0, `codesign could not describe the bundle: ${description.output}`);
+    assert.match(description.output, /Signature=adhoc/, "Unsigned macOS builds must carry an ad-hoc signature.");
+    assert.doesNotMatch(description.output, /Sealed Resources=none/, "The ad-hoc signature must seal the application bundle resources.");
+  }
+  writeStamp({ signatureStatus: "ad-hoc-local-only", notarizationStatus: "not-applicable" });
+  process.stdout.write("Local unsigned build: ad-hoc signature verified. Not eligible for external macOS testing.\n");
   process.exit(0);
 }
 

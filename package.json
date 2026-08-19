@@ -1,6 +1,6 @@
 {
   "name": "produdash",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "private": true,
   "type": "module",
   "description": "Secure local operations workspace for connected commerce and approval-gated AI workflows.",
