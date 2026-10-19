@@ -396,3 +396,7 @@ Relevant primary documentation:
 - [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)
 - [Electron utilityProcess](https://www.electronjs.org/docs/latest/api/utility-process)
 - [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security)
+
+## Local TikTok browser API
+
+The optional [TikTok automation API](integrations/tiktok-api/README.md) runs as a separate Node 24 service. It supports browser posting without a TikTok publishing token, guarded comments/replies, and pinned-recipient messaging. See its README for setup, test evidence, and current limitations. It is stopped by default; browser profiles, credentials, and runtime data remain local.

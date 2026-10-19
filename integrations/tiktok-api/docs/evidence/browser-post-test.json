@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-12",
+  "account": "jamftest",
+  "browser_instance": "kokinjamf Chrome, Work profile, extension instance 66bc91a7-0270-4dec-8839-b98845de5b91",
+  "test_method": "Connected browser UI through cua_repl; standalone API profile not used",
+  "media": "Locally generated two-second synthetic MP4, 6.81 KB",
+  "caption": "ProduDash browser posting validation — synthetic test clip",
+  "privacy_selected": "Only you",
+  "privacy_verified_in_content_list": "Only me",
+  "comments": "Existing setting retained; changing it was not live-tested",
+  "endpoint": "https://www.tiktok.com/tiktok/web/project/post/v1/",
+  "http_status": 200,
+  "acknowledgement": {
+    "status_code": 0,
+    "project_id": "7695907446916699150",
+    "project_status": 1,
+    "single_post_resp_list": [
+      {
+        "batch_index": 0,
+        "item_id": "7695907541301103886",
+        "status_code": 0,
+        "status_msg": ""
+      }
+    ]
+  },
+  "post_url": "https://www.tiktok.com/@jamftest/video/7695907541301103886",
+  "moderation": "Initially shown as Content under review; acknowledgement alone does not prove final moderation state",
+  "messages_sent": 0,
+  "comments_sent": 0,
+  "api_left_running": false,
+  "coverage": "Upload, caption, Only you privacy, and publish submission observed live. Automated implementation covered with fake-page regression tests; toggled interactions, AI labelling and brand disclosure not live-tested."
+}

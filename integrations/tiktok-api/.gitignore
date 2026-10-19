@@ -1,0 +1,5 @@
+node_modules/
+.env
+.runtime/
+docs/evidence/bundles/
+__pycache__/

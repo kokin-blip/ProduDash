@@ -1,0 +1,110 @@
+{
+  "tested_at": "2026-10-12T22:33:23.076Z",
+  "account": "jamftest",
+  "attempts": [
+    {
+      "route": "/v1/comments",
+      "request": {
+        "video_url": "https://www.tiktok.com/@jamftest/video/7695907541301103886",
+        "text": "ProduDash API comment validation 2026-10-12",
+        "dry_run": false
+      },
+      "idempotency_key": "jamftest-interaction-bf271198-2f78-44e4-8406-8a9c7b39383b",
+      "http_status": 422,
+      "result": {
+        "error": {
+          "code": "comment_rejected",
+          "message": "TikTok rejected the comment.",
+          "upstream_status_code": 2209
+        }
+      },
+      "replay": {
+        "http_status": 422,
+        "replayed": "true",
+        "result": {
+          "error": {
+            "code": "comment_rejected",
+            "message": "TikTok rejected the comment.",
+            "upstream_status_code": 2209
+          }
+        }
+      }
+    },
+    {
+      "route": "/v1/comments",
+      "request": {
+        "video_url": "https://www.tiktok.com/@jamftest/video/7695910788313271566",
+        "text": "ProduDash API reply validation 2026-10-12",
+        "reply_to": {
+          "username": "jamftest",
+          "text": "ProduDash API comment validation 2026-10-12"
+        },
+        "dry_run": false
+      },
+      "idempotency_key": "jamftest-interaction-bddd97f0-62e6-4207-b28c-131b44c0799f",
+      "http_status": 409,
+      "result": {
+        "error": {
+          "code": "reply_target_ambiguous",
+          "message": "The requested comment is absent or not unique in the loaded comments."
+        }
+      },
+      "replay": {
+        "http_status": 409,
+        "replayed": "true",
+        "result": {
+          "error": {
+            "code": "reply_target_ambiguous",
+            "message": "The requested comment is absent or not unique in the loaded comments."
+          }
+        }
+      }
+    },
+    {
+      "route": "/v1/messages",
+      "request": {
+        "recipient": "jamftest",
+        "text": "ProduDash API self-message validation 2026-10-12",
+        "dry_run": false
+      },
+      "idempotency_key": "jamftest-interaction-3bb8c721-94e0-4b17-9893-de954ab526d1",
+      "http_status": 202,
+      "result": {
+        "state": "submitted",
+        "conversation_id": "0:1:7695903804143420446:7695903804143420446",
+        "verification": "visible_in_ui",
+        "delivery_confirmed": false
+      },
+      "replay": {
+        "http_status": 202,
+        "replayed": "true",
+        "result": {
+          "state": "submitted",
+          "conversation_id": "0:1:7695903804143420446:7695903804143420446",
+          "verification": "visible_in_ui",
+          "delivery_confirmed": false
+        }
+      }
+    }
+  ],
+  "newer_private_post_comment": {
+    "http_status": 502,
+    "upstream_observed": {
+      "endpoint": "/api/comment/publish/",
+      "method": "POST",
+      "http_status": 200,
+      "status_code": 2209,
+      "status_msg": "This video does not exist"
+    },
+    "note": "Initial adapter classified this explicit rejection as unknown; fixed and regression-tested."
+  },
+  "independent_verification": {
+    "account": "jamftest",
+    "message_text": "ProduDash API self-message validation 2026-10-12",
+    "visible_in_separate_kokinjamf_browser": true,
+    "screenshot": "self-message-api.jpg",
+    "other_recipients_messaged": false
+  },
+  "api_stopped": true,
+  "saved_live_writes_enabled": false
+}

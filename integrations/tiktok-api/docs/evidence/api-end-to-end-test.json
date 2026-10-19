@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-12",
+  "account": "jamftest",
+  "method": "Actual HTTP API and standalone browser adapter",
+  "route": "/v1/posts",
+  "privacy_requested": "SELF_ONLY",
+  "idempotency_key": "jamftest-e2e-2861ac5b-c92d-45e4-ad63-b0e0ca058c2f",
+  "http_status": 202,
+  "result": {
+    "state": "submitted",
+    "provider": "browser",
+    "item_id": "7695910788313271566",
+    "project_id": "7695910756545483789",
+    "post_url": "https://www.tiktok.com/@jamftest/video/7695910788313271566",
+    "verification": "upstream_acknowledgement",
+    "moderation_complete": false
+  },
+  "messages_sent": 0,
+  "idempotency_replay": {
+    "http_status": 202,
+    "replayed": true,
+    "item_id": "7695910788313271566"
+  },
+  "profile_setup": {
+    "source": "/Users/kokinmartinez/Library/Application Support/Google/Chrome/Profile 2",
+    "destination": ".runtime/tiktok-profile",
+    "cookies_imported": 37,
+    "domains": "TikTok only",
+    "cookie_values_decrypted_or_printed": false,
+    "native_macos_keychain": true,
+    "expected_account_verified_by_api": "jamftest"
+  },
+  "privacy_verified_in_studio": "Only me",
+  "api_shutdown_verified": true,
+  "live_writes_enabled_in_saved_configuration": false
+}
