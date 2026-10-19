@@ -275,13 +275,14 @@ function migrateState(input) {
         : []
     };
   }
+  if (state.schemaVersion === 10) state = { ...state, schemaVersion: 11, messageDispatches: [] };
   return withDefaults(state);
 }
 
 // v1 predates per-destination publishing options; v2 includes them. Both must
 // keep validating, so the payload used to recompute a snapshot's hash is
 // reconstructed in the shape that snapshot was created with.
-const SUPPORTED_APPROVAL_VERSIONS = new Set([1, 2]);
+const SUPPORTED_APPROVAL_VERSIONS = new Set([1, 2, 3]);
 
 function approvalPayloadForVersion(plan, version) {
   const platformPackages =
@@ -295,7 +296,8 @@ function approvalPayloadForVersion(plan, version) {
     caption: plan.caption,
     platformPackages,
     schedule: plan.schedule,
-    media: plan.mediaSnapshot
+    media: plan.mediaSnapshot,
+    ...(version === 3 ? { connectionBindings: plan.connectionBindings } : {})
   };
 }
 
@@ -338,6 +340,7 @@ function validateState(state) {
     "mediaJobs",
     "clipperJobs",
     "postQueue",
+    "messageDispatches",
     "aiProviders"
   ];
   if (state.schemaVersion !== CURRENT_SCHEMA_VERSION || requiredArrays.some((key) => !Array.isArray(state[key]))) {
@@ -346,6 +349,24 @@ function validateState(state) {
   for (const collection of requiredArrays) {
     if (state[collection].some((item) => !item || typeof item !== "object" || Array.isArray(item))) {
       throw new AppError("INVALID_STATE", `The saved ${collection} collection is invalid.`);
+    }
+  }
+  for (const message of state.messageDispatches) {
+    if (
+      typeof message.id !== "string" ||
+      !/^[a-zA-Z0-9_-]{8,128}$/.test(message.id) ||
+      !/^[a-f0-9]{64}$/.test(message.fingerprint || "") ||
+      !/^[a-f0-9]{64}$/.test(message.idempotencyKey || "") ||
+      typeof message.accountId !== "string" ||
+      !/^[\w.-]{1,64}$/.test(message.accountId) ||
+      typeof message.conversationId !== "string" ||
+      !/^[\d:]{1,128}$/.test(message.externalId || "") ||
+      typeof message.text !== "string" ||
+      !message.text.trim() ||
+      message.text.length > 1000 ||
+      !["sending", "submitted", "failed", "outcome_unknown", "inspected"].includes(message.status)
+    ) {
+      throw new AppError("INVALID_STATE", "The saved message dispatch records are invalid.");
     }
   }
   // Public authorization metadata must stay public: validateAuthorizationRecord
@@ -731,7 +752,7 @@ function validateState(state) {
         !plan.approvalSnapshot ||
         !SUPPORTED_APPROVAL_VERSIONS.has(version) ||
         plan.approvalSnapshot.hash !== expectedHash ||
-        !["manual_export", "official_api"].includes(plan.approvalSnapshot.mode) ||
+        !["manual_export", "official_api", "api"].includes(plan.approvalSnapshot.mode) ||
         typeof plan.approvalSnapshot.approvedAt !== "string" ||
         JSON.stringify(plan.approvalSnapshot.payload) !== JSON.stringify(expectedPayload) ||
         !Array.isArray(plan.approvalSnapshot.destinations) ||

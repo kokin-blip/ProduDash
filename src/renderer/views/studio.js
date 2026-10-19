@@ -1,3 +1,4 @@
+import { kitIcon, renderStudioTabs, renderToolbar } from "../ui-patterns.js";
 import { escapeHtml, formatDate, statusLabel } from "../format.js";
 import { asArray, integrationReady, isPending, platformEntry, ui } from "../state.js";
 import { renderStatusBadge } from "./shared.js";
@@ -19,15 +20,7 @@ export function renderStudio() {
       <strong>Local media workspace</strong>
       <span>ProduDash processes media locally by default. A cloud analysis mode uploads only the categories named in a separate per-job consent; publishing requires a connected platform and explicit approval.</span>
     </div>
-    <div class="studio-tabs" role="tablist" aria-label="Content Studio">
-      ${STUDIO_TABS.map(
-        ([id, label]) => `
-          <button type="button" role="tab" data-studio-tab="${id}" aria-selected="${ui.studioTab === id}" class="${
-            ui.studioTab === id ? "active" : ""
-          }">${label}</button>
-        `
-      ).join("")}
-    </div>
+    ${renderStudioTabs(STUDIO_TABS, ui.studioTab)}
     ${
       ui.studioTab === "projects"
         ? renderProjects()
@@ -107,21 +100,16 @@ function renderLibrary() {
         (notice) => `<div class="inline-message warning"><strong>Library recovered</strong><span>${escapeHtml(notice.message)}</span></div>`
       )
       .join("")}
-    <div class="library-actions">
-      <div>
-        <h2>Clip Library</h2>
-        <p>${library.total} indexed video${library.total === 1 ? "" : "s"} · source files remain in place</p>
-      </div>
-      <div>
+    ${renderToolbar(
+      "Clip Library",
+      `${library.total} indexed video${library.total === 1 ? "" : "s"} · source files remain in place`,
+      `
         <button class="ghost-button" type="button" data-rebuild-clip-search data-pending-label="Indexing…">Rebuild smart index</button>
-        <button class="ghost-button" type="button" data-add-clip-files data-pending-label="Inspecting…" ${
-          isPending("add-clip-files") ? "disabled" : ""
-        }>Add videos</button>
-        <button class="primary-button" type="button" data-add-clip-folders data-pending-label="Scanning…" ${
-          isPending("add-clip-folders") ? "disabled" : ""
-        }>Add folder</button>
-      </div>
-    </div>
+        <button class="ghost-button" type="button" data-add-clip-files data-pending-label="Inspecting…" ${isPending("add-clip-files") ? "disabled" : ""}>Add videos</button>
+        <button class="primary-button" type="button" data-add-clip-folders data-pending-label="Scanning…" ${isPending("add-clip-folders") ? "disabled" : ""}>${kitIcon("plus")}Add folder</button>
+    `,
+      "library-actions"
+    )}
     <form class="library-filters" data-library-search-form>
       <label>
         <span class="sr-only">Search clips</span>
@@ -177,11 +165,14 @@ function renderLibrary() {
     ${renderFolders(library.folders)}
     <div class="library-layout">
       <div class="clip-list" aria-label="Indexed videos">
+        <div class="media-browser-heading"><strong>Indexed videos</strong><span>${library.total} videos · ${selected ? "1 selected" : "0 selected"}</span></div>
+        <div class="media-browser-grid">
         ${
           library.clips.length
             ? library.clips.map((clip) => renderClipRow(clip, selected?.id === clip.id)).join("")
             : `<div class="panel quiet-state"><strong>No matching videos</strong><p>Add a folder or loose video to build a local, read-only index.</p></div>`
         }
+        </div>
         ${
           library.total > library.limit
             ? `<div class="library-pagination">
@@ -244,13 +235,14 @@ function renderFolders(folders) {
 
 function renderClipRow(clip, selected) {
   return `
-    <button class="clip-row ${selected ? "active" : ""}" type="button" data-library-clip="${escapeHtml(clip.id)}">
+    <button class="clip-row ${selected ? "active" : ""}" type="button" data-library-clip="${escapeHtml(clip.id)}" aria-pressed="${selected}">
       <span class="clip-thumb">
         ${
           clip.thumbnailUrl
             ? `<img src="${escapeHtml(clip.thumbnailUrl)}" alt="" loading="lazy" />`
             : `<span aria-hidden="true">${escapeHtml((clip.extension || "video").toUpperCase())}</span>`
         }
+        <span class="clip-duration">${formatDuration(clip.duration)}</span>
       </span>
       <span class="clip-row-copy">
         <strong>${escapeHtml(clip.name)}</strong>
@@ -625,7 +617,7 @@ function renderPublishing() {
           </label>
           <label><span>Post title</span><input name="title" maxlength="120" required autocomplete="off" /></label>
           <label><span>Caption</span><textarea name="caption" maxlength="2200"></textarea></label>
-          <label><span>Planning target</span><input name="scheduledFor" type="datetime-local" /><small>Saved with your current time zone. This does not automatically publish.</small></label>
+          <label class="local-date-field"><span>${kitIcon("clock")}Planning target</span><input name="scheduledFor" type="datetime-local" /><small>Saved with your current time zone. This does not automatically publish.</small></label>
           ${renderPlatformChecks()}
           <button class="primary-button" type="submit" data-pending-label="Creating…">Create publishing package</button>
         </form>
@@ -764,7 +756,7 @@ function renderPublicationReceipts(planId, receipts) {
             receipt.status === "published" && receipt.providerPublicationId
               ? `Published · ${escapeHtml(receipt.providerPublicationId)}`
               : receipt.status === "processing" && receipt.providerPublicationId
-                ? `Uploaded · ${escapeHtml(receipt.providerPublicationId)} · the provider is still finalizing it`
+                ? `${receipt.platformId === "tiktok" ? "Submitted" : "Uploaded"} · ${escapeHtml(receipt.providerPublicationId)} · the provider is still finalizing it`
                 : receipt.status === "failed"
                   ? `Failed · ${escapeHtml(receiptErrorText(receipt.errorCode))}${
                       receipt.retryable ? " · retry available" : " · not retryable"
@@ -772,7 +764,7 @@ function renderPublicationReceipts(planId, receipts) {
                   : escapeHtml(statusLabel(receipt.status));
           // A processing destination is the one case where asking the provider
           // again changes anything, so the control appears only there.
-          const refreshable = receipt.status === "processing" && receipt.providerPublicationId;
+          const refreshable = receipt.platformId !== "tiktok" && receipt.status === "processing" && receipt.providerPublicationId;
           const attempts = asArray(receipt.attempts);
           const last = attempts[attempts.length - 1];
           // The provider could not say whether the earlier attempt published
@@ -787,6 +779,7 @@ function renderPublicationReceipts(planId, receipts) {
           return `<div class="publication-receipt">
             <span>${escapeHtml(platformName(receipt.platformId))}</span>
             <span>${outcome}</span>
+            ${receipt.platformId === "tiktok" && receipt.publicationUrl ? `<button type="button" class="ghost-button small" data-open-tiktok-publication="${escapeHtml(planId)}">Open on TikTok</button>` : ""}
             <small>${escapeHtml(
               `${attempts.length} attempt${attempts.length === 1 ? "" : "s"}${last?.endedAt ? ` · last ${formatDate(last.endedAt)}` : ""}`
             )}</small>
@@ -825,7 +818,13 @@ function renderPostPlan(plan) {
   const officialReady = platforms.length > 0 && platforms.every((platform) => integrationReady(platform));
   // Mirrors electron/publishing/post-status.cjs. A dispatch in flight cannot be
   // canceled locally, and published plans are terminal.
-  const canCancel = ["needs_approval", "approved_for_manual_export", "approved_for_official_api", "dispatch_failed"].includes(plan.status);
+  const canCancel = [
+    "needs_approval",
+    "approved_for_manual_export",
+    "approved_for_official_api",
+    "approved_for_api",
+    "dispatch_failed"
+  ].includes(plan.status);
   const editable = plan.status === "needs_approval";
   // A destination the dispatcher marked non-retryable is not made retryable by
   // clicking again. Offering the button anyway meant every click appended an
@@ -851,7 +850,10 @@ function renderPostPlan(plan) {
     return receipt.status !== "failed" || receipt.retryable !== false;
   };
   const blocked = approvedDestinations.length > 0 && !approvedDestinations.some(canProgress);
-  const canDispatch = ["approved_for_official_api", "dispatch_failed"].includes(plan.status) && Boolean(plan.approvalSnapshot) && !blocked;
+  const canDispatch =
+    ["approved_for_official_api", "approved_for_api", "dispatch_failed"].includes(plan.status) &&
+    Boolean(plan.approvalSnapshot) &&
+    !blocked;
   const receipts = asArray(plan.publicationReceipts);
   const packages = platforms.map(
     (platformId) =>
@@ -900,7 +902,7 @@ function renderPostPlan(plan) {
           plan.status === "needs_approval" && officialReady
             ? `<button class="text-button" type="button" data-approve-post="${escapeHtml(
                 plan.id
-              )}" data-approval-mode="official_api" data-pending-label="Approving…">Approve official API path</button>`
+              )}" data-approval-mode="api" data-pending-label="Approving…">Approve for publishing</button>`
             : ""
         }
         ${

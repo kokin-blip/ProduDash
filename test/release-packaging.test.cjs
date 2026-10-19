@@ -3,6 +3,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { finished } = require("node:stream/promises");
 const test = require("node:test");
 const asar = require("@electron/asar");
 const packageMetadata = require("../package.json");
@@ -54,7 +55,7 @@ function writeApprovedMedia(directory, overrides = {}) {
 }
 
 test("prerelease identity and builder configuration are fixed and non-publishing", () => {
-  assert.equal(packageMetadata.version, "0.1.0-alpha.3");
+  assert.equal(packageMetadata.version, "0.1.0-alpha.4");
   assert.equal(builderConfiguration.appId, "com.kokinblip.produdash");
   assert.equal(builderConfiguration.productName, "ProduDash");
   assert.equal(builderConfiguration.publish, null);
@@ -71,11 +72,14 @@ test("prerelease identity and builder configuration are fixed and non-publishing
   assert.equal(releaseProfile("signed", "darwin").testerFacing, true);
   assert.equal(
     macArtifactName(packageMetadata.version, "arm64", "dmg", "signed"),
-    "ProduDash-0.1.0-alpha.3-mac-arm64-signed-notarized.dmg"
+    "ProduDash-0.1.0-alpha.4-mac-arm64-signed-notarized.dmg"
   );
   assert.match(builderConfiguration.win.artifactName, /win-\$\{arch\}-setup/);
   assert.ok(builderConfiguration.files.includes("!node_modules/ffmpeg-static/**/*"));
   assert.ok(builderConfiguration.files.includes("!node_modules/protobufjs/scripts/**/*"));
+  assert.ok(builderConfiguration.files.includes("integrations/tiktok-api/src/**/*"));
+  assert.ok(builderConfiguration.files.includes("integrations/tiktok-api/package.json"));
+  assert.equal(packageMetadata.dependencies["playwright-core"], "1.58.2");
 });
 
 test("unsigned macOS builds are ad-hoc signed without claiming notarization", () => {
@@ -223,14 +227,26 @@ test("package audit rejects test content while accepting approved media resource
   fs.writeFileSync(path.join(source, "package.json"), '{"name":"produdash"}');
   fs.mkdirSync(path.join(source, "dependency.js"));
   fs.writeFileSync(path.join(source, "dependency.js", "index.js"), "module.exports = true;");
-  await asar.createPackage(source, path.join(resources, "app.asar"));
+  await finished(await asar.createPackage(source, path.join(resources, "app.asar")));
   writeApprovedMedia(path.join(resources, "media"));
   assert.equal(auditPackage(appOut).mediaVersion, "6.0");
+
+  const adapter = path.join(source, "node_modules", "playwright-core", "lib", "server", "webkit", "webkit.js");
+  fs.mkdirSync(path.dirname(adapter), { recursive: true });
+  fs.writeFileSync(adapter, 'const upstreamWslHome = "/home/pwuser";');
+  fs.rmSync(path.join(resources, "app.asar"));
+  await finished(await asar.createPackage(source, path.join(resources, "app.asar")));
+  assert.equal(auditPackage(appOut).mediaVersion, "6.0");
+  fs.appendFileSync(adapter, 'const privatePath = "/Users/private-test/profile";');
+  fs.rmSync(path.join(resources, "app.asar"));
+  await finished(await asar.createPackage(source, path.join(resources, "app.asar")));
+  assert.throws(() => auditPackage(appOut), /raw user path/);
+  fs.rmSync(path.join(source, "node_modules"), { recursive: true });
 
   fs.mkdirSync(path.join(source, "test"));
   fs.writeFileSync(path.join(source, "test", "fixture.js"), "module.exports = true;");
   fs.rmSync(path.join(resources, "app.asar"));
-  await asar.createPackage(source, path.join(resources, "app.asar"));
+  await finished(await asar.createPackage(source, path.join(resources, "app.asar")));
   assert.throws(() => auditPackage(appOut), /forbidden files/);
 });
 

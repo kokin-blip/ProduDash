@@ -135,6 +135,11 @@ function missingScopes(platform, authorization) {
 function deriveConnectionState({ platform, integration, setting, now = Date.now() }) {
   if (!platform) throw new AppError("INVALID_INPUT", "Unknown integration.");
   if (!platform.capabilities.hasLiveConnector) return CONNECTION_STATES.UNAVAILABLE;
+  if (platform.authType === "browser_session") {
+    return integration?.status === "connected" && integration?.authorization?.selectedAccount
+      ? CONNECTION_STATES.CONNECTED
+      : CONNECTION_STATES.DISCONNECTED;
+  }
   if (setting?.status !== "stored") return CONNECTION_STATES.REQUIRES_CONFIGURATION;
 
   const authorization = normalizeAuthorizationRecord(integration?.authorization);

@@ -4,13 +4,9 @@ ProduDash is a local-first Electron dashboard for merchant operations. The secur
 
 ## Internal desktop prerelease
 
-The repository is configured for the private `0.1.0-alpha.3` desktop prerelease:
+The `0.1.0-alpha.4` release includes **macOS Apple silicon (arm64) only**, with the complete redesigned workspace, Light/Dark/Glass Light/Glass Dark appearances, and the managed TikTok browser API. The DMG is ad-hoc signed, **not Apple notarized**, and may require approval in macOS Privacy & Security. Intel macOS and Windows builds are not included in this release.
 
-- macOS arm64 and x64 DMG and ZIP artifacts;
-- a Windows x64 assisted, per-user installer;
-- permanent application ID `com.kokinblip.produdash`;
-- the existing PD mark as the temporary prerelease application icon; and
-- no automatic updates, no publicly distributed builds, and no GitHub Release creation.
+The application ID remains `com.kokinblip.produdash`; upgrades retain the existing per-user workspace. Automatic updates are not implemented. The packaging configuration retains other platform targets for future releases.
 
 ProduDash packages only owner-approved, checksummed FFmpeg and ffprobe builds from the private Git LFS intake. The current npm static binaries remain development/test tools and are excluded from installers. `npm run check:distribution` intentionally blocks packaging until every native target has its approved binaries, provenance, approval reference, SHA-256 values, and license notice.
 
@@ -47,19 +43,23 @@ See [the internal prerelease guide](docs/prerelease.md) for artifact names, inst
 - Publication receipts carrying only the provider's own publication id, a safe error code, and honest retryability, with idempotency keys derived from the approved content hash so a repeated click or a restart mid-dispatch cannot double-post.
 - A derived Shopify analytics report with explicit metric definitions, source freshness, snapshot limitations, 7/30/60-day bounded comparisons, non-causal observations, unavailable profit/conversion/social states, and a PII-free local CSV export.
 
+## Managed TikTok browser API
+
+On macOS, Integrations → Custom APIs can configure, start and stop the bundled local TikTok runtime. Google Chrome must be installed. Sign in through the dedicated browser profile and verify the expected account before importing conversations, explicitly sending messages, or publishing an approved completed render. Nothing starts or publishes unattended; loopback credentials remain in the main process. The API runtime and its Playwright dependency ship inside the macOS application.
+
 ## What is not implemented
 
-- Social inbox imports or external message sending.
+- Social inbox imports or external message sending for platforms other than the managed TikTok browser API.
 - Automatic order creation, payments, refunds, discounts, or fulfillment.
-- TikTok, Instagram, Facebook, or Stripe API connectors. Instagram's two authorization routes are modelled but no connector exists, so it can be planned for and exported, never published to.
+- Official TikTok, Instagram, Facebook, or Stripe API connectors. Instagram's two authorization routes are modelled but no connector exists, so it can be planned for and exported, never published to.
 - Any unapproved media upload. Publishing happens only for a destination whose approval snapshot a human froze.
 - Scheduled or unattended publishing. A planned time is a local reminder; nothing uploads without someone pressing Publish.
 - Social analytics or Shopify profit/conversion figures without official reporting, cost, and traffic inputs.
 - Hosted accounts, cross-device synchronization, webhooks, or a hosted OAuth callback. YouTube authorizes over a loopback redirect and needs no hosted service; Facebook and Stripe would.
-- Publicly distributed installers, automatic updates, or production release publishing. Internal installer configuration exists but remains blocked by the approved-media gate.
+- Automatic updates or production-grade signing/notarization. The current macOS release is an explicitly labeled alpha.
 - General multi-source editing, speed/freeze effects, advanced audio mixing, animated overlays, model-generated embeddings, and hosted collaboration.
 
-ProduDash never substitutes scraped data, browser automation, emulators, password-based automation, fabricated analytics, or silent mock results for these missing capabilities.
+The optional TikTok integration explicitly uses browser automation in a dedicated Chrome profile; it is not an official TikTok API. Other unavailable connectors remain unavailable, and analytics never substitute fabricated values.
 
 ## Local security model
 
@@ -396,3 +396,15 @@ Relevant primary documentation:
 - [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)
 - [Electron utilityProcess](https://www.electronjs.org/docs/latest/api/utility-process)
 - [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security)
+
+## Custom APIs on macOS
+
+Open the installed app, or run `npm install` and `npm run app` for development. In **Integrations → Custom APIs**, save the expected TikTok username, then select **Start API**. Use **Sign in in browser** and **Check account** before publishing or loading chats. An existing dedicated browser profile can be selected while the API is off; normal Chrome profiles are not imported.
+
+Studio uses the existing approval and explicit publishing dispatch. TikTok defaults to Only you, freezes the approved account and settings, and records the returned video as submitted/processing. Inbox can refresh loaded TikTok conversations without Shopify, read a partial message snapshot, send a manual message, or separately send an approved AI draft. Delivery is unconfirmed when only the browser UI acknowledges a send.
+
+The shared worker manager runs authenticated loopback services with private per-session keys. **Stop API** drains active work; quitting ProduDash stops workers, and reopening leaves them off. No scheduler, automatic sends, tunnel, or cloud deployment is enabled. Comments and Windows custom-API support are deferred.
+
+Run `npm test`, `npm run test:custom-apis`, and `npm run test:smoke` for the integration coverage. The standalone service remains usable independently; see [its documentation](integrations/tiktok-api/README.md). New built-in APIs supply a registry definition, validated configuration, runtime entry point, and authenticated health handshake to reuse the same lifecycle controls.
+
+Dashboard reset stops APIs before clearing dashboard records. Delete-all removes managed API state and managed profiles after workers stop. A dedicated browser profile selected outside ProduDash's user-data directory remains in its original location.

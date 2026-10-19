@@ -1,3 +1,4 @@
+import { renderToolbar, renderPropertyGroup } from "../ui-patterns.js";
 import { escapeHtml } from "../format.js";
 import { asArray, ui } from "../state.js";
 
@@ -22,13 +23,14 @@ export function renderBrandTemplates() {
   const assets = asArray(ui.brandAssets);
   return `
     <section role="tabpanel" class="studio-tab-panel template-workspace">
-      <div class="library-actions">
-        <div>
-          <h2>Brand templates</h2>
-          <p>Reusable local composition settings. Applying one snapshots its exact version into the selected project.</p>
-        </div>
+      ${renderToolbar(
+        "Brand templates",
+        "Reusable local composition settings. Applying one snapshots its exact version into the selected project.",
+        `
         <button class="ghost-button" type="button" data-template-import data-pending-label="Importing…">Import template</button>
-      </div>
+      `,
+        "library-actions"
+      )}
       <div class="inline-message neutral">
         <strong>Local composition</strong>
         <span>Templates can now snapshot validated local logos, music, intros, and outros alongside captions and composition settings. No media is uploaded.</span>
@@ -65,17 +67,22 @@ export function renderBrandTemplates() {
       <details class="disclosure" open>
         <summary>Create template</summary>
         <form class="template-form" data-template-create-form aria-busy="false">
-          <label><span>Name</span><input name="name" maxlength="100" required placeholder="Product launch" /></label>
+${renderPropertyGroup(
+  "Template details",
+  `          <label><span>Name</span><input name="name" maxlength="100" required placeholder="Product launch" /></label>
           <label><span>Description</span><input name="description" maxlength="500" placeholder="Vertical launch clips" /></label>
-          <label><span>Aspect</span><select name="targetAspect">${options(
-            [
-              ["original", "Original"],
-              ["vertical", "Vertical 9:16"],
-              ["square", "Square 1:1"],
-              ["landscape", "Landscape 16:9"]
-            ],
-            "vertical"
-          )}</select></label>
+`
+)}${renderPropertyGroup(
+    "Canvas and captions",
+    `          <label><span>Aspect</span><select name="targetAspect">${options(
+      [
+        ["original", "Original"],
+        ["vertical", "Vertical 9:16"],
+        ["square", "Square 1:1"],
+        ["landscape", "Landscape 16:9"]
+      ],
+      "vertical"
+    )}</select></label>
           <label><span>Layout</span><select name="aspectTreatment">${options(
             [
               ["fit_pad", "Fit and pad"],
@@ -104,13 +111,16 @@ export function renderBrandTemplates() {
           <label><span>Caption text</span><input name="captionTextColor" type="color" value="#ffffff" /></label>
           <label><span>Caption background</span><input name="captionBackgroundColor" type="color" value="#000000" /></label>
           <label><span>Caption scale</span><input name="captionScale" type="number" min="0.5" max="2.5" step="0.1" value="1" /></label>
-          <label><span>Transition</span><select name="transition">${options(
-            [
-              ["cut", "Cut"],
-              ["fade", "Fade"]
-            ],
-            "cut"
-          )}</select></label>
+`
+  )}${renderPropertyGroup(
+    "Transitions and assets",
+    `          <label><span>Transition</span><select name="transition">${options(
+      [
+        ["cut", "Cut"],
+        ["fade", "Fade"]
+      ],
+      "cut"
+    )}</select></label>
           <label><span>Transition duration</span><input name="transitionDuration" type="number" min="0.05" max="1.5" step="0.05" value="0.25" /></label>
           <label><span>Canvas color</span><input name="backgroundColor" type="color" value="#000000" /></label>
           <label><span>Logo</span><select name="logoAssetId">${assetOptions(assets, "logo")}</select></label>
@@ -118,7 +128,10 @@ export function renderBrandTemplates() {
           <label><span>Music volume</span><input name="musicVolume" type="number" min="0.05" max="1" step="0.05" value="0.25" /></label>
           <label><span>Intro</span><select name="introAssetId">${assetOptions(assets, "intro")}</select></label>
           <label><span>Outro</span><select name="outroAssetId">${assetOptions(assets, "outro")}</select></label>
-          <label class="template-overlay-copy"><span>Optional text or CTA</span><input name="overlayText" maxlength="240" placeholder="Shop the collection" /></label>
+`
+  )}${renderPropertyGroup(
+    "Text overlay",
+    `          <label class="template-overlay-copy"><span>Optional text or CTA</span><input name="overlayText" maxlength="240" placeholder="Shop the collection" /></label>
           <label><span>Overlay type</span><select name="overlayType">${options(
             [
               ["cta", "Call to action"],
@@ -134,6 +147,8 @@ export function renderBrandTemplates() {
             ],
             "lower"
           )}</select></label>
+`
+  )}
           <button class="primary-button" type="submit" data-pending-label="Creating…">Create template</button>
         </form>
       </details>
@@ -145,7 +160,7 @@ export function renderBrandTemplates() {
                   (template) => `
                     <article class="template-card">
                       <div>
-                        <span class="eyebrow">Version ${template.version}</span>
+                        <small>Version ${template.version}</small>
                         <h3>${escapeHtml(template.name)}</h3>
                         <p>${escapeHtml(template.description || "Local ProduDash brand template")}</p>
                       </div>

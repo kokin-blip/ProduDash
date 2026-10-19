@@ -1,3 +1,4 @@
+import { updateMarkup } from "./dom.js";
 import { escapeHtml, statusLabel } from "./format.js";
 import { getBusiness, integrationReady, providerCredentialsStored, ui, workloadReady } from "./state.js";
 import { renderAnalytics } from "./views/analytics.js";
@@ -10,7 +11,7 @@ import { renderAdvisor } from "./advisor.js";
 
 const VIEW_META = {
   overview: ["Dashboard", "Operations overview", "Monitor verified commerce data and items that need attention."],
-  inbox: ["AI Inbox", "Approval-only drafts", "Review imported conversations and prepare replies that always require human approval."],
+  inbox: ["AI Inbox", "Conversations and replies", "Send manual messages or prepare AI drafts for approval and a separate send."],
   orders: ["Orders", "Shopify snapshot", "Review the most recent orders returned by your connected store."],
   signals: ["Signals", "Attention and activity", "Review verified issues and recent local actions."],
   studio: [
@@ -58,6 +59,8 @@ export function renderApp({ animateView = false } = {}) {
     transition.finished.then(clearTransition, clearTransition);
     return transition;
   }
+  // A background refresh supersedes any in-flight navigation snapshot too.
+  if (activeViewTransition) activeViewTransition.skipTransition();
   renderAppContents(shouldAnimate);
   return null;
 }
@@ -80,14 +83,19 @@ function renderNav() {
   });
   const footer = document.querySelector(".sidebar-footer");
   const connected = integrationReady("shopify") && workloadReady("inboxDrafting");
-  footer.querySelector("strong").textContent = connected ? "Core apps connected" : "Connections required";
+  const customConnected = ui.appState.customApis?.some((item) => item.state === "running" && item.account);
+  footer.querySelector("strong").textContent = connected
+    ? "Core apps connected"
+    : customConnected
+      ? "TikTok connected"
+      : "Connections required";
   // The running build, so a tester holding an installer can say which one it is
   // without inspecting the filename or a sidecar metadata file.
   const version = ui.appState.appVersion;
   document.querySelector(".sidebar-footer span:last-child").textContent = version
-    ? `Official APIs only · v${version}`
-    : "Official APIs only";
-  footer.querySelector(".status-dot").classList.toggle("connected", connected);
+    ? `Local-first workspace · v${version}`
+    : "Local-first workspace";
+  footer.querySelector(".status-dot").classList.toggle("connected", connected || customConnected);
 }
 
 function renderBusinesses() {
@@ -113,7 +121,7 @@ function renderBusinesses() {
 
 function renderHeader() {
   const business = getBusiness();
-  const needsSetup = !business && !["integrations", "studio", "analytics"].includes(ui.activeSection);
+  const needsSetup = !business && !["integrations", "studio", "analytics", "inbox"].includes(ui.activeSection);
   const [eyebrow, title, subtitle] = needsSetup
     ? ["Getting started", "Set up ProduDash", "Connect your store and AI assistant to begin."]
     : VIEW_META[ui.activeSection] || VIEW_META.overview;
@@ -142,10 +150,11 @@ function renderHeader() {
 
 function renderActiveView(animateFallback) {
   const root = document.querySelector("#viewRoot");
+  const previousError = root.querySelector('[role="alert"]')?.textContent;
   const previousStatuses = new Map(
     [...root.querySelectorAll("[data-status-key]")].map((badge) => [badge.dataset.statusKey, badge.dataset.statusValue])
   );
-  const standalone = ["integrations", "studio", "analytics"];
+  const standalone = ["integrations", "studio", "analytics", "inbox"];
   let markup;
   if (!getBusiness() && !standalone.includes(ui.activeSection)) {
     markup = renderConnectionFirst();
@@ -161,11 +170,30 @@ function renderActiveView(animateFallback) {
     };
     markup = (views[ui.activeSection] || renderDashboard)();
   }
-  root.innerHTML = `<div class="view-transition${animateFallback ? " is-entering" : ""}">${renderStatusMessages()}${markup}</div>`;
+  if (ui.activeSection === "studio") {
+    markup = markup.replace(
+      'role="tabpanel"',
+      `id="studioPanel" role="tabpanel" aria-labelledby="studio-tab-${ui.studioTab}" tabindex="0"`
+    );
+  }
+  const scope = [
+    ui.activeSection,
+    ui.selectedBusinessId,
+    ui.studioTab,
+    ui.selectedConversationId,
+    ui.selectedProjectId,
+    ui.selectedClipId
+  ].join(":");
+  updateMarkup(
+    root,
+    `<div class="view-transition${animateFallback ? " is-entering" : ""}">${renderStatusMessages()}${markup}</div>`,
+    scope
+  );
+  document.body.dataset.activeView = ui.activeSection;
   root.querySelectorAll("[data-status-key]").forEach((badge) => {
     const previousValue = previousStatuses.get(badge.dataset.statusKey);
     if (previousValue !== undefined && previousValue !== badge.dataset.statusValue) badge.classList.add("status-changed");
   });
   const alert = root.querySelector('[role="alert"]');
-  if (alert) window.requestAnimationFrame(() => alert.focus());
+  if (alert && alert.textContent !== previousError) window.requestAnimationFrame(() => alert.focus());
 }

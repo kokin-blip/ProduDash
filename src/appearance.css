@@ -1,0 +1,106 @@
+/* Additive material variants. Figma Fidelity/Material surface 116:170,
+   Recipe children 116:164/166/168; Light 116:55 and Dark 116:115.
+   Figma's blur radius maps to CSS sigma at half the design radius. */
+:root[data-appearance="light"] {
+  color-scheme: light;
+}
+
+:root[data-appearance="dark"] {
+  color-scheme: dark;
+}
+
+.appearance-control {
+  display: grid;
+  gap: 6px;
+  margin-top: auto;
+  margin-bottom: 62px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  -webkit-app-region: no-drag;
+}
+
+.appearance-control select {
+  width: 100%;
+  min-width: 0;
+}
+
+.sidebar-footer {
+  margin-top: 0;
+}
+
+:root[data-material="glass"] {
+  --glass-chrome: light-dark(rgb(247 247 255 / 52%), rgb(38 38 43 / 60%));
+  --glass-content: light-dark(rgb(255 255 255 / 62%), rgb(28 28 33 / 66%));
+  --glass-button: light-dark(rgb(252 252 255 / 23%), rgb(56 56 64 / 32%));
+  --glass-rim: light-dark(rgb(255 255 255 / 72%), rgb(255 255 255 / 13%));
+  --glass-blur-chrome: 11.25px;
+  --glass-blur-content: 22.5px;
+  --glass-blur-button: 7.5px;
+  --glass-shadow: inset 0 1px 1px rgb(255 255 255 / 10%), 0 8px 24px rgb(0 0 0 / 18%);
+  --glass-button-shadow: inset 0 1px 1px rgb(255 255 255 / 20%), 0 3px 9px rgb(0 0 0 / 14%);
+  --glass-backdrop-start: light-dark(#a8ccfa, #0f1a38);
+  --glass-backdrop-end: light-dark(#f0bdcc, #40143d);
+  --text-secondary: light-dark(#45454e, #c4c0c8);
+  --text-muted: var(--text-secondary);
+}
+
+:root[data-material="glass"] body {
+  background: linear-gradient(140.55deg, var(--glass-backdrop-start) 14.286%, var(--glass-backdrop-end) 85.714%);
+}
+
+:root[data-material="glass"] :is(.window-chrome, .sidebar, .advisor-panel) {
+  background: var(--glass-chrome);
+  border-color: var(--glass-rim);
+  backdrop-filter: blur(var(--glass-blur-chrome));
+  box-shadow: var(--glass-shadow);
+}
+
+:root[data-material="glass"] .topbar {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--glass-rim);
+  border-radius: var(--radius-panel);
+  background: var(--glass-chrome);
+  backdrop-filter: blur(var(--glass-blur-chrome));
+  box-shadow: var(--glass-shadow);
+}
+
+:root[data-material="glass"] :is(.panel, .attention-section, .project-browser, .project-editor, .project-inspector) {
+  background: var(--glass-content);
+  border-color: var(--glass-rim);
+  backdrop-filter: blur(var(--glass-blur-content));
+  box-shadow: var(--glass-shadow);
+}
+
+:root[data-material="glass"] :is(.ghost-button, .icon-button, .advisor-launcher):not(:disabled) {
+  background: var(--glass-button);
+  border-color: var(--glass-rim);
+  backdrop-filter: blur(var(--glass-blur-button));
+  box-shadow: var(--glass-button-shadow);
+}
+
+:root[data-material="glass"] :is(.ghost-button, .icon-button, .advisor-launcher):not(:disabled):hover {
+  background: var(--surface-hover);
+}
+
+/* Readable opaque working surfaces remain behind fields, media and approvals.
+   Only the surrounding chrome changes material; selection retains shared blue. */
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-material="glass"] {
+    --glass-chrome: var(--sidebar);
+    --glass-content: var(--surface);
+    --glass-button: var(--surface-raised);
+    --glass-blur-chrome: 0px;
+    --glass-blur-content: 0px;
+    --glass-blur-button: 0px;
+  }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  :root[data-material="glass"] {
+    --glass-chrome: var(--sidebar);
+    --glass-content: var(--surface);
+    --glass-button: var(--surface-raised);
+  }
+}

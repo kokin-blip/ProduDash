@@ -1,5 +1,25 @@
-const { app, BrowserWindow, dialog, Menu, protocol, safeStorage, session, shell, utilityProcess } = require("electron");
+const { app, BrowserWindow, dialog, Menu, protocol, nativeTheme, safeStorage, session, shell, utilityProcess } = require("electron");
 const path = require("node:path");
+const { CustomApiManager } = require("./custom-apis/manager.cjs");
+const { TikTokMessagingService } = require("./custom-apis/messaging.cjs");
+let customApis;
+let messaging;
+let apiQuitReady = false;
+let apiQuitInProgress = false;
+app.on("before-quit", (event) => {
+  if (!customApis || apiQuitReady) return;
+  event.preventDefault();
+  if (apiQuitInProgress) return;
+  apiQuitInProgress = true;
+  customApis.shutdown().finally(() => {
+    try {
+      messaging?.interrupt();
+    } finally {
+      apiQuitReady = true;
+      app.quit();
+    }
+  });
+});
 const { pathToFileURL } = require("node:url");
 const { createConnectors } = require("./connectors.cjs");
 const { PublishingDispatchService } = require("./publishing/dispatch-service.cjs");
@@ -61,7 +81,7 @@ function createWindow() {
     minWidth: 1120,
     minHeight: 760,
     title: "ProduDash",
-    backgroundColor: "#0f1418",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#211f23" : "#ffffff",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 22, y: 20 },
     webPreferences: {
@@ -107,7 +127,18 @@ if (hasSingleInstanceLock) {
         }
       }
       // Authorization opens in the user's real browser, never an embedded view.
-      const connectors = createConnectors({ openExternal: (url) => shell.openExternal(url) });
+      customApis = new CustomApiManager({
+        utilityProcess,
+        userDataPath: app.getPath("userData"),
+        supported: process.platform === "darwin",
+        onEvent: (value) => {
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("produdash:customApiEvent", value);
+        }
+      });
+      store.customApis = customApis;
+      messaging = new TikTokMessagingService({ manager: customApis, store });
+      messaging.initialize();
+      const connectors = createConnectors({ customApis, openExternal: (url) => shell.openExternal(url) });
       const providerRegistry = new ProviderRegistry([
         new GeminiProviderAdapter({ connector: connectors.gemini }),
         new OpenAIProviderAdapter(),
@@ -195,6 +226,8 @@ if (hasSingleInstanceLock) {
       await publishing.initialize();
       protocol.handle("produdash-media", createMediaProtocolHandler(mediaLibrary, brandAssets, mediaJobs));
       registerIpc({
+        customApis,
+        messaging,
         store,
         connections,
         connectorRegistry: connectors.connectorRegistry,

@@ -8,6 +8,8 @@ const POST_PLAN_STATUSES = Object.freeze({
   NEEDS_APPROVAL: "needs_approval",
   APPROVED_FOR_MANUAL_EXPORT: "approved_for_manual_export",
   APPROVED_FOR_OFFICIAL_API: "approved_for_official_api",
+  APPROVED_FOR_API: "approved_for_api",
+  PROCESSING: "processing",
   EXPORT_READY: "export_ready",
   // Dispatch is in flight. Reaching this state means bytes may already have
   // been sent, so recovery has to check the provider rather than assume.
@@ -23,11 +25,18 @@ const TRANSITIONS = Object.freeze({
   [POST_PLAN_STATUSES.NEEDS_APPROVAL]: Object.freeze([
     POST_PLAN_STATUSES.APPROVED_FOR_MANUAL_EXPORT,
     POST_PLAN_STATUSES.APPROVED_FOR_OFFICIAL_API,
+    POST_PLAN_STATUSES.APPROVED_FOR_API,
     POST_PLAN_STATUSES.CANCELED
   ]),
   [POST_PLAN_STATUSES.APPROVED_FOR_MANUAL_EXPORT]: Object.freeze([POST_PLAN_STATUSES.EXPORT_READY, POST_PLAN_STATUSES.CANCELED]),
   [POST_PLAN_STATUSES.APPROVED_FOR_OFFICIAL_API]: Object.freeze([POST_PLAN_STATUSES.DISPATCHING, POST_PLAN_STATUSES.CANCELED]),
-  [POST_PLAN_STATUSES.DISPATCHING]: Object.freeze([POST_PLAN_STATUSES.PUBLISHED, POST_PLAN_STATUSES.DISPATCH_FAILED]),
+  [POST_PLAN_STATUSES.APPROVED_FOR_API]: Object.freeze([POST_PLAN_STATUSES.DISPATCHING, POST_PLAN_STATUSES.CANCELED]),
+  [POST_PLAN_STATUSES.PROCESSING]: Object.freeze([POST_PLAN_STATUSES.PUBLISHED, POST_PLAN_STATUSES.DISPATCH_FAILED]),
+  [POST_PLAN_STATUSES.DISPATCHING]: Object.freeze([
+    POST_PLAN_STATUSES.PROCESSING,
+    POST_PLAN_STATUSES.PUBLISHED,
+    POST_PLAN_STATUSES.DISPATCH_FAILED
+  ]),
   // A failed dispatch can be retried; idempotency keys make that safe.
   [POST_PLAN_STATUSES.DISPATCH_FAILED]: Object.freeze([POST_PLAN_STATUSES.DISPATCHING, POST_PLAN_STATUSES.CANCELED]),
   // Terminal. A published post is not un-publishable from here, and a canceled
@@ -42,7 +51,9 @@ const TRANSITIONS = Object.freeze({
 const EDITABLE_STATUSES = Object.freeze(new Set([POST_PLAN_STATUSES.NEEDS_APPROVAL]));
 
 // States from which the official-API dispatcher may run.
-const DISPATCHABLE_STATUSES = Object.freeze(new Set([POST_PLAN_STATUSES.APPROVED_FOR_OFFICIAL_API, POST_PLAN_STATUSES.DISPATCH_FAILED]));
+const DISPATCHABLE_STATUSES = Object.freeze(
+  new Set([POST_PLAN_STATUSES.APPROVED_FOR_API, POST_PLAN_STATUSES.APPROVED_FOR_OFFICIAL_API, POST_PLAN_STATUSES.DISPATCH_FAILED])
+);
 
 function canTransition(from, to) {
   return Boolean(TRANSITIONS[from]?.includes(to));

@@ -33,6 +33,8 @@ function action(id, label, available, reason = null) {
 }
 
 function buildActions({ platform, setting, authorization }) {
+  if (platform.authType === "browser_session") return [];
+
   const live = platform.capabilities.hasLiveConnector;
   const configured = setting?.status === "stored";
   const usesOauth = requiresAuthorizationFlow(platform);

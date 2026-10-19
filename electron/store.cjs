@@ -75,13 +75,14 @@ function publishingApprovalSnapshot(plan, mode, mediaSnapshot) {
     caption: plan.caption,
     platformPackages: plan.platformPackages,
     schedule: plan.schedule,
-    media: mediaSnapshot
+    media: mediaSnapshot,
+    ...(plan.connectionBindings ? { connectionBindings: plan.connectionBindings } : {})
   };
   const hash = crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
   return {
     // v2 adds per-destination publishing options to the payload. v1 snapshots
     // remain valid and are verified against their own shape.
-    version: 2,
+    version: plan.connectionBindings ? 3 : 2,
     hash,
     mode,
     approvedAt,
@@ -134,7 +135,20 @@ class ProduDashStore {
 
   getAppState() {
     const state = clone(this.state);
-    return { ...state, systemNotices: clone(this.notices), platformCatalog: buildPlatformCatalog(state), appVersion: this.appVersion };
+    const customApis = this.customApis?.list() || [];
+    const browser = state.integrations.find((item) => item.id === "tiktok");
+    if (browser) {
+      const api = customApis.find((item) => item.id === "tiktok");
+      browser.status = api?.state === "running" && api.account ? "connected" : "disconnected";
+      browser.authorization = { ...createAuthorizationRecord(), selectedAccount: api?.account || null };
+    }
+    return {
+      ...state,
+      customApis,
+      systemNotices: clone(this.notices),
+      platformCatalog: buildPlatformCatalog(state),
+      appVersion: this.appVersion
+    };
   }
 
   // The public token expiry, read without cloning the store.
@@ -235,6 +249,8 @@ class ProduDashStore {
 
   async saveIntegrationCredentials(integrationId, values) {
     requireKnownIntegration(integrationId);
+    if (getPlatform(integrationId).authType === "browser_session")
+      throw new AppError("BROWSER_SESSION_SETUP_REQUIRED", "Configure the account in Custom APIs instead of saving OAuth credentials.");
     // Accepting credentials for a platform with no connector behind it would
     // leave the user with secrets on disk that nothing can ever verify.
     if (!getPlatform(integrationId).capabilities.hasLiveConnector) {
@@ -575,6 +591,8 @@ class ProduDashStore {
   // a real provider request succeeds.
   async saveIntegrationAuthorization(integrationId, { accessToken, refreshToken, ...metadata } = {}) {
     requireKnownIntegration(integrationId);
+    if (getPlatform(integrationId).authType === "browser_session")
+      throw new AppError("BROWSER_SESSION_SETUP_REQUIRED", "Use the dedicated browser session instead of OAuth tokens.");
     if (!this.credentialVault) throw new AppError("SECURE_STORAGE_UNAVAILABLE", "Secure credential storage is unavailable.");
     if (!getPlatform(integrationId).capabilities.hasLiveConnector) {
       throw new AppError("INTEGRATION_UNAVAILABLE", "This provider connector is planned and cannot be authorized yet.");
@@ -657,7 +675,9 @@ class ProduDashStore {
     requireId(conversationId, "Conversation");
     const instruction = boundedString(prompt, { label: "Draft instruction", min: 1, max: 2000 });
     const conversation = clone(this.getConversation(conversationId));
-    const business = clone(this.getBusiness(conversation.businessId));
+    const business = conversation.accountId
+      ? { name: `TikTok @${conversation.accountId}` }
+      : clone(this.getBusiness(conversation.businessId));
     if (this.state.approvals.some((item) => item.conversationId === conversationId && item.type === "reply" && item.status === "pending")) {
       throw new AppError("PENDING_APPROVAL_EXISTS", "Resolve the existing reply draft before creating another.");
     }
@@ -671,7 +691,8 @@ class ProduDashStore {
       const currentConversation = this.getConversation(conversationId);
       const approval = {
         id: createId("approval"),
-        businessId: business.id,
+        businessId: business.id || null,
+        accountId: conversation.accountId || null,
         conversationId,
         type: "reply",
         status: "pending",
@@ -922,11 +943,12 @@ class ProduDashStore {
 
   async approvePostPlan(planId, mode = "manual_export") {
     requireId(planId, "Post plan");
-    if (!["manual_export", "official_api"].includes(mode)) throw new AppError("INVALID_INPUT", "Approval mode is invalid.");
+    if (!["manual_export", "official_api", "api"].includes(mode)) throw new AppError("INVALID_INPUT", "Approval mode is invalid.");
     return this.enqueueMutation(async () => {
       const plan = this.state.postQueue.find((item) => item.id === planId);
       if (!plan) throw new AppError("POST_PLAN_NOT_FOUND", "Post plan not found.");
-      const targetStatus = mode === "manual_export" ? "approved_for_manual_export" : "approved_for_official_api";
+      const targetStatus =
+        mode === "manual_export" ? "approved_for_manual_export" : mode === "api" ? "approved_for_api" : "approved_for_official_api";
       if (plan.status === targetStatus) return this.getAppState();
       if (plan.status !== "needs_approval") throw new AppError("INVALID_TRANSITION", "This post plan cannot enter that approval path.");
       // Plan completeness is checked before connection readiness so someone
@@ -937,7 +959,7 @@ class ProduDashStore {
       // package too, so a manual upload carries the same recorded declaration
       // as an API one.
       assertPublishingOptionsComplete(plan.platformPackages);
-      if (mode === "official_api") {
+      if (mode !== "manual_export") {
         if (!plan.platforms.length) throw new AppError("INVALID_INPUT", "Select at least one publishing destination.");
         // Asked of deriveConnectionState rather than of the raw status field.
         // The raw field says only what the last verification returned, so an
@@ -948,18 +970,23 @@ class ProduDashStore {
         const ready = plan.platforms.every((platformId) => {
           const platform = findPlatform(platformId);
           if (!platform) return false;
-          const integration = this.state.integrations.find((item) => item.id === platformId);
+          const integration = this.getAppState().integrations.find((item) => item.id === platformId);
           const setting = this.state.credentialSettings.find((item) => item.id === platformId);
           return deriveConnectionState({ platform, integration, setting }) === CONNECTION_STATES.CONNECTED;
         });
         if (!ready) throw new AppError("INTEGRATION_NOT_READY", "Every publishing destination must be genuinely connected.");
+      }
+      if (mode !== "manual_export" && plan.platforms.includes("tiktok")) {
+        const account = this.customApis?.account("tiktok");
+        if (!account) throw new AppError("CUSTOM_API_ACCOUNT_REQUIRED", "Verify the TikTok browser account first.");
+        plan.connectionBindings = { tiktok: { transport: "browser", accountId: account.id } };
       }
       const mediaSnapshot = publishingMediaSnapshot(this.state, plan.mediaJobId);
       plan.mediaSnapshot = mediaSnapshot;
       plan.approvalSnapshot = publishingApprovalSnapshot(plan, mode, mediaSnapshot);
       plan.status = targetStatus;
       plan.approvedAt = plan.approvalSnapshot.approvedAt;
-      this.audit("publisher", `Approved ${plan.title} for ${mode === "manual_export" ? "manual export" : "official API publishing"}.`);
+      this.audit("publisher", `Approved ${plan.title} for ${mode === "manual_export" ? "manual export" : "API publishing"}.`);
       this.persist();
       return this.getAppState();
     });
@@ -1000,12 +1027,12 @@ class ProduDashStore {
     return this.enqueueMutation(async () => {
       const plan = this.requirePostPlan(planId);
       if (!DISPATCHABLE_STATUSES.has(plan.status)) {
-        throw new AppError("INVALID_TRANSITION", "Approve this plan for official API publishing first.");
+        throw new AppError("INVALID_TRANSITION", "Approve this plan for API publishing first.");
       }
       if (!plan.approvalSnapshot) throw new AppError("INVALID_TRANSITION", "This plan has no approval snapshot.");
       assertTransition(plan.status, POST_PLAN_STATUSES.DISPATCHING);
       plan.status = POST_PLAN_STATUSES.DISPATCHING;
-      this.audit("publisher", `Started official API publishing for ${plan.title}.`);
+      this.audit("publisher", `Started API publishing for ${plan.title}.`);
       this.persist();
       return this.getAppState();
     });
@@ -1040,10 +1067,17 @@ class ProduDashStore {
       const published = expected.every((destination) =>
         plan.publicationReceipts.some((receipt) => receipt.idempotencyKey === destination.idempotencyKey && isAlreadyPublished(receipt))
       );
-      const target = published ? POST_PLAN_STATUSES.PUBLISHED : POST_PLAN_STATUSES.DISPATCH_FAILED;
+      const browserProcessing = plan.publicationReceipts.some(
+        (receipt) => receipt.platformId === "tiktok" && receipt.status === "processing"
+      );
+      const target = published
+        ? browserProcessing
+          ? POST_PLAN_STATUSES.PROCESSING
+          : POST_PLAN_STATUSES.PUBLISHED
+        : POST_PLAN_STATUSES.DISPATCH_FAILED;
       assertTransition(plan.status, target);
       plan.status = target;
-      if (published) plan.publishedAt = new Date().toISOString();
+      if (target === POST_PLAN_STATUSES.PUBLISHED) plan.publishedAt = new Date().toISOString();
       // The audit log is the compliance record, so it must not assert more than
       // happened. Every destination was delivered, but a provider still
       // finalizing has not confirmed anything, and it can still reject.
@@ -1054,7 +1088,7 @@ class ProduDashStore {
           ? finalizing
             ? `Uploaded ${plan.title} to every approved destination; at least one provider is still finalizing it.`
             : `Published ${plan.title} to every approved destination.`
-          : `Official API publishing did not complete for ${plan.title}.`
+          : `API publishing did not complete for ${plan.title}.`
       );
       this.persist();
       return this.getAppState();
@@ -1077,6 +1111,13 @@ class ProduDashStore {
       for (const plan of this.state.postQueue) {
         if (plan.status !== POST_PLAN_STATUSES.DISPATCHING) continue;
         plan.status = POST_PLAN_STATUSES.DISPATCH_FAILED;
+        for (const receipt of plan.publicationReceipts || []) {
+          if (receipt.platformId === "tiktok" && receipt.status === "uploading" && !receipt.providerPublicationId) {
+            receipt.status = "failed";
+            receipt.errorCode = "CUSTOM_API_OUTCOME_UNKNOWN";
+            receipt.retryable = false;
+          }
+        }
         changed = true;
         this.audit("publisher", `Publishing for ${plan.title} was interrupted before it finished.`);
       }

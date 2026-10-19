@@ -19,7 +19,11 @@ export function renderIntegrations() {
         </div>
         <span class="security-note">Protected by OS encryption</span>
       </div>
-      <div class="connection-stack">${livePlatforms().map(renderConnection).join("")}</div>
+      ${renderCustomApis()}
+      <div class="connection-stack">${livePlatforms()
+        .filter((item) => item.authType !== "browser_session")
+        .map(renderConnection)
+        .join("")}</div>
       ${renderAiProviders()}
       ${renderLocalVoiceOptions()}
       ${renderWorkloads()}
@@ -473,4 +477,36 @@ function renderLocalDataControls() {
       </div>
     </details>
   `;
+}
+
+function renderCustomApis() {
+  return `<section class="panel connection-section" aria-labelledby="customApiTitle">
+    <div class="section-heading"><div><h2 id="customApiTitle">Custom APIs</h2>
+    <p>Start a local API when you need it. APIs stop when ProduDash quits and stay off on the next launch.</p></div></div>
+    ${asArray(ui.appState.customApis)
+      .map((service) => {
+        const id = escapeHtml(service.id);
+        const busy = isPending(`custom-api-${service.id}`);
+        const active = ["starting", "running", "stopping"].includes(service.state);
+        const running = service.state === "running";
+        const disabled = busy ? "disabled" : "";
+        return `<form data-custom-api-form="${id}" class="custom-api-row" aria-busy="${busy}">
+        <div class="connection-heading"><div><h3>${escapeHtml(service.name)}</h3>
+          <p role="status">${escapeHtml({ off: "Off", starting: "Starting", running: "Running", stopping: "Stopping", error: "Error" }[service.state] || "Off")}${service.account ? ` · Verified @${escapeHtml(service.account.id)}` : " · Account not verified"}</p></div>
+          <button type="button" class="${active ? "ghost-button" : "primary-button"}" data-custom-api="${id}" data-api-action="${active ? "stop" : "start"}"
+            ${busy || ["starting", "stopping"].includes(service.state) || (!active && (!service.supported || !service.configured)) ? "disabled" : ""}>
+            ${service.state === "starting" ? "Starting…" : service.state === "stopping" ? "Stopping after current action…" : active ? "Stop API" : "Start API"}</button></div>
+        ${service.error ? `<p class="inline-message error">${escapeHtml(service.error)}</p>` : ""}
+        ${!service.supported ? "<p>Available in macOS builds only.</p>" : ""}
+        <div class="field-grid"><label for="api-account-${id}">Expected TikTok username</label>
+          <input id="api-account-${id}" name="expectedUsername" autocomplete="off" maxlength="64" value="${escapeHtml(service.expectedUsername)}" ${active || busy ? "disabled" : ""} />
+          <button type="submit" class="ghost-button small" ${active || busy ? "disabled" : ""}>Save account</button>
+          <button type="button" class="ghost-button small" data-custom-api="${id}" data-api-action="profile" ${active || busy ? "disabled" : ""}>Use existing dedicated profile</button></div>
+        <p>${service.usingExistingProfile ? "Using your selected dedicated browser profile." : "A separate browser profile will be created for this API."}</p>
+        <div class="button-row"><button type="button" class="ghost-button" data-custom-api="${id}" data-api-action="open" ${!running ? "disabled" : disabled}>Sign in in browser</button>
+          <button type="button" class="ghost-button" data-custom-api="${id}" data-api-action="check" ${!running ? "disabled" : disabled}>Check account</button></div>
+      </form>`;
+      })
+      .join("")}
+  </section>`;
 }

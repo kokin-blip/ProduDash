@@ -4,6 +4,9 @@ dist/
 coverage/
 playwright-report/
 test-results/
+# Local browser acceptance evidence can contain account and conversation data.
+integrations/tiktok-api/docs/evidence/
+docs/custom-api-live-acceptance.json
 assets/advisor/generated/
 assets/advisor/tmp/
 assets/advisor/**/.sprite-forge-cache/

@@ -38,6 +38,8 @@ module.exports = {
     "index.html",
     "electron/**/*",
     "src/**/*",
+    "integrations/tiktok-api/package.json",
+    "integrations/tiktok-api/src/**/*",
     "assets/advisor/states/**/*",
     "package.json",
     "!**/*.map",

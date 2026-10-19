@@ -1,0 +1,2893 @@
+{
+  "baselineRevision": "a2c599352ef2d864f4161656b03a684e9c76a86b",
+  "note": "Static selector inventory. Availability/consent gates remain in the named renderer functions and main-process services. API lists are direct calls in matching handler blocks; helper calls and presentation-only attributes are not new features.",
+  "attributes": [
+    {
+      "attribute": "data-active-section",
+      "source": [
+        {
+          "file": "index.html",
+          "line": 34,
+          "owner": "shell"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-add-clip-files",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 117,
+          "owner": "renderLibrary"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-add-clip-files]",
+          "line": 1150
+        }
+      ],
+      "apiCalls": ["chooseClipFiles"]
+    },
+    {
+      "attribute": "data-add-clip-folders",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 120,
+          "owner": "renderLibrary"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-add-clip-folders]",
+          "line": 1140
+        }
+      ],
+      "apiCalls": ["chooseClipFolders"]
+    },
+    {
+      "attribute": "data-add-job-thumbnail",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 537,
+          "owner": "renderThumbnailReview"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-add-job-thumbnail]",
+          "line": 1199
+        }
+      ],
+      "apiCalls": ["addMediaJobThumbnail"]
+    },
+    {
+      "attribute": "data-advisor-art-state",
+      "source": [
+        {
+          "file": "src/renderer/advisor.js",
+          "line": 165,
+          "owner": "renderAdvisor"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-advisor-cancel",
+      "source": [
+        {
+          "file": "src/renderer/advisor.js",
+          "line": 225,
+          "owner": "renderAdvisor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-advisor-cancel]",
+          "line": 316
+        }
+      ],
+      "apiCalls": ["cancelAdvisorTurn"]
+    },
+    {
+      "attribute": "data-advisor-clear",
+      "source": [
+        {
+          "file": "src/renderer/advisor.js",
+          "line": 198,
+          "owner": "renderAdvisor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-advisor-clear]",
+          "line": 292
+        }
+      ],
+      "apiCalls": ["clearAdvisorHistory"]
+    },
+    {
+      "attribute": "data-advisor-close",
+      "source": [
+        {
+          "file": "src/renderer/advisor.js",
+          "line": 190,
+          "owner": "renderAdvisor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-advisor-close]",
+          "line": 272
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-advisor-consent",
+      "source": [
+        {
+          "file": "src/renderer/advisor.js",
+          "line": 108,
+          "owner": "renderConsent"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-advisor-consent]",
+          "line": 280
+        }
+      ],
+      "apiCalls": ["grantAdvisorConsent"]
+    },
+    {
+      "attribute": "data-advisor-form",
+      "source": [
+        {
+          "file": "src/renderer/advisor.js",
+          "line": 216,
+          "owner": "renderAdvisor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-advisor-form]",
+          "line": 1389
+        }
+      ],
+      "apiCalls": ["sendAdvisorTurn", "getAdvisorHistory"]
+    },
+    {
+      "attribute": "data-advisor-job-reaction",
+      "source": [
+        {
+          "file": "src/renderer/advisor-reactions.js",
+          "line": 66,
+          "owner": "showJobReaction"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-advisor-open-integrations",
+      "source": [
+        {
+          "file": "src/renderer/advisor.js",
+          "line": 204,
+          "owner": "renderAdvisor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-advisor-open-integrations]",
+          "line": 324
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-advisor-settings-form",
+      "source": [
+        {
+          "file": "src/renderer/advisor.js",
+          "line": 242,
+          "owner": "renderAdvisor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-advisor-settings-form]",
+          "line": 1452
+        }
+      ],
+      "apiCalls": ["updateAdvisorSettings"]
+    },
+    {
+      "attribute": "data-advisor-suggestion",
+      "source": [
+        {
+          "file": "src/renderer/advisor.js",
+          "line": 213,
+          "owner": "renderAdvisor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-advisor-suggestion]",
+          "line": 306
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-advisor-toggle",
+      "source": [
+        {
+          "file": "src/renderer/advisor.js",
+          "line": 142,
+          "owner": "renderAdvisor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-advisor-toggle]",
+          "line": 264
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-ai-provider-form",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 263,
+          "owner": "renderAiProvider"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-ai-provider-form]",
+          "line": 2310
+        }
+      ],
+      "apiCalls": ["saveAiProviderCredentials"]
+    },
+    {
+      "attribute": "data-analytics-range-form",
+      "source": [
+        {
+          "file": "src/renderer/views/analytics.js",
+          "line": 47,
+          "owner": "renderCommerceReport"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-analytics-range-form]",
+          "line": 1380
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-approval-mode",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 896,
+          "owner": "renderPostPlan"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-approve-approval",
+      "source": [
+        {
+          "file": "src/renderer/views/dashboard.js",
+          "line": 224,
+          "owner": "renderApprovals"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-approve-approval]",
+          "line": 948
+        }
+      ],
+      "apiCalls": ["approveAiAction"]
+    },
+    {
+      "attribute": "data-approve-post",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 894,
+          "owner": "renderPostPlan"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-approve-post]",
+          "line": 967
+        }
+      ],
+      "apiCalls": ["approvePostPlan"]
+    },
+    {
+      "attribute": "data-approved-options",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 1025,
+          "owner": "renderApprovedOptions"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-brand-asset-delete",
+      "source": [
+        {
+          "file": "src/renderer/views/templates.js",
+          "line": 56,
+          "owner": "renderBrandTemplates"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-brand-asset-delete]",
+          "line": 372
+        }
+      ],
+      "apiCalls": ["deleteBrandAsset"]
+    },
+    {
+      "attribute": "data-brand-asset-import",
+      "source": [
+        {
+          "file": "src/renderer/views/templates.js",
+          "line": 43,
+          "owner": "renderBrandTemplates"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-brand-asset-import]",
+          "line": 356
+        }
+      ],
+      "apiCalls": ["importBrandAsset"]
+    },
+    {
+      "attribute": "data-business",
+      "source": [
+        {
+          "file": "src/renderer/render.js",
+          "line": 101,
+          "owner": "renderBusinesses"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-business]",
+          "line": 891
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-cancel-media-job",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 460,
+          "owner": "renderMediaJob"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-cancel-media-job]",
+          "line": 1174
+        }
+      ],
+      "apiCalls": ["cancelMediaJob"]
+    },
+    {
+      "attribute": "data-cancel-post",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 937,
+          "owner": "renderPostPlan"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-cancel-post]",
+          "line": 1041
+        }
+      ],
+      "apiCalls": ["cancelPostPlan"]
+    },
+    {
+      "attribute": "data-candidate-aspect-preview",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 129,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-candidate-card",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 116,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-candidate-edit-form",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 163,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-candidate-edit-form]",
+          "line": 2209
+        }
+      ],
+      "apiCalls": ["updateMediaCandidate"]
+    },
+    {
+      "attribute": "data-candidate-id",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 163,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-candidate-pause",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 149,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-candidate-play",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 148,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-candidate-reject",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 218,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-candidate-reset",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 216,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-candidate-restart",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 150,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-candidate-review",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 228,
+          "owner": "renderCandidateReview"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-candidate-seek",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 156,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-candidate-select",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 217,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-candidate-video",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 132,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-caption-segment",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 90,
+          "owner": "renderCaptionEditor"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-categories",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 374,
+          "owner": "renderCreateClips"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-choose-media-output",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 394,
+          "owner": "renderCreateClips"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-choose-media-output]",
+          "line": 1160
+        }
+      ],
+      "apiCalls": ["chooseMediaOutputFolder"]
+    },
+    {
+      "attribute": "data-clip-tags-form",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 306,
+          "owner": "renderClipDetail"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-clip-tags-form]",
+          "line": 2352
+        }
+      ],
+      "apiCalls": ["updateClipTags"]
+    },
+    {
+      "attribute": "data-connection-state",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 165,
+          "owner": "renderConnection"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-conversation",
+      "source": [
+        {
+          "file": "src/renderer/views/dashboard.js",
+          "line": 147,
+          "owner": "renderConversationRows"
+        },
+        {
+          "file": "src/renderer/views/inbox.js",
+          "line": 26,
+          "owner": "renderInbox"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-conversation]",
+          "line": 906
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-credentials-form",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 165,
+          "owner": "renderConnection"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-credentials-form]",
+          "line": 2298
+        }
+      ],
+      "apiCalls": ["saveIntegrationCredentials"]
+    },
+    {
+      "attribute": "data-custom-voice-close",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 826,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-custom-voice-close]",
+          "line": 554
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-custom-voice-dialog",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 822,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-custom-voice-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 823,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-custom-voice-form]",
+          "line": 1773
+        }
+      ],
+      "apiCalls": ["createCustomVoice"]
+    },
+    {
+      "attribute": "data-custom-voice-open",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 789,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-custom-voice-open]",
+          "line": 532
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-custom-voice-remove",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 812,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-custom-voice-remove]",
+          "line": 572
+        }
+      ],
+      "apiCalls": ["removeCustomVoice"]
+    },
+    {
+      "attribute": "data-delete-all",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 471,
+          "owner": "renderLocalDataControls"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-delete-all]",
+          "line": 1307
+        }
+      ],
+      "apiCalls": ["deleteAllLocalData", "getClipLibrary", "getProjects", "getAdvisorHistory", "refreshConnections"]
+    },
+    {
+      "attribute": "data-destination",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 681,
+          "owner": "renderPlatformChecks"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-direction",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 327,
+          "owner": "renderInspector"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-disabled-reason",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 121,
+          "owner": "renderActionButton"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-discard-platform",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 804,
+          "owner": "renderPublicationReceipts"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-discard-session",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 802,
+          "owner": "renderPublicationReceipts"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-discard-session]",
+          "line": 1003
+        }
+      ],
+      "apiCalls": ["discardUploadSession"]
+    },
+    {
+      "attribute": "data-dispatch-post",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 925,
+          "owner": "renderPostPlan"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-dispatch-post]",
+          "line": 1023
+        }
+      ],
+      "apiCalls": ["dispatchPostPlan"]
+    },
+    {
+      "attribute": "data-draft-form",
+      "source": [
+        {
+          "file": "src/renderer/views/inbox.js",
+          "line": 73,
+          "owner": "renderInbox"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-draft-form]",
+          "line": 2365
+        }
+      ],
+      "apiCalls": ["draftAiReply"]
+    },
+    {
+      "attribute": "data-export-analytics",
+      "source": [
+        {
+          "file": "src/renderer/views/analytics.js",
+          "line": 62,
+          "owner": "renderCommerceReport"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-export-analytics]",
+          "line": 937
+        }
+      ],
+      "apiCalls": ["exportAnalyticsReport"]
+    },
+    {
+      "attribute": "data-export-post",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 908,
+          "owner": "renderPostPlan"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-export-post]",
+          "line": 978
+        }
+      ],
+      "apiCalls": ["exportPostPackage"]
+    },
+    {
+      "attribute": "data-fingerprint",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 369,
+          "owner": "renderProjectSettings"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-library-clip",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 247,
+          "owner": "renderClipRow"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-library-clip]",
+          "line": 884
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-library-offset",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 188,
+          "owner": "renderLibrary"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-library-offset]",
+          "line": 1268
+        }
+      ],
+      "apiCalls": ["getClipLibrary"]
+    },
+    {
+      "attribute": "data-library-search-form",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 125,
+          "owner": "renderLibrary"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-library-search-form]",
+          "line": 2336
+        }
+      ],
+      "apiCalls": ["getClipLibrary"]
+    },
+    {
+      "attribute": "data-local-likeness-close",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 871,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-local-likeness-close]",
+          "line": 566
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-local-likeness-dialog",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 864,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-local-likeness-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 865,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-local-likeness-form]",
+          "line": 1861
+        }
+      ],
+      "apiCalls": ["authorizeConfiguredLocalVoice"]
+    },
+    {
+      "attribute": "data-local-likeness-open",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 792,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-local-likeness-open]",
+          "line": 560
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-local-provider-file",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 338,
+          "owner": "renderCredentialField"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-local-provider-file]",
+          "line": 1130
+        }
+      ],
+      "apiCalls": ["chooseLocalProviderFile"]
+    },
+    {
+      "attribute": "data-local-voice-scan",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 43,
+          "owner": "renderLocalVoiceOptions"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-local-voice-scan]",
+          "line": 1110
+        }
+      ],
+      "apiCalls": ["scanLocalVoiceCompatibility"]
+    },
+    {
+      "attribute": "data-localization-id",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 736,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-localized-source-id",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 752,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-media-candidates-form",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 236,
+          "owner": "renderCandidateReview"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-media-candidates-form]",
+          "line": 2223
+        }
+      ],
+      "apiCalls": ["approveMediaCandidates"]
+    },
+    {
+      "attribute": "data-media-job",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 431,
+          "owner": "renderMediaJob"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-media-job-form]",
+          "line": 2160
+        }
+      ],
+      "apiCalls": ["createMediaJob"]
+    },
+    {
+      "attribute": "data-media-job-form",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 336,
+          "owner": "renderCreateClips"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-media-job-form]",
+          "line": 2160
+        }
+      ],
+      "apiCalls": ["createMediaJob"]
+    },
+    {
+      "attribute": "data-model-id",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 371,
+          "owner": "renderCreateClips"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-pending-label",
+      "source": [
+        {
+          "file": "index.html",
+          "line": 97,
+          "owner": "shell"
+        },
+        {
+          "file": "src/renderer/advisor.js",
+          "line": 109,
+          "owner": "renderConsent"
+        },
+        {
+          "file": "src/renderer/advisor.js",
+          "line": 228,
+          "owner": "renderAdvisor"
+        },
+        {
+          "file": "src/renderer/views/analytics.js",
+          "line": 30,
+          "owner": "renderAnalyticsEmpty"
+        },
+        {
+          "file": "src/renderer/views/analytics.js",
+          "line": 59,
+          "owner": "renderCommerceReport"
+        },
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 213,
+          "owner": "renderCandidate"
+        },
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 248,
+          "owner": "renderCandidateReview"
+        },
+        {
+          "file": "src/renderer/views/dashboard.js",
+          "line": 223,
+          "owner": "renderApprovals"
+        },
+        {
+          "file": "src/renderer/views/inbox.js",
+          "line": 78,
+          "owner": "renderInbox"
+        },
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 43,
+          "owner": "renderLocalVoiceOptions"
+        },
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 117,
+          "owner": "renderActionButton"
+        },
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 233,
+          "owner": "renderConnection"
+        },
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 316,
+          "owner": "renderAiProvider"
+        },
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 340,
+          "owner": "renderCredentialField"
+        },
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 405,
+          "owner": "renderWorkload"
+        },
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 464,
+          "owner": "renderLocalDataControls"
+        },
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 41,
+          "owner": "renderProjectCreate"
+        },
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 82,
+          "owner": "renderProjectList"
+        },
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 301,
+          "owner": "renderTranscript"
+        },
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 551,
+          "owner": "renderProjectSettings"
+        },
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 719,
+          "owner": "renderLocalization"
+        },
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1178,
+          "owner": "renderEditor"
+        },
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1248,
+          "owner": "renderProjects"
+        },
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 116,
+          "owner": "renderLibrary"
+        },
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 228,
+          "owner": "renderFolders"
+        },
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 308,
+          "owner": "renderClipDetail"
+        },
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 394,
+          "owner": "renderCreateClips"
+        },
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 460,
+          "owner": "renderMediaJob"
+        },
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 539,
+          "owner": "renderThumbnailReview"
+        },
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 630,
+          "owner": "renderPublishing"
+        },
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 797,
+          "owner": "renderPublicationReceipts"
+        },
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 896,
+          "owner": "renderPostPlan"
+        },
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 1010,
+          "owner": "renderPostDraftForm"
+        },
+        {
+          "file": "src/renderer/views/templates.js",
+          "line": 30,
+          "owner": "renderBrandTemplates"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-planned-platform",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 429,
+          "owner": "renderPlannedConnections"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-post-draft-form",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 981,
+          "owner": "renderPostDraftForm"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-post-draft-form]",
+          "line": 2262
+        }
+      ],
+      "apiCalls": ["updatePostPlanDraft"]
+    },
+    {
+      "attribute": "data-post-form",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 611,
+          "owner": "renderPublishing"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-post-form]",
+          "line": 2240
+        }
+      ],
+      "apiCalls": ["createPostPlan"]
+    },
+    {
+      "attribute": "data-profile-id",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 338,
+          "owner": "renderCredentialField"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-choose-output",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1181,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-choose-output]",
+          "line": 609
+        }
+      ],
+      "apiCalls": ["chooseMediaOutputFolder"]
+    },
+    {
+      "attribute": "data-project-collection-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 80,
+          "owner": "renderProjectList"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-collection-form]",
+          "line": 1593
+        }
+      ],
+      "apiCalls": ["createProjectCollection"]
+    },
+    {
+      "attribute": "data-project-comment-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 335,
+          "owner": "renderInspector"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-comment-form]",
+          "line": 2149
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-create-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 19,
+          "owner": "renderProjectCreate"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-create-form]",
+          "line": 1549
+        }
+      ],
+      "apiCalls": ["createProject"]
+    },
+    {
+      "attribute": "data-project-delete",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1235,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-delete-segment",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 329,
+          "owner": "renderInspector"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-duplicate",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1228,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-duplicate-segment",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 326,
+          "owner": "renderInspector"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-editor",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1107,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-export",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1229,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-export]",
+          "line": 448
+        }
+      ],
+      "apiCalls": ["exportProjectDocument"]
+    },
+    {
+      "attribute": "data-project-favorite",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1117,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-favorite]",
+          "line": 477
+        }
+      ],
+      "apiCalls": ["updateProject"]
+    },
+    {
+      "attribute": "data-project-filter-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 53,
+          "owner": "renderProjectList"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-filter-form]",
+          "line": 1580
+        }
+      ],
+      "apiCalls": ["getProjects"]
+    },
+    {
+      "attribute": "data-project-frame-step",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1160,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-play], [data-project-pause], [data-project-frame-step]",
+          "line": 794
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-from-candidate",
+      "source": [
+        {
+          "file": "src/renderer/views/candidate-review.js",
+          "line": 214,
+          "owner": "renderCandidate"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-from-candidate]",
+          "line": 457
+        }
+      ],
+      "apiCalls": ["createProjectFromCandidate"]
+    },
+    {
+      "attribute": "data-project-import",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1248,
+          "owner": "renderProjects"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-import]",
+          "line": 434
+        },
+        {
+          "selector": "[data-project-import-transcript]",
+          "line": 637
+        }
+      ],
+      "apiCalls": ["importProjectDocument", "importProjectTranscript"]
+    },
+    {
+      "attribute": "data-project-import-transcript",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 273,
+          "owner": "renderTranscript"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-import-transcript]",
+          "line": 637
+        }
+      ],
+      "apiCalls": ["importProjectTranscript"]
+    },
+    {
+      "attribute": "data-project-localization-create",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 694,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-localization-create]",
+          "line": 1610
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-localization-delete",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 767,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-localization-delete]",
+          "line": 493
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-localization-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 735,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-localization-form]",
+          "line": 1673
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-localization-translate",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 701,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-localization-translate]",
+          "line": 1637
+        }
+      ],
+      "apiCalls": ["translateProjectTranscript"]
+    },
+    {
+      "attribute": "data-project-marker-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 331,
+          "owner": "renderInspector"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-marker-form]",
+          "line": 2138
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-move-segment",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 327,
+          "owner": "renderInspector"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-open",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 91,
+          "owner": "renderProjectList"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-open]",
+          "line": 424
+        }
+      ],
+      "apiCalls": ["getProject"]
+    },
+    {
+      "attribute": "data-project-overlay-delete",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 577,
+          "owner": "renderProjectSettings"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-overlay-delete]",
+          "line": 730
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-overlay-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 560,
+          "owner": "renderProjectSettings"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-overlay-form]",
+          "line": 2074
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-pause",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1159,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-play], [data-project-pause], [data-project-frame-step]",
+          "line": 794
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-play",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1158,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-play], [data-project-pause], [data-project-frame-step]",
+          "line": 794
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-playhead",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1162,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-prepare",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1178,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-prepare]",
+          "line": 599
+        }
+      ],
+      "apiCalls": ["prepareProject"]
+    },
+    {
+      "attribute": "data-project-preview-mode",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1155,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-preview-mode]",
+          "line": 832
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-redo",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1122,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-redo]",
+          "line": 740
+        }
+      ],
+      "apiCalls": ["saveProjectDraft"]
+    },
+    {
+      "attribute": "data-project-relink-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 592,
+          "owner": "renderProjectSettings"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-relink-form]",
+          "line": 2105
+        }
+      ],
+      "apiCalls": ["relinkProject"]
+    },
+    {
+      "attribute": "data-project-render",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1182,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-render]",
+          "line": 624
+        }
+      ],
+      "apiCalls": ["renderProject"]
+    },
+    {
+      "attribute": "data-project-restore-version",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1092,
+          "owner": "renderVersions"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-restore-version]",
+          "line": 658
+        }
+      ],
+      "apiCalls": ["restoreProjectVersion"]
+    },
+    {
+      "attribute": "data-project-save-version",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1120,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-save-version]",
+          "line": 647
+        }
+      ],
+      "apiCalls": ["saveProjectVersion"]
+    },
+    {
+      "attribute": "data-project-segment-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 317,
+          "owner": "renderInspector"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-segment-form]",
+          "line": 2117
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-settings-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 399,
+          "owner": "renderProjectSettings"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-settings-form]",
+          "line": 1919
+        }
+      ],
+      "apiCalls": ["updateProject", "saveProjectDraft"]
+    },
+    {
+      "attribute": "data-project-speaker-voiceovers",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 949,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-speaker-voiceovers]",
+          "line": 1740
+        }
+      ],
+      "apiCalls": ["generateProjectSpeakerVoiceovers"]
+    },
+    {
+      "attribute": "data-project-split",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 325,
+          "owner": "renderInspector"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-timeline-scroll",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 245,
+          "owner": "renderTimeline"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-transcript-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 280,
+          "owner": "renderTranscript"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-transcript-form]",
+          "line": 2128
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-transcript-search",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 276,
+          "owner": "renderTranscript"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-transcript-search-form]",
+          "line": 1601
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-transcript-search-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 275,
+          "owner": "renderTranscript"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-transcript-search-form]",
+          "line": 1601
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-undo",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1121,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-undo]",
+          "line": 709
+        }
+      ],
+      "apiCalls": ["saveProjectDraft"]
+    },
+    {
+      "attribute": "data-project-video",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1133,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-voiceover-create",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 907,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-voiceover-create]",
+          "line": 1707
+        }
+      ],
+      "apiCalls": ["generateProjectVoiceover"]
+    },
+    {
+      "attribute": "data-project-voiceover-delete",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1014,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-voiceover-delete]",
+          "line": 513
+        }
+      ],
+      "apiCalls": ["deleteProjectVoiceover"]
+    },
+    {
+      "attribute": "data-project-voiceover-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 987,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-project-voiceover-form]",
+          "line": 1897
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-project-zoom",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1168,
+          "owner": "renderEditor"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-provider-id",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 370,
+          "owner": "renderCreateClips"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-provider-profile-id",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 813,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-provider-type",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 814,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-publishing-option",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 959,
+          "owner": "renderPublishingOptionFields"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-rebuild-clip-search",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 116,
+          "owner": "renderLibrary"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-rebuild-clip-search]",
+          "line": 1277
+        }
+      ],
+      "apiCalls": ["rebuildClipSearchIndex", "getClipLibrary"]
+    },
+    {
+      "attribute": "data-refresh-analytics",
+      "source": [
+        {
+          "file": "src/renderer/views/analytics.js",
+          "line": 30,
+          "owner": "renderAnalyticsEmpty"
+        },
+        {
+          "file": "src/renderer/views/analytics.js",
+          "line": 61,
+          "owner": "renderCommerceReport"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-refresh-analytics]",
+          "line": 931
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-refresh-platform",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 797,
+          "owner": "renderPublicationReceipts"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-refresh-publication",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 795,
+          "owner": "renderPublicationReceipts"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-refresh-publication]",
+          "line": 989
+        }
+      ],
+      "apiCalls": ["refreshPublicationStatus"]
+    },
+    {
+      "attribute": "data-reject-approval",
+      "source": [
+        {
+          "file": "src/renderer/views/dashboard.js",
+          "line": 221,
+          "owner": "renderApprovals"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-reject-approval]",
+          "line": 959
+        }
+      ],
+      "apiCalls": ["rejectAiAction"]
+    },
+    {
+      "attribute": "data-relocate-clip-folder",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 229,
+          "owner": "renderFolders"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-relocate-clip-folder]",
+          "line": 1228
+        }
+      ],
+      "apiCalls": ["relocateClipFolder"]
+    },
+    {
+      "attribute": "data-remove-ai-provider",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 314,
+          "owner": "renderAiProvider"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-remove-ai-provider]",
+          "line": 1121
+        }
+      ],
+      "apiCalls": ["removeAiProviderCredentials"]
+    },
+    {
+      "attribute": "data-remove-clip",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 312,
+          "owner": "renderClipDetail"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-remove-clip-folder]",
+          "line": 1237
+        },
+        {
+          "selector": "[data-remove-clip]",
+          "line": 1247
+        }
+      ],
+      "apiCalls": ["removeClipFolder", "removeClip"]
+    },
+    {
+      "attribute": "data-remove-clip-folder",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 232,
+          "owner": "renderFolders"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-remove-clip-folder]",
+          "line": 1237
+        }
+      ],
+      "apiCalls": ["removeClipFolder"]
+    },
+    {
+      "attribute": "data-rescan-clip-folder",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 226,
+          "owner": "renderFolders"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-rescan-clip-folder]",
+          "line": 1219
+        }
+      ],
+      "apiCalls": ["rescanClipFolder"]
+    },
+    {
+      "attribute": "data-reset-dashboard",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 464,
+          "owner": "renderLocalDataControls"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-reset-dashboard]",
+          "line": 1294
+        }
+      ],
+      "apiCalls": ["resetDashboardData", "getClipLibrary", "getAdvisorHistory"]
+    },
+    {
+      "attribute": "data-retry-media-job",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 461,
+          "owner": "renderMediaJob"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-retry-media-job]",
+          "line": 1182
+        }
+      ],
+      "apiCalls": ["retryMediaJob"]
+    },
+    {
+      "attribute": "data-reveal-clip",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 311,
+          "owner": "renderClipDetail"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-reveal-clip]",
+          "line": 1257
+        }
+      ],
+      "apiCalls": ["openClipInFolder"]
+    },
+    {
+      "attribute": "data-reveal-media-job",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 462,
+          "owner": "renderMediaJob"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-reveal-media-job]",
+          "line": 1209
+        }
+      ],
+      "apiCalls": ["openMediaJobOutput"]
+    },
+    {
+      "attribute": "data-rvc-voiceover-close",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1032,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-rvc-voiceover-close]",
+          "line": 548
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-rvc-voiceover-dialog",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1024,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-rvc-voiceover-form",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1025,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-rvc-voiceover-form]",
+          "line": 1810
+        }
+      ],
+      "apiCalls": ["convertProjectVoiceover"]
+    },
+    {
+      "attribute": "data-rvc-voiceover-open",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 1011,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-rvc-voiceover-open]",
+          "line": 538
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-scope-disclosure",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 128,
+          "owner": "renderScopeDisclosure"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-section",
+      "source": [
+        {
+          "file": "index.html",
+          "line": 36,
+          "owner": "shell"
+        },
+        {
+          "file": "src/renderer/views/dashboard.js",
+          "line": 49,
+          "owner": "renderDashboard"
+        },
+        {
+          "file": "src/renderer/views/dashboard.js",
+          "line": 91,
+          "owner": "renderAttention"
+        },
+        {
+          "file": "src/renderer/views/dashboard.js",
+          "line": 147,
+          "owner": "renderConversationRows"
+        },
+        {
+          "file": "src/renderer/views/shared.js",
+          "line": 135,
+          "owner": "renderSetupStep"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-section]",
+          "line": 914
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-segment-id",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 317,
+          "owner": "renderInspector"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-select-job-thumbnail",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 555,
+          "owner": "renderThumbnailReview"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-select-job-thumbnail]",
+          "line": 1189
+        }
+      ],
+      "apiCalls": ["selectMediaJobThumbnail"]
+    },
+    {
+      "attribute": "data-selected-account",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 186,
+          "owner": "renderConnection"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-status-key",
+      "source": [
+        {
+          "file": "src/renderer/views/shared.js",
+          "line": 9,
+          "owner": "renderStatusBadge"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-status-value",
+      "source": [
+        {
+          "file": "src/renderer/views/shared.js",
+          "line": 9,
+          "owner": "renderStatusBadge"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-studio-tab",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 25,
+          "owner": "renderStudio"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-studio-tab]",
+          "line": 331
+        }
+      ],
+      "apiCalls": ["getBrandAssets"]
+    },
+    {
+      "attribute": "data-template-apply",
+      "source": [
+        {
+          "file": "src/renderer/views/templates.js",
+          "line": 167,
+          "owner": "renderBrandTemplates"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-template-apply]",
+          "line": 388
+        }
+      ],
+      "apiCalls": ["applyBrandTemplate"]
+    },
+    {
+      "attribute": "data-template-create-form",
+      "source": [
+        {
+          "file": "src/renderer/views/templates.js",
+          "line": 67,
+          "owner": "renderBrandTemplates"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-template-create-form]",
+          "line": 1463
+        }
+      ],
+      "apiCalls": ["createBrandTemplate"]
+    },
+    {
+      "attribute": "data-template-delete",
+      "source": [
+        {
+          "file": "src/renderer/views/templates.js",
+          "line": 173,
+          "owner": "renderBrandTemplates"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-template-delete]",
+          "line": 411
+        }
+      ],
+      "apiCalls": ["deleteBrandTemplate"]
+    },
+    {
+      "attribute": "data-template-export",
+      "source": [
+        {
+          "file": "src/renderer/views/templates.js",
+          "line": 170,
+          "owner": "renderBrandTemplates"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-template-export]",
+          "line": 403
+        }
+      ],
+      "apiCalls": ["exportBrandTemplate"]
+    },
+    {
+      "attribute": "data-template-import",
+      "source": [
+        {
+          "file": "src/renderer/views/templates.js",
+          "line": 30,
+          "owner": "renderBrandTemplates"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-template-import]",
+          "line": 345
+        }
+      ],
+      "apiCalls": ["importBrandTemplate"]
+    },
+    {
+      "attribute": "data-test-ai-provider",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 317,
+          "owner": "renderAiProvider"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-test-ai-provider]",
+          "line": 1101
+        }
+      ],
+      "apiCalls": ["testAiProvider"]
+    },
+    {
+      "attribute": "data-thumbnail-group",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 538,
+          "owner": "renderThumbnailReview"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-thumbnail-id",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 556,
+          "owner": "renderThumbnailReview"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-timeline-segment",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 142,
+          "owner": "renderTimeline"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-timeline-segment]",
+          "line": 786
+        }
+      ],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-transcript-cue",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 287,
+          "owner": "renderTranscript"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-transcript-id",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 289,
+          "owner": "renderTranscript"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-transcription-model-id",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 373,
+          "owner": "renderCreateClips"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-transcription-provider-id",
+      "source": [
+        {
+          "file": "src/renderer/views/studio.js",
+          "line": 372,
+          "owner": "renderCreateClips"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-voiceover-id",
+      "source": [
+        {
+          "file": "src/renderer/views/projects.js",
+          "line": 988,
+          "owner": "renderLocalization"
+        }
+      ],
+      "handlerSelectors": [],
+      "apiCalls": []
+    },
+    {
+      "attribute": "data-workload-form",
+      "source": [
+        {
+          "file": "src/renderer/views/integrations.js",
+          "line": 388,
+          "owner": "renderWorkload"
+        }
+      ],
+      "handlerSelectors": [
+        {
+          "selector": "[data-workload-form]",
+          "line": 2322
+        }
+      ],
+      "apiCalls": ["setAiWorkload"]
+    }
+  ],
+  "globalActions": ["#syncButton", "#trainButton"],
+  "bridgeOnly": ["completeCommand", "getAuthorizationInstructions", "cancelClipSearchIndex", "updateBrandTemplate"]
+}

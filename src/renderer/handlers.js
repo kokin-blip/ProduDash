@@ -1,3 +1,4 @@
+import { consumeFormDraft } from "./dom.js";
 import { api } from "./api.js";
 import { ADVISOR_CATEGORIES, renderAdvisor } from "./advisor.js";
 import { acknowledgeAdvisor, celebrateAdvisor } from "./advisor-reactions.js";
@@ -104,19 +105,56 @@ export function bindHandlers() {
   document.addEventListener("submit", handleSubmit);
   document.addEventListener("input", handleCandidateInput);
   document.addEventListener("change", handleCandidateInput);
+  document.addEventListener("keydown", handleWorkspaceKeydown);
   document.addEventListener("keydown", handleProjectKeydown);
 }
 
+function handleWorkspaceKeydown(event) {
+  const segment = event.target.closest?.("[data-timeline-segment]");
+  if (segment && ["Enter", " "].includes(event.key)) {
+    event.preventDefault();
+    segment.dispatchEvent(new Event("click", { bubbles: true }));
+    return;
+  }
+  const tab = event.target.closest?.('[role="tab"][data-studio-tab]');
+  if (tab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+    event.preventDefault();
+    const tabs = [...tab.parentElement.querySelectorAll('[role="tab"]')];
+    const index = tabs.indexOf(tab);
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? tabs.length - 1
+          : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[next].focus();
+    tabs[next].click();
+  }
+  if (event.key === "Escape" && ui.advisorOpen && !document.querySelector("dialog[open]")) {
+    event.preventDefault();
+    ui.advisorOpen = false;
+    renderAdvisor();
+    document.querySelector("[data-advisor-toggle]")?.focus();
+  }
+}
+
 function handleProjectKeydown(event) {
-  if (!ui.activeProject || ui.studioTab !== "projects") return;
+  if (
+    event.defaultPrevented ||
+    !ui.activeProject ||
+    ui.studioTab !== "projects" ||
+    ui.activeSection !== "studio" ||
+    event.target.closest?.("dialog[open]")
+  )
+    return;
   const editing = event.target.matches?.("input, textarea, select");
+  if (editing) return;
   const modifier = event.metaKey || event.ctrlKey;
   if (modifier && event.key.toLowerCase() === "z") {
     event.preventDefault();
     document.querySelector(event.shiftKey ? "[data-project-redo]" : "[data-project-undo]")?.click();
     return;
   }
-  if (editing) return;
   if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
     event.preventDefault();
     const direction = event.key === "ArrowLeft" ? -1 : 1;
@@ -141,6 +179,7 @@ async function runAction(key, trigger, action, options = {}) {
     result = await action();
     if (options.applyResult) options.applyResult(result);
     else if (result) setAppState(result);
+    consumeFormDraft(trigger);
     succeeded = true;
   } catch (error) {
     if (options.refreshOnError) {
@@ -156,6 +195,7 @@ async function runAction(key, trigger, action, options = {}) {
     restorePendingUi(pendingUi);
     if (options.render !== false || ui.error) {
       renderApp();
+      if (ui.error) document.querySelector('[role="alert"]')?.focus();
       if (!ui.error && trigger) {
         const restored = findFocusTarget(focusTarget);
         (restored || document.querySelector("#pageTitle"))?.focus();
@@ -261,6 +301,64 @@ function restorePendingUi(pendingUi) {
 }
 
 async function handleClick(event) {
+  const customApi = event.target.closest("[data-custom-api]");
+  if (customApi) {
+    const id = customApi.dataset.customApi;
+    const action = customApi.dataset.apiAction;
+    const username = customApi.closest("form")?.elements.expectedUsername.value.trim();
+    await runAction(
+      `custom-api-${id}`,
+      customApi,
+      () =>
+        action === "start"
+          ? api.startCustomApi(id)
+          : action === "stop"
+            ? api.stopCustomApi(id)
+            : action === "profile"
+              ? api.chooseCustomApiProfile(id, username)
+              : api.customApiSession(id, action),
+      { refreshOnError: true }
+    );
+    return;
+  }
+  const chats = event.target.closest("[data-refresh-tiktok-chats]");
+  if (chats) {
+    await runAction("tiktok-chats", chats, () => api.refreshTikTokConversations());
+    return;
+  }
+  const messages = event.target.closest("[data-refresh-tiktok-messages]");
+  if (messages) {
+    await runAction("tiktok-messages", messages, () => api.refreshTikTokMessages(messages.dataset.refreshTiktokMessages));
+    return;
+  }
+  const draftSend = event.target.closest("[data-send-tiktok-draft]");
+  if (draftSend) {
+    await runAction(
+      `message-${draftSend.dataset.messageThread}`,
+      draftSend,
+      () =>
+        api.sendTikTokMessage({
+          conversationId: draftSend.dataset.messageThread,
+          approvalId: draftSend.dataset.sendTiktokDraft,
+          operationId: `draft-${draftSend.dataset.sendTiktokDraft}`
+        }),
+      { refreshOnError: true }
+    );
+    return;
+  }
+  const inspect = event.target.closest("[data-inspect-message]");
+  if (inspect) {
+    await runAction("inspect-message", inspect, () => api.inspectTikTokMessage(inspect.dataset.inspectMessage));
+    return;
+  }
+  const publication = event.target.closest("[data-open-tiktok-publication]");
+  if (publication) {
+    await runAction("open-publication", publication, () => api.openTikTokPublication(publication.dataset.openTiktokPublication), {
+      applyResult: () => {}
+    });
+    return;
+  }
+
   const advisorToggle = event.target.closest("[data-advisor-toggle]");
   if (advisorToggle) {
     ui.advisorOpen = !ui.advisorOpen;
@@ -339,6 +437,7 @@ async function handleClick(event) {
       ui.brandAssets = await api.getBrandAssets();
     }
     renderApp();
+    document.getElementById(`studio-tab-${ui.studioTab}`)?.focus();
     return;
   }
 
@@ -1373,10 +1472,38 @@ function handleCandidateInput(event) {
   }
 }
 
+const manualMessageIntents = new Map();
+
 async function handleSubmit(event) {
   const form = event.target;
   if (!(form instanceof HTMLElement)) return;
 
+  if (form.matches("[data-custom-api-form]")) {
+    event.preventDefault();
+    await runAction(`custom-api-${form.dataset.customApiForm}`, event.submitter, () =>
+      api.configureCustomApi(form.dataset.customApiForm, form.elements.expectedUsername.value.trim())
+    );
+    return;
+  }
+  if (form.matches("[data-tiktok-send-form]")) {
+    event.preventDefault();
+    const id = form.dataset.tiktokSendForm;
+    const text = form.elements.message.value;
+    let intent = manualMessageIntents.get(id);
+    if (!intent || intent.text !== text) {
+      intent = { text, operationId: window.crypto.randomUUID() };
+      manualMessageIntents.set(id, intent);
+    }
+    const operationId = intent.operationId;
+    const sent = await runAction(`message-${id}`, event.submitter, () => api.sendTikTokMessage({ conversationId: id, text, operationId }), {
+      refreshOnError: true
+    });
+    if (sent) {
+      manualMessageIntents.delete(id);
+      form.elements.message.value = "";
+    }
+    return;
+  }
   if (form.matches("[data-analytics-range-form]")) {
     event.preventDefault();
     const previousRangeDays = ui.analyticsRangeDays;

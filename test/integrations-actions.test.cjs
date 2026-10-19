@@ -137,7 +137,7 @@ test("YouTube renders as a live connection while platforms without connectors st
     assert.equal(document.querySelectorAll(`[data-credentials-form="${id}"]`).length, 0, `${id} must not accept credentials`);
   }
   assert.match(document.querySelector(".planned-list").textContent, /Instagram/);
-  assert.match(document.querySelector(".planned-list").textContent, /TikTok/);
+  assert.doesNotMatch(document.querySelector(".planned-list").textContent, /TikTok/);
 });
 
 test("the YouTube form shows its state and never renders a stored secret", async () => {

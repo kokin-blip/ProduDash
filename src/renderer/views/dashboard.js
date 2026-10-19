@@ -1,4 +1,5 @@
-import { escapeHtml, formatDate, formatUsd, heightClass, levelClass, statusLabel } from "../format.js";
+import { renderRevenueBars } from "../ui-patterns.js";
+import { escapeHtml, formatDate, formatUsd, levelClass, statusLabel } from "../format.js";
 import { asArray, getApprovals, getBusiness, getConversations, ui } from "../state.js";
 import { renderIntegrationCards, renderStatusBadge } from "./shared.js";
 
@@ -16,7 +17,6 @@ export function renderDashboard() {
   const conversations = getConversations();
   const pendingApprovals = getApprovals().filter((approval) => approval.status === "pending");
   const trends = validTrends(business.financeTrend);
-  const maxRevenue = Math.max(0, ...trends.map((item) => Number(item.revenue)));
   const averageOrderValue = orders.length ? orders.reduce((total, order) => total + (Number(order.value) || 0), 0) / orders.length : null;
 
   return `
@@ -41,7 +41,10 @@ export function renderDashboard() {
               <div><h2>Revenue trend</h2><p>Weekly totals supported by the current Shopify snapshot.</p></div>
               ${renderStatusBadge(business.connectionStatus || "unknown")}
             </div>
-            ${renderRevenueChart(trends, maxRevenue, business.currency)}
+            ${renderRevenueBars(
+              trends.map((item) => ({ period: item.week, revenue: item.revenue })),
+              business.currency
+            )}
           </article>
           <article class="panel">
             <div class="section-heading">
@@ -116,25 +119,6 @@ function validTrends(value) {
   return asArray(value).filter(
     (item) => item && typeof item.week === "string" && item.week.trim() && Number.isFinite(Number(item.revenue))
   );
-}
-
-function renderRevenueChart(trends, maxRevenue, currency) {
-  if (!trends.length) return `<div class="quiet-state compact"><p>No dated revenue is available yet.</p></div>`;
-  return `
-    <div class="trend-chart" role="img" aria-label="Weekly revenue trend">
-      ${trends
-        .map(
-          (item) => `
-            <div class="trend-column">
-              <strong>${formatUsd(item.revenue, currency)}</strong>
-              <div class="bar-track"><span class="bar revenue ${heightClass(item.revenue, maxRevenue)}"></span></div>
-              <small>${escapeHtml(item.week)}</small>
-            </div>
-          `
-        )
-        .join("")}
-    </div>
-  `;
 }
 
 function renderConversationRows(conversations) {
@@ -237,8 +221,8 @@ export function renderOrders(orders, currency = "USD") {
   if (!orders.length) return `<div class="quiet-state compact"><p>No orders were returned by Shopify.</p></div>`;
   return `
     <div class="table-wrap">
-      <table>
-        <thead><tr><th scope="col">Order</th><th scope="col">Customer</th><th scope="col">Payment</th><th scope="col">Fulfillment</th><th scope="col">Total</th></tr></thead>
+      <table class="data-table orders-table">
+        <thead><tr><th scope="col">Order</th><th scope="col">Customer</th><th scope="col">Payment</th><th scope="col">Fulfillment</th><th scope="col" class="numeric-cell">Total</th></tr></thead>
         <tbody>
           ${orders
             .map(
@@ -248,7 +232,7 @@ export function renderOrders(orders, currency = "USD") {
                   <td>${escapeHtml(order.customer || "Customer")}</td>
                   <td>${renderStatusBadge(order.paymentStatus || "unknown")}</td>
                   <td>${escapeHtml(statusLabel(order.fulfillmentStatus))}</td>
-                  <td>${formatUsd(order.value, order.currency || currency)}</td>
+                  <td class="numeric-cell">${formatUsd(order.value, order.currency || currency)}</td>
                 </tr>
               `
             )

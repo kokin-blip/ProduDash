@@ -146,31 +146,69 @@ const PLATFORMS = [
     displayName: "TikTok",
     kind: "social",
     defaultStatus: "disconnected",
-    detail: "Use approved TikTok APIs for analytics, messaging, and content posting when available.",
-    allowedUse: "Manage eligible business messaging, reporting, and creator-approved video publishing through TikTok-approved API access.",
-    compliance: "Use Content Posting API flows only. Do not automate private accounts or scrape TikTok surfaces.",
-    authType: "oauth2_pkce_loopback",
+    detail: "Post approved videos and send messages using the local browser API.",
+    allowedUse: "Post approved media and send explicitly selected messages through your signed-in browser.",
+    compliance: "Human approval is required for posting. Sending is a separate explicit action.",
+    authType: "browser_session",
     // TikTok's desktop Login Kit specifies hex-encoded S256, not base64url.
     pkceChallengeEncoding: "hex",
-    credentialNote: "TikTok APIs require approved API access before ProduDash can use these credentials.",
-    credentialFields: [
-      { key: "clientKey", label: "Client key", type: "text", placeholder: "TikTok client key", sensitive: false },
-      { key: "clientSecret", label: "Client secret", type: "password", placeholder: "TikTok client secret", sensitive: true }
-    ],
-    scopes: ["user.info.basic", "video.publish"],
-    capabilities: { isPublishDestination: true, providesCreatorAnalytics: true },
+    credentialNote: "Use the Custom APIs controls to start the service and verify the browser account.",
+    credentialFields: [],
+    scopes: [],
+    capabilities: { hasLiveConnector: true, isPublishDestination: true, providesCreatorAnalytics: false },
+    publishingOptions: {
+      privacyLevel: {
+        type: "enum",
+        values: ["SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "PUBLIC_TO_EVERYONE"],
+        default: "SELF_ONLY",
+        label: "Visibility",
+        help: "Only choices offered by the signed-in account can be submitted.",
+        choices: [
+          { value: "SELF_ONLY", label: "Only you" },
+          { value: "MUTUAL_FOLLOW_FRIENDS", label: "Friends" },
+          { value: "FOLLOWER_OF_CREATOR", label: "Followers" },
+          { value: "PUBLIC_TO_EVERYONE", label: "Everyone" }
+        ]
+      },
+      allowComments: {
+        type: "boolean",
+        default: true,
+        label: "Allow comments",
+        choices: [
+          { value: true, label: "Allow comments" },
+          { value: false, label: "Disable comments" }
+        ]
+      },
+      allowReuse: {
+        type: "boolean",
+        default: false,
+        label: "Reuse of content",
+        choices: [
+          { value: false, label: "Disable reuse" },
+          { value: true, label: "Allow reuse" }
+        ]
+      },
+      isAigc: {
+        type: "boolean",
+        default: false,
+        label: "AI-generated content",
+        choices: [
+          { value: false, label: "No AI label" },
+          { value: true, label: "Label as AI-generated" }
+        ]
+      }
+    },
     creator: {
       order: 0,
       displayName: "TikTok",
       format: "9:16 short video",
-      postingMode: "Content Posting API draft or direct post after approval",
-      analyticsMode: "Official TikTok analytics/reporting access only",
-      requirements: ["Approved TikTok developer app", "Creator authorization", "No scraping or emulator posting"],
+      postingMode: "Local browser posting after approval",
+      analyticsMode: "Unavailable in the browser connector",
+      requirements: ["Running custom API", "Verified browser account", "Human-approved video"],
       metrics: ["views", "likes", "comments", "shares", "profile visits", "completion rate"]
     },
     mediaConstraints: { targetAspect: "vertical", captionSafeArea: "social" },
-    reviewRequirement:
-      "Unaudited TikTok clients are forced to SELF_ONLY visibility. An audit is required before any other visibility may be offered.",
+    reviewRequirement: "Mac development builds only. Submission does not prove publication or moderation completion.",
     requiresHostedCallback: false,
     docsUrl: "https://developers.tiktok.com/doc/content-posting-api-reference-direct-post"
   },

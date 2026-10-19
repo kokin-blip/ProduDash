@@ -16,7 +16,7 @@ function minimalConnector(overrides = {}) {
   return {
     // A platform that is deliberately NOT marked live, so registering it is a
     // registry-agreement failure.
-    id: "tiktok",
+    id: "instagram",
     capabilities: [],
     getAuthorizationInstructions: () => ({}),
     validateConfiguration: () => ({ valid: true, missing: [] }),
@@ -130,7 +130,7 @@ test("unknown, unavailable, and unconfigured integrations fail with distinct cod
 
   await assert.rejects(() => service.refreshIntegration("myspace"), { code: "INVALID_INPUT" });
   // Declared in the registry but with no connector behind it.
-  await assert.rejects(() => service.refreshIntegration("tiktok"), { code: "INTEGRATION_UNAVAILABLE" });
+  await assert.rejects(() => service.refreshIntegration("instagram"), { code: "INTEGRATION_UNAVAILABLE" });
   await assert.rejects(() => service.refreshIntegration("stripe"), { code: "INTEGRATION_UNAVAILABLE" });
 });
 

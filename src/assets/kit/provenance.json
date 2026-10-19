@@ -1,0 +1,13 @@
+{
+  "source": "Owner-provided Figma UI kit Gz7WEiN8Y3Vvivvae0ZPlP",
+  "retrieved": "2026-10-18",
+  "workflow": "Figma download_assets, original SVG assets downloaded locally",
+  "dimensions": "Each SVG retains its original 24 by 24 root dimensions; the .kit-icon slot is 24 by 24.",
+  "assets": {
+    "close.svg": "Shared/Icon/close · 10:54 · Juanito and voice-dialog close buttons",
+    "play.svg": "Shared/Icon/play · 10:25 · project preview play control",
+    "pause.svg": "Shared/Icon/pause · 10:29 · project preview pause control",
+    "plus.svg": "Shared/Icon/plus · 10:17 · Library Add folder control",
+    "clock.svg": "Shared/Icon/clock · 10:38 · Publishing planning target"
+  }
+}

@@ -146,14 +146,14 @@ export function renderCompliancePanel(title = "Security and workflow boundaries"
       <summary>
         <span>
           <strong>${escapeHtml(title)}</strong>
-          <small>Local storage, official APIs, and mandatory approvals</small>
+          <small>Local storage, verified connections, and explicit sending</small>
         </span>
         <span class="disclosure-icon" aria-hidden="true">+</span>
       </summary>
       <div class="disclosure-content">
         <div class="policy-row">
           <span aria-hidden="true">API</span>
-          <div><strong>Official connections only</strong><p>ProduDash does not scrape provider websites or accept credentials for unfinished connectors.</p></div>
+          <div><strong>Verified connections</strong><p>Official connectors and the optional TikTok browser API report their actual capabilities. Unfinished connectors do not accept credentials.</p></div>
         </div>
         <div class="policy-row">
           <span aria-hidden="true">KEY</span>

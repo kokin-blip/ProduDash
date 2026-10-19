@@ -24,6 +24,18 @@ async function unwrap(request) {
 }
 
 export const api = {
+  listCustomApis: () => unwrap(client().listCustomApis()),
+  startCustomApi: (id) => unwrap(client().startCustomApi(id)),
+  stopCustomApi: (id) => unwrap(client().stopCustomApi(id)),
+  configureCustomApi: (id, username) => unwrap(client().configureCustomApi(id, username)),
+  chooseCustomApiProfile: (id, username) => unwrap(client().chooseCustomApiProfile(id, username)),
+  customApiSession: (id, action) => unwrap(client().customApiSession(id, action)),
+  refreshTikTokConversations: () => unwrap(client().refreshTikTokConversations()),
+  refreshTikTokMessages: (id) => unwrap(client().refreshTikTokMessages(id)),
+  sendTikTokMessage: (payload) => unwrap(client().sendTikTokMessage(payload)),
+  inspectTikTokMessage: (id) => unwrap(client().inspectTikTokMessage(id)),
+  openTikTokPublication: (id) => unwrap(client().openTikTokPublication(id)),
+  onCustomApiEvent: (callback) => client().onCustomApiEvent?.(callback),
   getAppState: () => unwrap(client().getAppState()),
   getAnalyticsReport: (businessId, rangeDays) => unwrap(client().getAnalyticsReport(businessId, rangeDays)),
   exportAnalyticsReport: (businessId, rangeDays) => unwrap(client().exportAnalyticsReport(businessId, rangeDays)),

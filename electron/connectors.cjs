@@ -2,6 +2,7 @@ const { AppError } = require("./errors.cjs");
 const { assertConnectorContract } = require("./connectors/contract.cjs");
 const { GeminiConnector } = require("./connectors/gemini.cjs");
 const { ShopifyClient, ShopifyConnector } = require("./connectors/shopify.cjs");
+const { TikTokConnector } = require("./connectors/tiktok.cjs");
 const { YouTubeConnector } = require("./connectors/youtube.cjs");
 const { listPlatforms } = require("./platforms/registry.cjs");
 
@@ -56,6 +57,7 @@ function createConnectorRegistry(options = {}) {
   if (options.registry) return assertRegistryAgreement(options.registry);
   const registry = new ConnectorRegistry([
     options.shopifyConnector || new ShopifyConnector(options.shopifyOptions),
+    options.tiktokConnector || new TikTokConnector(options.customApis),
     options.youtubeConnector || new YouTubeConnector({ openExternal: options.openExternal, ...options.youtubeOptions })
   ]);
   return assertRegistryAgreement(registry);

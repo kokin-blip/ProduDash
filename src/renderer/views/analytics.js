@@ -1,3 +1,4 @@
+import { renderRevenueBars } from "../ui-patterns.js";
 import { escapeHtml, formatDate, formatUsd, statusLabel } from "../format.js";
 import { asArray, ui } from "../state.js";
 import { renderStatusBadge } from "./shared.js";
@@ -131,9 +132,9 @@ function renderComparison(report) {
         )}</span>
       </div>
       <div class="table-wrap">
-        <table>
+        <table class="data-table">
           <thead>
-            <tr><th scope="col">Metric</th><th scope="col">Latest</th><th scope="col">Preceding</th><th scope="col">Change</th></tr>
+            <tr><th scope="col">Metric</th><th scope="col" class="numeric-cell">Latest</th><th scope="col" class="numeric-cell">Preceding</th><th scope="col" class="numeric-cell">Change</th></tr>
           </thead>
           <tbody>
             ${asArray(comparison.metrics)
@@ -141,9 +142,9 @@ function renderComparison(report) {
                 (metric) => `
                   <tr>
                     <th scope="row">${escapeHtml(metric.label)}</th>
-                    <td>${escapeHtml(comparisonValue(metric.current, metric.format, report.currency))}</td>
-                    <td>${escapeHtml(comparisonValue(metric.previous, metric.format, report.currency))}</td>
-                    <td>${escapeHtml(comparisonChange(metric))}</td>
+                    <td class="numeric-cell">${escapeHtml(comparisonValue(metric.current, metric.format, report.currency))}</td>
+                    <td class="numeric-cell">${escapeHtml(comparisonValue(metric.previous, metric.format, report.currency))}</td>
+                    <td class="numeric-cell">${escapeHtml(comparisonChange(metric))}</td>
                   </tr>
                 `
               )
@@ -172,13 +173,15 @@ function renderTrend(report) {
   return `
     <div class="analytics-trend">
       <div class="section-heading"><div><h3>Imported revenue trend</h3><p>Weekly totals from the bounded recent-order snapshot.</p></div></div>
+      ${renderRevenueBars(trend, report.currency, "Imported weekly revenue", { includeTable: false })}
       <div class="table-wrap">
-        <table>
-          <thead><tr><th scope="col">Period</th><th scope="col">Revenue</th></tr></thead>
+        <table class="data-table">
+          <thead><tr><th scope="col">Period</th><th scope="col" class="numeric-cell">Revenue</th></tr></thead>
           <tbody>
             ${trend
               .map(
-                (point) => `<tr><td>${escapeHtml(point.period)}</td><td>${escapeHtml(formatUsd(point.revenue, report.currency))}</td></tr>`
+                (point) =>
+                  `<tr><td>${escapeHtml(point.period)}</td><td class="numeric-cell">${escapeHtml(formatUsd(point.revenue, report.currency))}</td></tr>`
               )
               .join("")}
           </tbody>

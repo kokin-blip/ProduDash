@@ -8,7 +8,9 @@
       content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: produdash-media:; media-src 'self' produdash-media:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'"
     />
     <title>ProduDash</title>
+    <script src="./src/renderer/appearance.js"></script>
     <link rel="stylesheet" href="./src/styles.css" />
+    <link rel="stylesheet" href="./src/appearance.css" />
   </head>
   <body>
     <div class="window-chrome" aria-hidden="true">
@@ -77,11 +79,21 @@
           </button>
         </nav>
 
+        <label class="appearance-control" for="appearanceSelect">
+          <span>Appearance</span>
+          <select id="appearanceSelect" data-appearance-select>
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+            <option value="glass-light">Glass Light</option>
+            <option value="glass-dark">Glass Dark</option>
+          </select>
+        </label>
         <div class="sidebar-footer">
           <span class="status-dot" aria-hidden="true"></span>
           <div>
             <strong>Connections required</strong>
-            <span>Official APIs only</span>
+            <span>Local-first workspace</span>
           </div>
         </div>
       </aside>
@@ -89,7 +101,7 @@
       <main class="workspace">
         <header class="topbar">
           <div class="page-heading">
-            <p class="eyebrow" id="pageEyebrow">Dashboard</p>
+            <p class="eyebrow" id="pageEyebrow" hidden>Dashboard</p>
             <h1 id="pageTitle" tabindex="-1">Set up ProduDash</h1>
             <p class="page-subtitle" id="pageSubtitle">Connect your store and AI assistant to begin.</p>
           </div>
@@ -100,10 +112,12 @@
         </header>
 
         <section class="business-strip" aria-label="Businesses" id="businessStrip"></section>
-        <section id="viewRoot" aria-live="polite"></section>
+        <div class="workspace-body">
+          <section id="viewRoot" aria-label="Workspace content"></section>
+          <div id="advisorRoot"></div>
+        </div>
       </main>
     </div>
-    <div id="advisorRoot"></div>
 
     <script type="module" src="./src/app.js"></script>
   </body>

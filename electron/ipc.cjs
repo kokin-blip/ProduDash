@@ -70,6 +70,10 @@ function createTrustedSender(appUrl) {
 }
 
 function createHandlers({
+  customApis,
+  messaging,
+  chooseCustomApiProfile,
+  openTikTokPublication,
   store,
   connections,
   connectorRegistry,
@@ -150,6 +154,39 @@ function createHandlers({
     };
   };
   const handlers = {
+    "produdash:listCustomApis": async () => customApis.list(),
+    "produdash:startCustomApi": async (_event, payload) => {
+      await customApis.start(payload?.id);
+      return store.getAppState();
+    },
+    "produdash:stopCustomApi": async (_event, payload) => {
+      await customApis.stop(payload?.id);
+      return store.getAppState();
+    },
+    "produdash:configureCustomApi": async (_event, payload) => {
+      customApis.configure(payload?.id, { expectedUsername: payload?.expectedUsername });
+      return store.getAppState();
+    },
+    "produdash:chooseCustomApiProfile": async (event, payload) => {
+      await chooseCustomApiProfile(event, payload?.id, payload?.expectedUsername);
+      return store.getAppState();
+    },
+    "produdash:customApiSession": async (_event, payload) => {
+      await customApis.session(payload?.id, payload?.action);
+      return store.getAppState();
+    },
+    "produdash:refreshTikTokConversations": async () => messaging.refreshConversations(),
+    "produdash:refreshTikTokMessages": async (_event, payload) => messaging.refreshMessages(payload?.conversationId),
+    "produdash:sendTikTokMessage": async (_event, payload) => messaging.send(payload),
+    "produdash:inspectTikTokMessage": async (_event, payload) => messaging.inspect(payload?.id),
+    "produdash:openTikTokPublication": async (_event, payload) => {
+      const receipt = store
+        .getAppState()
+        .postQueue.find((p) => p.id === payload?.planId)
+        ?.publicationReceipts.find((r) => r.platformId === "tiktok");
+      if (receipt?.publicationUrl && /^https:\/\/www\.tiktok\.com\/@[\w.-]+\/video\/\d+$/.test(receipt.publicationUrl))
+        await openTikTokPublication(receipt.publicationUrl);
+    },
     "produdash:getAppState": async () => store.getAppState(),
     "produdash:getAnalyticsReport": async (_event, payload) => store.getAnalyticsReport(payload?.businessId, payload?.rangeDays),
     "produdash:getAdvisorHistory": async () => advisor.getHistory(),
@@ -166,6 +203,8 @@ function createHandlers({
     "produdash:completeCommand": async (_event, payload) => store.completeCommand(payload?.commandId),
     "produdash:resetDashboardData": async () => {
       try {
+        if (customApis) await Promise.all(customApis.list().map((item) => customApis.stop(item.id)));
+        await messaging?.drain();
         if (mediaJobs) await mediaJobs.clear();
         if (mediaLibrary) await mediaLibrary.clear();
         if (projects) await projects.clearPreparation();
@@ -181,6 +220,8 @@ function createHandlers({
     },
     "produdash:deleteAllLocalData": async () => {
       try {
+        if (customApis) await customApis.clear();
+        await messaging?.drain();
         if (mediaJobs) await mediaJobs.clear();
         if (mediaLibrary) await mediaLibrary.clear({ removeIndex: true });
         if (projects) await projects.clear({ removeFiles: true });
@@ -508,6 +549,8 @@ function createHandlers({
 }
 
 function registerIpc({
+  customApis,
+  messaging,
   store,
   connections,
   connectorRegistry,
@@ -852,6 +895,16 @@ function registerIpc({
   };
   const openMediaJobOutput = async (_event, jobId) => mediaJobs.revealOutput(jobId, (outputPath) => shell.showItemInFolder(outputPath));
   const handlers = createHandlers({
+    customApis,
+    messaging,
+    openTikTokPublication: (url) => shell.openExternal(url),
+    chooseCustomApiProfile: async (event, id, expectedUsername) => {
+      const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+        title: "Choose a dedicated API browser profile",
+        properties: ["openDirectory"]
+      });
+      if (!result.canceled && result.filePaths[0]) customApis.configure(id, { expectedUsername, profileDir: result.filePaths[0] });
+    },
     store,
     connections,
     connectorRegistry,

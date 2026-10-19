@@ -78,6 +78,11 @@ function normalizeReceipt(value) {
     approvedContentHash,
     idempotencyKey,
     providerPublicationId: safeIdentifier(value.providerPublicationId),
+    publicationUrl:
+      typeof value.publicationUrl === "string" && /^https:\/\/www\.tiktok\.com\/@[\w.-]+\/video\/\d+$/.test(value.publicationUrl)
+        ? value.publicationUrl
+        : null,
+    verification: value.verification === "upstream_acknowledgement" ? value.verification : null,
     status: STATUS_VALUES.has(value.status) ? value.status : RECEIPT_STATUSES.PENDING,
     attempts: (Array.isArray(value.attempts) ? value.attempts : []).map(normalizeAttempt).filter(Boolean).slice(-MAX_ATTEMPTS_RECORDED),
     // Codes only -- never a provider message.

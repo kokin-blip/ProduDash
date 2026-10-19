@@ -21,7 +21,14 @@ function listFiles(directory) {
 }
 
 function assertSafeText(label, content) {
-  if (ABSOLUTE_USER_PATH.test(content)) throw new Error(`${label} contains a raw user path.`);
+  // Playwright's pinned WebKit adapter contains this public WSL account literal;
+  // it is upstream source, not a build-machine path. Keep scanning every other
+  // path, including additional paths in this same dependency file.
+  const pathContent =
+    label === "node_modules/playwright-core/lib/server/webkit/webkit.js"
+      ? content.replaceAll('"/home/pwuser"', '"<upstream-wsl-home>"')
+      : content;
+  if (ABSOLUTE_USER_PATH.test(pathContent)) throw new Error(`${label} contains a raw user path.`);
   if (SECRET_VALUE.test(content)) throw new Error(`${label} contains a credential-shaped value.`);
 }
 

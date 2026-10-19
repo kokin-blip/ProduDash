@@ -107,6 +107,17 @@ test("packaged ProduDash starts with secure local resources", { timeout: 90_000 
 
   const stateResponse = await page.evaluate(() => window.produdash.getAppState());
   assert.equal(stateResponse.ok, true);
+  if (process.platform === "darwin") {
+    // Exercise the shipped worker/runtime and its production dependencies without
+    // opening Chrome, contacting TikTok or sending any content.
+    assert.equal(stateResponse.data.customApis.find((api) => api.id === "tiktok").supported, true);
+    assert.equal((await page.evaluate(() => window.produdash.configureCustomApi("tiktok", "packaged_fixture"))).ok, true);
+    const started = await page.evaluate(() => window.produdash.startCustomApi("tiktok"));
+    assert.equal(started.ok, true, JSON.stringify(started));
+    assert.equal(started.data.customApis.find((api) => api.id === "tiktok").state, "running");
+    assert.doesNotMatch(JSON.stringify(started.data.customApis), /token|profileDir|entryPath|127\.0\.0\.1/);
+    assert.equal((await page.evaluate(() => window.produdash.stopCustomApi("tiktok"))).ok, true);
+  }
   assert.equal(JSON.stringify(stateResponse).includes(userDataPath), false);
   assert.equal(
     stateResponse.data.credentialSettings.some((setting) =>

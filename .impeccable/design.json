@@ -1,0 +1,1044 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-18T00:00:00.000Z",
+  "title": "Design System: ProduDash",
+  "extensions": {
+    "colorMeta": {
+      "bg": {
+        "displayName": "Bg",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(26% 0.0000 89.88)",
+          "oklch(38% 0.0000 89.88)",
+          "oklch(49% 0.0000 89.88)",
+          "oklch(61% 0.0000 89.88)",
+          "oklch(72% 0.0000 89.88)",
+          "oklch(84% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "sidebar": {
+        "displayName": "Sidebar",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0027 286.35)",
+          "oklch(26% 0.0027 286.35)",
+          "oklch(38% 0.0027 286.35)",
+          "oklch(49% 0.0027 286.35)",
+          "oklch(61% 0.0027 286.35)",
+          "oklch(72% 0.0027 286.35)",
+          "oklch(84% 0.0027 286.35)",
+          "oklch(95% 0.0027 286.35)"
+        ]
+      },
+      "surface": {
+        "displayName": "Surface",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(26% 0.0000 89.88)",
+          "oklch(38% 0.0000 89.88)",
+          "oklch(49% 0.0000 89.88)",
+          "oklch(61% 0.0000 89.88)",
+          "oklch(72% 0.0000 89.88)",
+          "oklch(84% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "surface-raised": {
+        "displayName": "Surface Raised",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0040 286.32)",
+          "oklch(26% 0.0040 286.32)",
+          "oklch(38% 0.0040 286.32)",
+          "oklch(49% 0.0040 286.32)",
+          "oklch(61% 0.0040 286.32)",
+          "oklch(72% 0.0040 286.32)",
+          "oklch(84% 0.0040 286.32)",
+          "oklch(95% 0.0040 286.32)"
+        ]
+      },
+      "surface-hover": {
+        "displayName": "Surface Hover",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0067 286.27)",
+          "oklch(26% 0.0067 286.27)",
+          "oklch(38% 0.0067 286.27)",
+          "oklch(49% 0.0067 286.27)",
+          "oklch(61% 0.0067 286.27)",
+          "oklch(72% 0.0067 286.27)",
+          "oklch(84% 0.0067 286.27)",
+          "oklch(95% 0.0067 286.27)"
+        ]
+      },
+      "border": {
+        "displayName": "Border",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0068 286.26)",
+          "oklch(26% 0.0068 286.26)",
+          "oklch(38% 0.0068 286.26)",
+          "oklch(49% 0.0068 286.26)",
+          "oklch(61% 0.0068 286.26)",
+          "oklch(72% 0.0068 286.26)",
+          "oklch(84% 0.0068 286.26)",
+          "oklch(95% 0.0068 286.26)"
+        ]
+      },
+      "border-subtle": {
+        "displayName": "Border Subtle",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0067 286.27)",
+          "oklch(26% 0.0067 286.27)",
+          "oklch(38% 0.0067 286.27)",
+          "oklch(49% 0.0067 286.27)",
+          "oklch(61% 0.0067 286.27)",
+          "oklch(72% 0.0067 286.27)",
+          "oklch(84% 0.0067 286.27)",
+          "oklch(95% 0.0067 286.27)"
+        ]
+      },
+      "border-strong": {
+        "displayName": "Border Strong",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0112 286.14)",
+          "oklch(26% 0.0112 286.14)",
+          "oklch(38% 0.0112 286.14)",
+          "oklch(49% 0.0112 286.14)",
+          "oklch(61% 0.0112 286.14)",
+          "oklch(72% 0.0112 286.14)",
+          "oklch(84% 0.0112 286.14)",
+          "oklch(95% 0.0112 286.14)"
+        ]
+      },
+      "text": {
+        "displayName": "Text",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0038 286.10)",
+          "oklch(26% 0.0038 286.10)",
+          "oklch(38% 0.0038 286.10)",
+          "oklch(49% 0.0038 286.10)",
+          "oklch(61% 0.0038 286.10)",
+          "oklch(72% 0.0038 286.10)",
+          "oklch(84% 0.0038 286.10)",
+          "oklch(95% 0.0038 286.10)"
+        ]
+      },
+      "text-secondary": {
+        "displayName": "Text Secondary",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0110 286.00)",
+          "oklch(26% 0.0110 286.00)",
+          "oklch(38% 0.0110 286.00)",
+          "oklch(49% 0.0110 286.00)",
+          "oklch(61% 0.0110 286.00)",
+          "oklch(72% 0.0110 286.00)",
+          "oklch(84% 0.0110 286.00)",
+          "oklch(95% 0.0110 286.00)"
+        ]
+      },
+      "text-muted": {
+        "displayName": "Text Muted",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0110 286.00)",
+          "oklch(26% 0.0110 286.00)",
+          "oklch(38% 0.0110 286.00)",
+          "oklch(49% 0.0110 286.00)",
+          "oklch(61% 0.0110 286.00)",
+          "oklch(72% 0.0110 286.00)",
+          "oklch(84% 0.0110 286.00)",
+          "oklch(95% 0.0110 286.00)"
+        ]
+      },
+      "accent": {
+        "displayName": "Accent",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.2177 257.42)",
+          "oklch(26% 0.2177 257.42)",
+          "oklch(38% 0.2177 257.42)",
+          "oklch(49% 0.2177 257.42)",
+          "oklch(61% 0.2177 257.42)",
+          "oklch(72% 0.2177 257.42)",
+          "oklch(84% 0.2177 257.42)",
+          "oklch(95% 0.2177 257.42)"
+        ]
+      },
+      "accent-strong": {
+        "displayName": "Accent Strong",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.1735 257.05)",
+          "oklch(26% 0.1735 257.05)",
+          "oklch(38% 0.1735 257.05)",
+          "oklch(49% 0.1735 257.05)",
+          "oklch(61% 0.1735 257.05)",
+          "oklch(72% 0.1735 257.05)",
+          "oklch(84% 0.1735 257.05)",
+          "oklch(95% 0.1735 257.05)"
+        ]
+      },
+      "accent-surface": {
+        "displayName": "Accent Surface",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.0327 252.46)",
+          "oklch(26% 0.0327 252.46)",
+          "oklch(38% 0.0327 252.46)",
+          "oklch(49% 0.0327 252.46)",
+          "oklch(61% 0.0327 252.46)",
+          "oklch(72% 0.0327 252.46)",
+          "oklch(84% 0.0327 252.46)",
+          "oklch(95% 0.0327 252.46)"
+        ]
+      },
+      "selected-text": {
+        "displayName": "Selected Text",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.1251 255.63)",
+          "oklch(26% 0.1251 255.63)",
+          "oklch(38% 0.1251 255.63)",
+          "oklch(49% 0.1251 255.63)",
+          "oklch(61% 0.1251 255.63)",
+          "oklch(72% 0.1251 255.63)",
+          "oklch(84% 0.1251 255.63)",
+          "oklch(95% 0.1251 255.63)"
+        ]
+      },
+      "on-accent": {
+        "displayName": "On Accent",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(26% 0.0000 89.88)",
+          "oklch(38% 0.0000 89.88)",
+          "oklch(49% 0.0000 89.88)",
+          "oklch(61% 0.0000 89.88)",
+          "oklch(72% 0.0000 89.88)",
+          "oklch(84% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "action-bg": {
+        "displayName": "Action Bg",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.1871 257.36)",
+          "oklch(26% 0.1871 257.36)",
+          "oklch(38% 0.1871 257.36)",
+          "oklch(49% 0.1871 257.36)",
+          "oklch(61% 0.1871 257.36)",
+          "oklch(72% 0.1871 257.36)",
+          "oklch(84% 0.1871 257.36)",
+          "oklch(95% 0.1871 257.36)"
+        ]
+      },
+      "success": {
+        "displayName": "Success",
+        "role": "semantic",
+        "tonalRamp": [
+          "oklch(15% 0.1142 149.23)",
+          "oklch(26% 0.1142 149.23)",
+          "oklch(38% 0.1142 149.23)",
+          "oklch(49% 0.1142 149.23)",
+          "oklch(61% 0.1142 149.23)",
+          "oklch(72% 0.1142 149.23)",
+          "oklch(84% 0.1142 149.23)",
+          "oklch(95% 0.1142 149.23)"
+        ]
+      },
+      "success-surface": {
+        "displayName": "Success Surface",
+        "role": "semantic",
+        "tonalRamp": [
+          "oklch(15% 0.0200 150.10)",
+          "oklch(26% 0.0200 150.10)",
+          "oklch(38% 0.0200 150.10)",
+          "oklch(49% 0.0200 150.10)",
+          "oklch(61% 0.0200 150.10)",
+          "oklch(72% 0.0200 150.10)",
+          "oklch(84% 0.0200 150.10)",
+          "oklch(95% 0.0200 150.10)"
+        ]
+      },
+      "warning": {
+        "displayName": "Warning",
+        "role": "semantic",
+        "tonalRamp": [
+          "oklch(15% 0.1022 75.12)",
+          "oklch(26% 0.1022 75.12)",
+          "oklch(38% 0.1022 75.12)",
+          "oklch(49% 0.1022 75.12)",
+          "oklch(61% 0.1022 75.12)",
+          "oklch(72% 0.1022 75.12)",
+          "oklch(84% 0.1022 75.12)",
+          "oklch(95% 0.1022 75.12)"
+        ]
+      },
+      "warning-surface": {
+        "displayName": "Warning Surface",
+        "role": "semantic",
+        "tonalRamp": [
+          "oklch(15% 0.0400 88.20)",
+          "oklch(26% 0.0400 88.20)",
+          "oklch(38% 0.0400 88.20)",
+          "oklch(49% 0.0400 88.20)",
+          "oklch(61% 0.0400 88.20)",
+          "oklch(72% 0.0400 88.20)",
+          "oklch(84% 0.0400 88.20)",
+          "oklch(95% 0.0400 88.20)"
+        ]
+      },
+      "danger": {
+        "displayName": "Danger",
+        "role": "semantic",
+        "tonalRamp": [
+          "oklch(15% 0.2255 27.27)",
+          "oklch(26% 0.2255 27.27)",
+          "oklch(38% 0.2255 27.27)",
+          "oklch(49% 0.2255 27.27)",
+          "oklch(61% 0.2255 27.27)",
+          "oklch(72% 0.2255 27.27)",
+          "oklch(84% 0.2255 27.27)",
+          "oklch(95% 0.2255 27.27)"
+        ]
+      },
+      "danger-surface": {
+        "displayName": "Danger Surface",
+        "role": "semantic",
+        "tonalRamp": [
+          "oklch(15% 0.0219 10.60)",
+          "oklch(26% 0.0219 10.60)",
+          "oklch(38% 0.0219 10.60)",
+          "oklch(49% 0.0219 10.60)",
+          "oklch(61% 0.0219 10.60)",
+          "oklch(72% 0.0219 10.60)",
+          "oklch(84% 0.0219 10.60)",
+          "oklch(95% 0.0219 10.60)"
+        ]
+      },
+      "disabled": {
+        "displayName": "Disabled",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0122 286.00)",
+          "oklch(26% 0.0122 286.00)",
+          "oklch(38% 0.0122 286.00)",
+          "oklch(49% 0.0122 286.00)",
+          "oklch(61% 0.0122 286.00)",
+          "oklch(72% 0.0122 286.00)",
+          "oklch(84% 0.0122 286.00)",
+          "oklch(95% 0.0122 286.00)"
+        ]
+      },
+      "media-stage": {
+        "displayName": "Media Stage",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0041 285.98)",
+          "oklch(26% 0.0041 285.98)",
+          "oklch(38% 0.0041 285.98)",
+          "oklch(49% 0.0041 285.98)",
+          "oklch(61% 0.0041 285.98)",
+          "oklch(72% 0.0041 285.98)",
+          "oklch(84% 0.0041 285.98)",
+          "oklch(95% 0.0041 285.98)"
+        ]
+      },
+      "dark-bg": {
+        "displayName": "Dark Bg",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0080 308.09)",
+          "oklch(26% 0.0080 308.09)",
+          "oklch(38% 0.0080 308.09)",
+          "oklch(49% 0.0080 308.09)",
+          "oklch(61% 0.0080 308.09)",
+          "oklch(72% 0.0080 308.09)",
+          "oklch(84% 0.0080 308.09)",
+          "oklch(95% 0.0080 308.09)"
+        ]
+      },
+      "dark-sidebar": {
+        "displayName": "Dark Sidebar",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0056 301.16)",
+          "oklch(26% 0.0056 301.16)",
+          "oklch(38% 0.0056 301.16)",
+          "oklch(49% 0.0056 301.16)",
+          "oklch(61% 0.0056 301.16)",
+          "oklch(72% 0.0056 301.16)",
+          "oklch(84% 0.0056 301.16)",
+          "oklch(95% 0.0056 301.16)"
+        ]
+      },
+      "dark-surface": {
+        "displayName": "Dark Surface",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0080 308.09)",
+          "oklch(26% 0.0080 308.09)",
+          "oklch(38% 0.0080 308.09)",
+          "oklch(49% 0.0080 308.09)",
+          "oklch(61% 0.0080 308.09)",
+          "oklch(72% 0.0080 308.09)",
+          "oklch(84% 0.0080 308.09)",
+          "oklch(95% 0.0080 308.09)"
+        ]
+      },
+      "dark-surface-raised": {
+        "displayName": "Dark Surface Raised",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0093 303.91)",
+          "oklch(26% 0.0093 303.91)",
+          "oklch(38% 0.0093 303.91)",
+          "oklch(49% 0.0093 303.91)",
+          "oklch(61% 0.0093 303.91)",
+          "oklch(72% 0.0093 303.91)",
+          "oklch(84% 0.0093 303.91)",
+          "oklch(95% 0.0093 303.91)"
+        ]
+      },
+      "dark-surface-hover": {
+        "displayName": "Dark Surface Hover",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0111 308.10)",
+          "oklch(26% 0.0111 308.10)",
+          "oklch(38% 0.0111 308.10)",
+          "oklch(49% 0.0111 308.10)",
+          "oklch(61% 0.0111 308.10)",
+          "oklch(72% 0.0111 308.10)",
+          "oklch(84% 0.0111 308.10)",
+          "oklch(95% 0.0111 308.10)"
+        ]
+      },
+      "dark-border": {
+        "displayName": "Dark Border",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0124 305.10)",
+          "oklch(26% 0.0124 305.10)",
+          "oklch(38% 0.0124 305.10)",
+          "oklch(49% 0.0124 305.10)",
+          "oklch(61% 0.0124 305.10)",
+          "oklch(72% 0.0124 305.10)",
+          "oklch(84% 0.0124 305.10)",
+          "oklch(95% 0.0124 305.10)"
+        ]
+      },
+      "dark-border-subtle": {
+        "displayName": "Dark Border Subtle",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0112 308.07)",
+          "oklch(26% 0.0112 308.07)",
+          "oklch(38% 0.0112 308.07)",
+          "oklch(49% 0.0112 308.07)",
+          "oklch(61% 0.0112 308.07)",
+          "oklch(72% 0.0112 308.07)",
+          "oklch(84% 0.0112 308.07)",
+          "oklch(95% 0.0112 308.07)"
+        ]
+      },
+      "dark-border-strong": {
+        "displayName": "Dark Border Strong",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0180 302.24)",
+          "oklch(26% 0.0180 302.24)",
+          "oklch(38% 0.0180 302.24)",
+          "oklch(49% 0.0180 302.24)",
+          "oklch(61% 0.0180 302.24)",
+          "oklch(72% 0.0180 302.24)",
+          "oklch(84% 0.0180 302.24)",
+          "oklch(95% 0.0180 302.24)"
+        ]
+      },
+      "dark-text": {
+        "displayName": "Dark Text",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0045 314.80)",
+          "oklch(26% 0.0045 314.80)",
+          "oklch(38% 0.0045 314.80)",
+          "oklch(49% 0.0045 314.80)",
+          "oklch(61% 0.0045 314.80)",
+          "oklch(72% 0.0045 314.80)",
+          "oklch(84% 0.0045 314.80)",
+          "oklch(95% 0.0045 314.80)"
+        ]
+      },
+      "dark-text-secondary": {
+        "displayName": "Dark Text Secondary",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0121 308.28)",
+          "oklch(26% 0.0121 308.28)",
+          "oklch(38% 0.0121 308.28)",
+          "oklch(49% 0.0121 308.28)",
+          "oklch(61% 0.0121 308.28)",
+          "oklch(72% 0.0121 308.28)",
+          "oklch(84% 0.0121 308.28)",
+          "oklch(95% 0.0121 308.28)"
+        ]
+      },
+      "dark-text-muted": {
+        "displayName": "Dark Text Muted",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0121 308.28)",
+          "oklch(26% 0.0121 308.28)",
+          "oklch(38% 0.0121 308.28)",
+          "oklch(49% 0.0121 308.28)",
+          "oklch(61% 0.0121 308.28)",
+          "oklch(72% 0.0121 308.28)",
+          "oklch(84% 0.0121 308.28)",
+          "oklch(95% 0.0121 308.28)"
+        ]
+      },
+      "dark-accent": {
+        "displayName": "Dark Accent",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.2056 255.49)",
+          "oklch(26% 0.2056 255.49)",
+          "oklch(38% 0.2056 255.49)",
+          "oklch(49% 0.2056 255.49)",
+          "oklch(61% 0.2056 255.49)",
+          "oklch(72% 0.2056 255.49)",
+          "oklch(84% 0.2056 255.49)",
+          "oklch(95% 0.2056 255.49)"
+        ]
+      },
+      "dark-action-bg": {
+        "displayName": "Dark Action Bg",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.1771 255.83)",
+          "oklch(26% 0.1771 255.83)",
+          "oklch(38% 0.1771 255.83)",
+          "oklch(49% 0.1771 255.83)",
+          "oklch(61% 0.1771 255.83)",
+          "oklch(72% 0.1771 255.83)",
+          "oklch(84% 0.1771 255.83)",
+          "oklch(95% 0.1771 255.83)"
+        ]
+      },
+      "dark-accent-strong": {
+        "displayName": "Dark Accent Strong",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.1170 251.65)",
+          "oklch(26% 0.1170 251.65)",
+          "oklch(38% 0.1170 251.65)",
+          "oklch(49% 0.1170 251.65)",
+          "oklch(61% 0.1170 251.65)",
+          "oklch(72% 0.1170 251.65)",
+          "oklch(84% 0.1170 251.65)",
+          "oklch(95% 0.1170 251.65)"
+        ]
+      },
+      "dark-accent-surface": {
+        "displayName": "Dark Accent Surface",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.0796 253.21)",
+          "oklch(26% 0.0796 253.21)",
+          "oklch(38% 0.0796 253.21)",
+          "oklch(49% 0.0796 253.21)",
+          "oklch(61% 0.0796 253.21)",
+          "oklch(72% 0.0796 253.21)",
+          "oklch(84% 0.0796 253.21)",
+          "oklch(95% 0.0796 253.21)"
+        ]
+      },
+      "dark-selected-text": {
+        "displayName": "Dark Selected Text",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.0357 249.52)",
+          "oklch(26% 0.0357 249.52)",
+          "oklch(38% 0.0357 249.52)",
+          "oklch(49% 0.0357 249.52)",
+          "oklch(61% 0.0357 249.52)",
+          "oklch(72% 0.0357 249.52)",
+          "oklch(84% 0.0357 249.52)",
+          "oklch(95% 0.0357 249.52)"
+        ]
+      },
+      "dark-success": {
+        "displayName": "Dark Success",
+        "role": "semantic",
+        "tonalRamp": [
+          "oklch(15% 0.1257 152.99)",
+          "oklch(26% 0.1257 152.99)",
+          "oklch(38% 0.1257 152.99)",
+          "oklch(49% 0.1257 152.99)",
+          "oklch(61% 0.1257 152.99)",
+          "oklch(72% 0.1257 152.99)",
+          "oklch(84% 0.1257 152.99)",
+          "oklch(95% 0.1257 152.99)"
+        ]
+      },
+      "dark-success-surface": {
+        "displayName": "Dark Success Surface",
+        "role": "semantic",
+        "tonalRamp": [
+          "oklch(15% 0.0414 154.32)",
+          "oklch(26% 0.0414 154.32)",
+          "oklch(38% 0.0414 154.32)",
+          "oklch(49% 0.0414 154.32)",
+          "oklch(61% 0.0414 154.32)",
+          "oklch(72% 0.0414 154.32)",
+          "oklch(84% 0.0414 154.32)",
+          "oklch(95% 0.0414 154.32)"
+        ]
+      },
+      "dark-warning": {
+        "displayName": "Dark Warning",
+        "role": "semantic",
+        "tonalRamp": [
+          "oklch(15% 0.1156 84.76)",
+          "oklch(26% 0.1156 84.76)",
+          "oklch(38% 0.1156 84.76)",
+          "oklch(49% 0.1156 84.76)",
+          "oklch(61% 0.1156 84.76)",
+          "oklch(72% 0.1156 84.76)",
+          "oklch(84% 0.1156 84.76)",
+          "oklch(95% 0.1156 84.76)"
+        ]
+      },
+      "dark-warning-surface": {
+        "displayName": "Dark Warning Surface",
+        "role": "semantic",
+        "tonalRamp": [
+          "oklch(15% 0.0402 82.81)",
+          "oklch(26% 0.0402 82.81)",
+          "oklch(38% 0.0402 82.81)",
+          "oklch(49% 0.0402 82.81)",
+          "oklch(61% 0.0402 82.81)",
+          "oklch(72% 0.0402 82.81)",
+          "oklch(84% 0.0402 82.81)",
+          "oklch(95% 0.0402 82.81)"
+        ]
+      },
+      "dark-danger": {
+        "displayName": "Dark Danger",
+        "role": "semantic",
+        "tonalRamp": [
+          "oklch(15% 0.1647 24.55)",
+          "oklch(26% 0.1647 24.55)",
+          "oklch(38% 0.1647 24.55)",
+          "oklch(49% 0.1647 24.55)",
+          "oklch(61% 0.1647 24.55)",
+          "oklch(72% 0.1647 24.55)",
+          "oklch(84% 0.1647 24.55)",
+          "oklch(95% 0.1647 24.55)"
+        ]
+      },
+      "dark-danger-surface": {
+        "displayName": "Dark Danger Surface",
+        "role": "semantic",
+        "tonalRamp": [
+          "oklch(15% 0.0467 13.80)",
+          "oklch(26% 0.0467 13.80)",
+          "oklch(38% 0.0467 13.80)",
+          "oklch(49% 0.0467 13.80)",
+          "oklch(61% 0.0467 13.80)",
+          "oklch(72% 0.0467 13.80)",
+          "oklch(84% 0.0467 13.80)",
+          "oklch(95% 0.0467 13.80)"
+        ]
+      },
+      "dark-disabled": {
+        "displayName": "Dark Disabled",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0181 304.69)",
+          "oklch(26% 0.0181 304.69)",
+          "oklch(38% 0.0181 304.69)",
+          "oklch(49% 0.0181 304.69)",
+          "oklch(61% 0.0181 304.69)",
+          "oklch(72% 0.0181 304.69)",
+          "oklch(84% 0.0181 304.69)",
+          "oklch(95% 0.0181 304.69)"
+        ]
+      },
+      "glass-chrome": {
+        "displayName": "Glass Chrome",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "dark-glass-chrome": {
+        "displayName": "Dark Glass Chrome",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "glass-content": {
+        "displayName": "Glass Content",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "dark-glass-content": {
+        "displayName": "Dark Glass Content",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "glass-button": {
+        "displayName": "Glass Button",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "dark-glass-button": {
+        "displayName": "Dark Glass Button",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "glass-rim": {
+        "displayName": "Glass Rim",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "dark-glass-rim": {
+        "displayName": "Dark Glass Rim",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "glass-backdrop-start": {
+        "displayName": "Glass Backdrop Start",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "dark-glass-backdrop-start": {
+        "displayName": "Dark Glass Backdrop Start",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "glass-backdrop-end": {
+        "displayName": "Glass Backdrop End",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "dark-glass-backdrop-end": {
+        "displayName": "Dark Glass Backdrop End",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "glass-text-secondary": {
+        "displayName": "Glass Text Secondary",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      },
+      "dark-glass-text-secondary": {
+        "displayName": "Dark Glass Text Secondary",
+        "role": "neutral",
+        "purpose": "Optional glass appearance; exact color is normative in DESIGN.md frontmatter."
+      }
+    },
+    "shadows": [
+      {
+        "name": "modal-light",
+        "value": "0 8px 24px rgb(0 0 0 / 12%)",
+        "purpose": "Light appearance dialog separation."
+      },
+      {
+        "name": "modal-dark",
+        "value": "0 8px 24px rgb(0 0 0 / 24%)",
+        "purpose": "Dark appearance dialog separation."
+      },
+      {
+        "name": "selected-tab",
+        "value": "0 1px 3px rgb(0 0 0 / 10%)",
+        "purpose": "Selected Studio tab."
+      },
+      {
+        "name": "advisor-reaction",
+        "value": "0 10px 24px rgb(0 0 0 / 24%)",
+        "purpose": "Existing Juanito reaction popover only."
+      },
+      {
+        "name": "glass-surface",
+        "value": "inset 0 1px 1px rgb(255 255 255 / 10%), 0 8px 24px rgb(0 0 0 / 18%)",
+        "purpose": "Glass chrome and content containers only."
+      },
+      {
+        "name": "glass-button",
+        "value": "inset 0 1px 1px rgb(255 255 255 / 20%), 0 3px 9px rgb(0 0 0 / 14%)",
+        "purpose": "Enabled glass ghost/icon buttons and Juanito launcher only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "motion-instant",
+        "value": "100ms",
+        "purpose": "Immediate feedback and active-state changes."
+      },
+      {
+        "name": "motion-control",
+        "value": "140ms",
+        "purpose": "Control state transitions."
+      },
+      {
+        "name": "motion-view",
+        "value": "190ms",
+        "purpose": "View and status changes."
+      },
+      {
+        "name": "motion-surface",
+        "value": "240ms",
+        "purpose": "Surface changes."
+      },
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "Shared outgoing easing."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "advisor-docked-min",
+        "value": "1560px"
+      },
+      {
+        "name": "stacked-grids-max",
+        "value": "1320px"
+      },
+      {
+        "name": "compact-shell-max",
+        "value": "1180px"
+      },
+      {
+        "name": "zoom-reflow-max",
+        "value": "980px"
+      }
+    ],
+    "materials": {
+      "activation": "data-material=\"glass\"; data-appearance chooses light or dark.",
+      "blurMapping": "CSS blur sigma is half the Figma radius.",
+      "recipes": [
+        {
+          "name": "chrome",
+          "fillToken": "glass-chrome",
+          "rimToken": "glass-rim",
+          "cssBlur": "11.25px",
+          "figmaBlur": "22.5px",
+          "shadow": "glass-surface",
+          "roles": ["window-chrome", "sidebar", "advisor-panel", "topbar"]
+        },
+        {
+          "name": "content",
+          "fillToken": "glass-content",
+          "rimToken": "glass-rim",
+          "cssBlur": "22.5px",
+          "figmaBlur": "45px",
+          "shadow": "glass-surface",
+          "roles": ["panel", "attention-section", "project-browser", "project-editor", "project-inspector"]
+        },
+        {
+          "name": "button",
+          "fillToken": "glass-button",
+          "rimToken": "glass-rim",
+          "cssBlur": "7.5px",
+          "figmaBlur": "15px",
+          "shadow": "glass-button",
+          "roles": ["enabled ghost-button", "enabled icon-button", "enabled advisor-launcher"]
+        }
+      ],
+      "backdrop": {
+        "angle": "140.55deg",
+        "startToken": "glass-backdrop-start",
+        "startPosition": "14.286%",
+        "endToken": "glass-backdrop-end",
+        "endPosition": "85.714%"
+      },
+      "readability": "Glass supporting text uses glass-text-secondary; fields, media, statuses and approval controls keep readable opaque working surfaces. Shared blue selection stays unchanged.",
+      "fallback": "Reduced transparency replaces chrome/content/button fills with sidebar/surface/surface-raised and sets blur to 0px. Unsupported backdrop-filter uses the same opaque fills."
+    },
+    "appearance": {
+      "choices": ["system", "light", "dark", "glass-light", "glass-dark"],
+      "labels": ["System", "Light", "Dark", "Glass Light", "Glass Dark"],
+      "default": "system",
+      "placement": "Sidebar Appearance selector",
+      "persistence": "Allowlisted device-local produdash.appearance local storage, restored before CSS; no workspace, credential or IPC changes. Invalid values fall back to System; unavailable storage retains session selection.",
+      "resolution": "System follows OS changes with solid material. Explicit choices override OS; glass choices use the named light/dark appearance.",
+      "switching": "Updates root attributes without rerendering content; preserves drafts, focus and playback."
+    },
+    "uiPatterns": {
+      "sources": [
+        "src/renderer/ui-patterns.js",
+        "src/renderer/views/projects.js",
+        "src/renderer/views/studio.js",
+        "src/renderer/views/templates.js",
+        "src/renderer/views/dashboard.js",
+        "src/renderer/views/analytics.js",
+        "src/styles.css"
+      ],
+      "referenceNodes": ["137:45061", "137:46139", "137:45637", "137:47155", "126:1687", "126:943", "126:1959"],
+      "mediaLibrary": {
+        "selection": "Native tile buttons expose aria-pressed, blue selection, actual indexed thumbnail, duration and visible source status.",
+        "fallback": "Existing format placeholder when no indexed thumbnail exists."
+      },
+      "timeline": {
+        "layout": "Full editor width beneath preview and inspector; fixed-height SVG inside horizontal scrolling.",
+        "zoom": {
+          "min": 1,
+          "max": 4,
+          "step": 0.25
+        },
+        "semantics": "Edited-time ruler and real cut/source ranges; repeated source thumbnails are illustrative, not per-cut frames. Prepared waveform is labeled Source waveform.",
+        "accessibility": "Keyboard-operable cuts, focus stroke, aria-pressed and an accessible cut list."
+      },
+      "propertyGroups": {
+        "helper": "renderPropertyGroup",
+        "layout": "Heading and ruled label/control rows; columns prefer 300px and wrap within available width.",
+        "contracts": "Keep native form names, constraints, values, disabled states and consent disclosures."
+      },
+      "commerce": {
+        "helpers": ["renderRevenueBars"],
+        "tables": "Read-only scoped headers, tabular numbers, right-aligned amounts and local overflow.",
+        "charts": "Independent caller-supplied series; zero, negative and unavailable values retained. More than eight periods scroll horizontally.",
+        "exactData": "Dashboard screen-reader table; Analytics visible period/revenue table.",
+        "authority": "Existing theme tokens; no new palette or static assets."
+      },
+      "verification": "See docs/ui-expansion.md. Full validation passed (486 unit tests, four Electron smoke tests); a decoded-frame recapture also passed. Final visual review marked SHIP for the captured matrix (124 current images). The app was opened."
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Implemented primary action variant.",
+      "html": "<button type=\"button\" class=\"ds-button-primary\">Approve draft</button>",
+      "css": ".ds-button-primary{font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif; font-size:13px;display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:0 12px;border:1px solid var(--action-bg,#0063d1);border-radius:var(--radius-control,6px);background:var(--action-bg,#0063d1);color:var(--on-accent,#fff);font-weight:500;line-height:17px;cursor:pointer;transition:background-color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1)),color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1));}.ds-button-primary:hover{background:var(--action-bg,#0063d1)}.ds-button-primary:focus-visible{outline:2px solid var(--accent-strong,#005bbf);outline-offset:2px;}.ds-button-primary:active{transform:none;transition-duration:var(--motion-instant,100ms)}.ds-button-primary:disabled{cursor:not-allowed;background:var(--surface-raised,#ececef);color:var(--disabled,#73737b);border-color:var(--border,#d9d9de)}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Implemented ghost action variant.",
+      "html": "<button type=\"button\" class=\"ds-button-ghost\">Refresh</button>",
+      "css": ".ds-button-ghost{font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif; font-size:13px;display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:0 12px;border:1px solid var(--border-strong,#b8b8c0);border-radius:var(--radius-control,6px);background:var(--surface-raised,#ececef);color:var(--text,#1d1d1f);font-weight:500;line-height:17px;cursor:pointer;transition:background-color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1)),color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1));}.ds-button-ghost:hover{background:var(--surface-hover,#e5e5ea)}.ds-button-ghost:focus-visible{outline:2px solid var(--accent-strong,#005bbf);outline-offset:2px;}.ds-button-ghost:active{transform:none;transition-duration:var(--motion-instant,100ms)}.ds-button-ghost:disabled{cursor:not-allowed;background:var(--surface-raised,#ececef);color:var(--disabled,#73737b);border-color:var(--border,#d9d9de)}"
+    },
+    {
+      "name": "Text Button",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "Implemented text action variant.",
+      "html": "<button type=\"button\" class=\"ds-button-text\">View details</button>",
+      "css": ".ds-button-text{font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif; font-size:13px;display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:0 8px;border:1px solid transparent;border-radius:var(--radius-control,6px);background:transparent;color:var(--accent-strong,#005bbf);font-weight:500;line-height:17px;cursor:pointer;transition:background-color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1)),color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1));}.ds-button-text:hover{background:var(--accent-surface,#d9eafe)}.ds-button-text:focus-visible{outline:2px solid var(--accent-strong,#005bbf);outline-offset:2px;}.ds-button-text:active{transform:none;transition-duration:var(--motion-instant,100ms)}.ds-button-text:disabled{cursor:not-allowed;background:var(--surface-raised,#ececef);color:var(--disabled,#73737b);border-color:var(--border,#d9d9de)}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Implemented danger action variant.",
+      "html": "<button type=\"button\" class=\"ds-button-danger\">Remove</button>",
+      "css": ".ds-button-danger{font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif; font-size:13px;display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:0 12px;border:1px solid var(--danger,#d70015);border-radius:var(--radius-control,6px);background:var(--danger-surface,#ffebed);color:var(--danger,#d70015);font-weight:500;line-height:17px;cursor:pointer;transition:background-color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1)),color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1));}.ds-button-danger:hover{background:var(--danger-surface,#ffebed)}.ds-button-danger:focus-visible{outline:2px solid var(--accent-strong,#005bbf);outline-offset:2px;}.ds-button-danger:active{transform:none;transition-duration:var(--motion-instant,100ms)}.ds-button-danger:disabled{cursor:not-allowed;background:var(--surface-raised,#ececef);color:var(--disabled,#73737b);border-color:var(--border,#d9d9de)}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "A visible label and compact local field.",
+      "html": "<label class=\"ds-field\">Project name<input class=\"ds-input\" value=\"Autumn launch\" /></label>",
+      "css": ".ds-field{font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif; font-size:13px;display:grid;gap:6px;color:var(--text-secondary,#64646b)}.ds-input{font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif; font-size:13px;min-height:30px;padding:6px 9px;border:1px solid var(--border-strong,#b8b8c0);border-radius:var(--radius-control,6px);background:var(--surface,#fff);color:var(--text,#1d1d1f);transition:background-color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1)),color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1));}.ds-input:hover{border-color:var(--border-strong,#b8b8c0)}.ds-input:focus{border-color:var(--accent,#007aff)}.ds-input:focus-visible{outline:2px solid var(--accent-strong,#005bbf);outline-offset:2px;}.ds-input:disabled{color:var(--disabled,#73737b);opacity:1;cursor:not-allowed}"
+    },
+    {
+      "name": "Selected Navigation",
+      "kind": "nav",
+      "refersTo": "navigation-selected",
+      "description": "Shared blue row selection with an inline local-style vector icon.",
+      "html": "<button type=\"button\" class=\"ds-nav\" aria-current=\"page\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2 2h5v5H2zm7 0h5v5H9zM2 9h5v5H2zm7 0h5v5H9z\" fill=\"currentColor\"/></svg>Dashboard</button>",
+      "css": ".ds-nav{font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif; font-size:13px;display:flex;align-items:center;gap:10px;min-height:34px;width:100%;padding:0 10px;border:1px solid transparent;border-radius:var(--radius-control,6px);background:var(--accent-surface,#d9eafe);color:var(--selected-text,#003e80);font-weight:600;text-align:left;cursor:pointer;transition:background-color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1)),color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1));}.ds-nav:hover{background:var(--accent-surface,#d9eafe)}.ds-nav:focus-visible{outline:2px solid var(--accent-strong,#005bbf);outline-offset:2px;}"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Noninteractive semantic status with a dot and visible text.",
+      "html": "<span class=\"ds-status\"><span class=\"ds-status-dot\" aria-hidden=\"true\"></span>Connected</span>",
+      "css": ".ds-status{font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif; font-size:13px;display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:3px 7px;border:1px solid var(--success,#216e37);border-radius:999px;background:var(--success-surface,#e7f4e9);color:var(--success,#216e37);font-size:11px;font-weight:600;white-space:nowrap;transition:background-color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1)),color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1));}.ds-status-dot{width:6px;height:6px;border-radius:50%;background:currentColor}"
+    },
+    {
+      "name": "Solid Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Flat bordered group with the implemented panel inset.",
+      "html": "<section class=\"ds-panel\"><h2 class=\"ds-panel-title\">Recent activity</h2><p class=\"ds-panel-copy\">Your local workspace is up to date.</p></section>",
+      "css": ".ds-panel{font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif; font-size:13px;min-width:0;padding:20px;border:1px solid var(--border,#d9d9de);border-radius:var(--radius-panel,16px);background:var(--surface,#fff);color:var(--text,#1d1d1f)}.ds-panel-title{margin:0;font-size:16px;line-height:22px;font-weight:650;letter-spacing:-.015em}.ds-panel-copy{margin:4px 0 0;max-width:68ch;color:var(--text-secondary,#64646b)}"
+    },
+    {
+      "name": "Studio Segmented Tabs",
+      "kind": "nav",
+      "refersTo": "studio-tab-selected",
+      "description": "Wrapping segmented presentation; application helper supplies full keyboard behavior.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\" aria-label=\"Content Studio\"><button type=\"button\" class=\"ds-tab\" role=\"tab\" aria-selected=\"true\">Library</button><button type=\"button\" class=\"ds-tab\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\">Projects</button></div>",
+      "css": ".ds-tabs{display:flex;flex-wrap:wrap;gap:4px;width:fit-content;padding:4px;border-radius:var(--radius-control,6px);background:var(--sidebar,#f5f5f7)}.ds-tab{font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif; font-size:13px;border:0;padding:7px 14px;border-radius:var(--radius-control,6px);background:transparent;color:var(--text-muted,#64646b);font-weight:600;cursor:pointer;transition:background-color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1)),color var(--motion-control,140ms) var(--ease-out,cubic-bezier(.2,0,0,1));}.ds-tab:hover{color:var(--text-secondary,#64646b)}.ds-tab[aria-selected=\"true\"]{background:var(--surface,#fff);color:var(--text,#1d1d1f);box-shadow:0 1px 3px rgb(0 0 0 / 10%)}.ds-tab:focus-visible{outline:2px solid var(--accent-strong,#005bbf);outline-offset:2px;}"
+    },
+    {
+      "name": "Glass Panel",
+      "kind": "card",
+      "refersTo": "panel-glass",
+      "description": "Optional content material alongside Solid Panel; inherits active light/dark glass tokens with an opaque fallback.",
+      "html": "<section class=\"ds-glass-panel\"><h2 class=\"ds-glass-title\">Recent activity</h2><p class=\"ds-glass-copy\">Your local workspace is up to date.</p></section>",
+      "css": ".ds-glass-panel{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",system-ui,sans-serif;font-size:13px;min-width:0;padding:20px;border:1px solid var(--glass-rim,rgb(255 255 255 / 72%));border-radius:var(--radius-panel,16px);background:var(--glass-content,rgb(255 255 255 / 62%));color:var(--text,#1d1d1f);backdrop-filter:blur(var(--glass-blur-content,22.5px));box-shadow:var(--glass-shadow,inset 0 1px 1px rgb(255 255 255 / 10%),0 8px 24px rgb(0 0 0 / 18%))}.ds-glass-title{margin:0;font-size:16px;line-height:22px;font-weight:650;letter-spacing:-.015em}.ds-glass-copy{margin:4px 0 0;max-width:68ch;color:var(--text-secondary,#45454e)}@media(prefers-reduced-transparency:reduce){.ds-glass-panel{background:var(--surface,#fff);backdrop-filter:none}}@supports not(backdrop-filter:blur(1px)){.ds-glass-panel{background:var(--surface,#fff)}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Shared macOS Workspace",
+    "overview": "ProduDash uses a compact, calm working interface adapted from the owner’s shared macOS Figma kit. Solid surfaces, restrained borders and a single blue selection language connect commerce operations, conversations and the media editor. This name describes the implemented direction; it does not introduce a new visual concept.\n\nSystem-following solid light and dark appearances carry the same hierarchy. The approved optional Glass Light and Glass Dark variants extend this system with translucent materials from the kit’s Native Fidelity Lab; the solid themes remain available. Local system typography and bundled artwork keep the interface self-contained. Native window chrome, readable status text and explicit approval controls remain part of the working surface.",
+    "keyCharacteristics": [
+      "Compact system typography and controls.",
+      "Solid defaults and optional glass surfaces with shared blue selection.",
+      "Reserved space for Juanito and real editing controls."
+    ],
+    "rules": [
+      {
+        "name": "The Shared Blue Rule",
+        "body": "Use the shared blue family for selection and primary actions across all sections; preserve semantic status colors with visible text.",
+        "section": "colors"
+      },
+      {
+        "name": "The Local Type Rule",
+        "body": "Use the existing local system font stack; introduce no runtime font service.",
+        "section": "typography"
+      },
+      {
+        "name": "The Reserved Space Rule",
+        "body": "Place Juanito in the workspace grid and his launcher in the sidebar footer so neither covers approval or timeline controls.",
+        "section": "layout"
+      },
+      {
+        "name": "The Optional Material Rule",
+        "body": "Keep System solid by default. Apply chrome, content and button glass recipes only for explicit glass choices, retaining readable opaque working surfaces and reduced-transparency fallbacks.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do default to System, honor explicit appearance choices and preserve the shared blue hierarchy.",
+      "Do use the scoped chrome/content/button recipes for glass and opaque fallback surfaces when transparency is reduced or blur unavailable.",
+      "Do keep keyboard focus visible, tab selection semantic, and state labels readable.",
+      "Do reflow panels at narrow effective widths and keep timeline scrolling inside its own container.",
+      "Do preserve native window controls, bundled Juanito artwork and local system typography."
+    ],
+    "donts": [
+      "Don't substitute family-specific yellow or red accents for shared blue selection.",
+      "Don't add whole-window horizontal overflow or overlay Juanito on working controls.",
+      "Don't remove status text, approval boundaries, consent disclosures or unavailable states to simplify a layout.",
+      "Don't introduce remote runtime font or media dependencies."
+    ]
+  }
+}

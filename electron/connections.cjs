@@ -34,6 +34,8 @@ class ConnectionService {
   // the public token expiry -- which lives on the authorization record rather
   // than in the credential vault.
   credentialsFor(integrationId) {
+    if (this.connectorRegistry?.find(integrationId)?.transport === "browser") return {};
+
     const credentials = this.store.getIntegrationCredentials(integrationId);
     // Deliberately not getAppState(): this runs on every connector call, and
     // that would deep-clone the entire store to read a single timestamp.
@@ -196,7 +198,12 @@ class ConnectionService {
   refreshableIntegrationIds() {
     const state = this.store.getAppState();
     return state.credentialSettings
-      .filter((setting) => setting.status === "stored" && this.connectorRegistry?.has(setting.id))
+      .filter(
+        (setting) =>
+          setting.status === "stored" &&
+          this.connectorRegistry?.has(setting.id) &&
+          this.connectorRegistry.find(setting.id).transport !== "browser"
+      )
       .map((setting) => setting.id);
   }
 

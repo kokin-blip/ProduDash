@@ -10,6 +10,7 @@ function createInitialState() {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     selectedBusinessId: null,
+    messageDispatches: [],
     selectedConversationId: null,
     integrations: buildIntegrationCatalog(),
     credentialSettings: buildCredentialSettingsCatalog(),

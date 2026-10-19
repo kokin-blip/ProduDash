@@ -29,7 +29,7 @@ test("the catalog covers every platform and separates live from planned", () => 
   const catalog = buildPlatformCatalog(stateWith());
   assert.deepEqual(
     catalog.filter((entry) => entry.hasLiveConnector).map((entry) => entry.id),
-    ["shopify", "youtube"]
+    ["shopify", "tiktok", "youtube"]
   );
   // Everything without a connector stays planned and unavailable.
   for (const entry of catalog.filter((item) => !item.hasLiveConnector)) {

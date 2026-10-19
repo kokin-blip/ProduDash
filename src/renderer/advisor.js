@@ -1,3 +1,5 @@
+import { updateMarkup } from "./dom.js";
+import { kitIcon } from "./ui-patterns.js";
 import { escapeHtml, formatDate, statusLabel } from "./format.js";
 import { asArray, resolveWorkload, ui } from "./state.js";
 import { renderStatusBadge } from "./views/shared.js";
@@ -115,6 +117,7 @@ function renderConsent(provider) {
 export function renderAdvisor() {
   const root = document.querySelector("#advisorRoot");
   if (!root) return;
+  const previousError = root.querySelector('[role="alert"]')?.textContent;
   const provider = advisorProvider();
   const consented = hasCurrentConsent(provider);
   const busy = Boolean(ui.advisorRequest);
@@ -135,7 +138,10 @@ export function renderAdvisor() {
             ? "Ready"
             : "Connection required";
 
-  root.innerHTML = `
+  document.body.dataset.advisorOpen = String(ui.advisorOpen);
+  updateMarkup(
+    root,
+    `
     <button
       class="advisor-launcher${ui.advisorOpen ? " is-panel-open" : ""}"
       type="button"
@@ -155,6 +161,7 @@ export function renderAdvisor() {
     <aside
       class="advisor-panel${ui.advisorOpen ? " is-open" : ""}"
       id="advisorPanel"
+      ${ui.advisorOpen ? "" : "inert"}
       aria-label="${escapeHtml(displayName)}"
       aria-hidden="${!ui.advisorOpen}"
     >
@@ -187,7 +194,7 @@ export function renderAdvisor() {
             <p>${escapeHtml(providerLabel)}</p>
           </div>
         </div>
-        <button class="icon-button" type="button" data-advisor-close aria-label="Close ${escapeHtml(displayName)}">×</button>
+        <button class="icon-button" type="button" data-advisor-close aria-label="Close ${escapeHtml(displayName)}">${kitIcon("close")}</button>
       </header>
       <div class="advisor-state">
         ${renderStatusBadge(
@@ -249,14 +256,16 @@ export function renderAdvisor() {
         </div>
       </details>
     </aside>
-  `;
+  `
+  );
   previousArtState = artState;
   previousOpenState = ui.advisorOpen;
   if (ui.advisorOpen) {
     window.requestAnimationFrame(() => {
       const history = root.querySelector("#advisorHistory");
       if (history) history.scrollTop = history.scrollHeight;
-      root.querySelector('.advisor-panel [role="alert"]')?.focus();
+      const alert = root.querySelector('.advisor-panel [role="alert"]');
+      if (alert && alert.textContent !== previousError) alert.focus();
     });
   }
 }

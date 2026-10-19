@@ -249,7 +249,8 @@ test("connected dashboard uses supported metrics, semantic orders, and a compact
   assert.match(document.querySelector(".attention-section").textContent, /All clear/i);
   assert.equal(document.querySelectorAll(".metric-card").length, 4);
   assert.match(document.querySelector(".metric-grid").textContent, /Average order value/i);
-  assert.equal(document.querySelectorAll("table tbody tr").length, 2);
+  assert.equal(document.querySelectorAll(".orders-table tbody tr").length, 2);
+  assert.equal(document.querySelectorAll(".revenue-chart table tbody tr").length, 1);
   assert.match(document.querySelector(".availability-note").textContent, /Profit and conversion are unavailable/i);
 });
 
@@ -1231,7 +1232,8 @@ test("Projects render escaped metadata, a semantic transcript editor, and bounde
   ];
   renderer.renderApp();
   assert.equal(document.querySelectorAll(".nav-item").length, 7);
-  assert.equal(document.querySelector("[data-project-editor] img"), null);
+  assert.equal(document.querySelector('[data-project-editor] img:not([src^="./src/assets/kit/"])'), null);
+  assert.equal(document.querySelector("[data-project-editor] [onerror]"), null);
   assert.equal(window.projectPwned, undefined);
   assert.equal(document.querySelectorAll(".timeline-segment").length, 2);
   assert.equal(document.querySelectorAll(".timeline-intelligent-subject").length, 1);
@@ -1667,11 +1669,11 @@ test("pending actions expose loading state and destructive controls require conf
   assert.equal(document.querySelector('.nav-item[data-section="analytics"] span').textContent, "Analytics");
 });
 
-test("focused theme removes glass effects and keeps the restrictive CSP", () => {
+test("shared light and dark themes keep solid surfaces and the restrictive CSP", () => {
   const css = fs.readFileSync(path.join(projectRoot, "src/styles.css"), "utf8");
   const html = fs.readFileSync(path.join(projectRoot, "index.html"), "utf8");
-  assert.match(css, /--bg: #101214/);
-  assert.match(css, /--accent: #7aa2f7/);
+  assert.match(css, /--bg: light-dark\(#ffffff, #211f23\)/);
+  assert.match(css, /--accent: light-dark\(#007aff, #0a84ff\)/);
   assert.doesNotMatch(css, /(?:linear|radial)-gradient|backdrop-filter|glassDrift|surfaceSheen/);
   assert.doesNotMatch(html, /unsafe-inline|unsafe-eval/);
   assert.match(html, /img-src 'self' data: produdash-media:/);
@@ -1929,7 +1931,7 @@ test("the sidebar names the running build", async () => {
   // A build that reports no version says nothing rather than "vundefined".
   renderer.setAppState(baseState({ appVersion: null }));
   renderer.renderApp();
-  assert.equal(document.querySelector(".sidebar-footer span:last-child").textContent, "Official APIs only");
+  assert.equal(document.querySelector(".sidebar-footer span:last-child").textContent, "Local-first workspace");
 });
 
 test("Publishing keeps Retry available while any destination can still make progress", async () => {
@@ -2042,4 +2044,24 @@ test("Publishing keeps Retry available for a destination that was never attempte
   renderer.ui.studioTab = "publishing";
   renderer.renderApp();
   assert.ok(document.querySelector("[data-dispatch-post='post-1']"), "the unattempted destination is still reachable");
+});
+
+test("unchanged errors do not steal focus or text selection during a background refresh", async () => {
+  const renderer = await setupRenderer();
+  renderer.setAppState(baseState());
+  renderer.ui.activeSection = "integrations";
+  renderer.ui.error = "Connection validation was interrupted.";
+  renderer.renderApp();
+  assert.equal(document.activeElement, document.querySelector('[role="alert"]'));
+  const input = document.querySelector("[data-ai-provider-form] input");
+  input.value = "A correction in progress";
+  input.focus();
+  input.setSelectionRange(2, 8);
+  renderer.renderApp();
+  assert.equal(document.activeElement, input);
+  assert.deepEqual([input.selectionStart, input.selectionEnd], [2, 8]);
+  assert.equal(input.value, "A correction in progress");
+  renderer.ui.error = "The provider rejected the revised configuration.";
+  renderer.renderApp();
+  assert.equal(document.activeElement, document.querySelector('[role="alert"]'));
 });

@@ -177,6 +177,23 @@ contextBridge.exposeInMainWorld("produdash", {
   approvePostPlan: (planId, mode) => invoke("produdash:approvePostPlan", { planId, mode }),
   exportPostPackage: (planId) => invoke("produdash:exportPostPackage", { planId }),
   cancelPostPlan: (planId) => invoke("produdash:cancelPostPlan", { planId }),
+  listCustomApis: () => invoke("produdash:listCustomApis"),
+  startCustomApi: (id) => invoke("produdash:startCustomApi", { id }),
+  stopCustomApi: (id) => invoke("produdash:stopCustomApi", { id }),
+  configureCustomApi: (id, expectedUsername) => invoke("produdash:configureCustomApi", { id, expectedUsername }),
+  chooseCustomApiProfile: (id, expectedUsername) => invoke("produdash:chooseCustomApiProfile", { id, expectedUsername }),
+  customApiSession: (id, action) => invoke("produdash:customApiSession", { id, action }),
+  refreshTikTokConversations: () => invoke("produdash:refreshTikTokConversations"),
+  refreshTikTokMessages: (conversationId) => invoke("produdash:refreshTikTokMessages", { conversationId }),
+  sendTikTokMessage: (payload) => invoke("produdash:sendTikTokMessage", payload),
+  inspectTikTokMessage: (id) => invoke("produdash:inspectTikTokMessage", { id }),
+  openTikTokPublication: (planId) => invoke("produdash:openTikTokPublication", { planId }),
+  onCustomApiEvent: (callback) => {
+    if (typeof callback !== "function") return () => {};
+    const listener = () => callback();
+    ipcRenderer.on("produdash:customApiEvent", listener);
+    return () => ipcRenderer.removeListener("produdash:customApiEvent", listener);
+  },
   dispatchPostPlan: (planId) => invoke("produdash:dispatchPostPlan", { planId }),
   refreshPublicationStatus: (planId, platformId) => invoke("produdash:refreshPublicationStatus", { planId, platformId }),
   discardUploadSession: (planId, platformId) => invoke("produdash:discardUploadSession", { planId, platformId }),

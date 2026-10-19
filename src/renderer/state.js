@@ -77,6 +77,8 @@ export function normalizeAppState(value) {
     businesses: asArray(state.businesses),
     conversations: asArray(state.conversations),
     approvals: asArray(state.approvals),
+    customApis: asArray(state.customApis),
+    messageDispatches: asArray(state.messageDispatches),
     integrations: asArray(state.integrations),
     credentialSettings: asArray(state.credentialSettings),
     aiProviders: asArray(state.aiProviders),
@@ -133,16 +135,23 @@ export function getBusiness(businessId = ui.selectedBusinessId) {
 }
 
 export function getConversations(businessId = ui.selectedBusinessId) {
-  return ui.appState.conversations.filter((conversation) => conversation?.businessId === businessId);
+  const api = ui.appState.customApis?.find((item) => item.id === "tiktok");
+  const account = api?.account?.id || api?.expectedUsername;
+  return ui.appState.conversations.filter((conversation) =>
+    conversation?.source === "tiktok" ? conversation.accountId === account : conversation?.businessId === businessId
+  );
 }
 
 export function getSelectedConversation() {
   const conversation = ui.appState.conversations.find((item) => item?.id === ui.selectedConversationId);
-  return conversation?.businessId === ui.selectedBusinessId ? conversation : null;
+  return getConversations().some((item) => item.id === conversation?.id) ? conversation : null;
 }
 
 export function getApprovals(businessId = ui.selectedBusinessId) {
-  return ui.appState.approvals.filter((approval) => approval?.businessId === businessId);
+  const ids = new Set(getConversations(businessId).map((item) => item.id));
+  return ui.appState.approvals.filter(
+    (approval) => ids.has(approval.conversationId) || (!approval.accountId && approval.businessId === businessId)
+  );
 }
 
 export function integrationReady(integrationId) {

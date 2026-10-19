@@ -9,7 +9,15 @@ const { UploadSessionStore, createUploadSession, isUsableSession } = require("./
 // An unresolved session is a local error, but unlike every other local error
 // the previous attempt did reach the provider. Retrying cannot be made safe
 // until a human has checked the destination, so the receipt must not offer it.
-const NEVER_RETRYABLE = Object.freeze(new Set(["UPLOAD_SESSION_UNRESOLVED", "APPROVAL_PREDATES_REQUIRED_OPTIONS"]));
+const NEVER_RETRYABLE = Object.freeze(
+  new Set([
+    "UPLOAD_SESSION_UNRESOLVED",
+    "APPROVAL_PREDATES_REQUIRED_OPTIONS",
+    "APPROVED_ACCOUNT_CHANGED",
+    "APPROVED_MEDIA_CHANGED",
+    "CUSTOM_API_OUTCOME_UNKNOWN"
+  ])
+);
 
 // Dispatches an approved post plan to real connectors.
 //
@@ -92,6 +100,23 @@ class PublishingDispatchService {
     const { filePath, contentLength } = this.resolveMediaFile(plan);
     const accountId = integration?.authorization?.selectedAccount?.id || null;
     const metadata = { title: pack.title, description: pack.caption, ...(pack.options || {}) };
+
+    if (connector.transport === "browser") {
+      const binding = plan.approvalSnapshot?.payload?.connectionBindings?.[destination.platformId];
+      if (binding?.transport !== "browser" || binding.accountId !== accountId)
+        throw new AppError(
+          "APPROVED_ACCOUNT_CHANGED",
+          "APPROVED_MEDIA_CHANGED",
+          "The approved browser account changed. Create a new approval."
+        );
+      const result = await connector.publish({
+        ...metadata,
+        filePath,
+        idempotencyKey: destination.idempotencyKey,
+        expectedAccountId: accountId
+      });
+      return { result, accountId };
+    }
 
     // A connector without resumable support uploads in one call. It cannot be
     // reconciled after a crash, and that limitation is real rather than hidden.
@@ -397,6 +422,8 @@ class PublishingDispatchService {
           ...receipt,
           accountId,
           providerPublicationId: result.publicationId,
+          publicationUrl: result.publicationUrl || null,
+          verification: result.verification || null,
           status: outcome,
           hasResumableSession: false,
           errorCode: null,

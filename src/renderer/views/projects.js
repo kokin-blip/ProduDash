@@ -1,3 +1,4 @@
+import { kitIcon, renderToolbar, renderPropertyGroup } from "../ui-patterns.js";
 import { escapeHtml, formatDate, statusLabel } from "../format.js";
 import { asArray, ui } from "../state.js";
 import { renderStatusBadge } from "./shared.js";
@@ -135,15 +136,22 @@ function renderTimeline(project) {
     )
     .map((x) => `<line x1="${x}" x2="${x}" y1="0" y2="130" class="scene-line" />`)
     .join("");
+  const sourceClip = asArray(ui.clipLibrary.clips).find((clip) => clip.id === project.source.mediaId);
+  const ruler = Array.from({ length: 9 }, (_, index) => {
+    const x = index * 125;
+    return `<g class="timeline-tick"><line x1="${x}" x2="${x}" y1="23" y2="30" /><text x="${x}" y="15" text-anchor="${index === 0 ? "start" : index === 8 ? "end" : "middle"}">${seconds((total * index) / 8)}</text></g>`;
+  }).join("");
+  const selectedId = ui.selectedProjectSegmentId || plan.segments[0]?.id;
   const blocks = asArray(plan.segments)
     .map((segment, index) => {
       const x = Number((segment.timelineStart * scale).toFixed(2));
       const width = Math.max(2, Number((segment.duration * scale).toFixed(2)));
-      return `<g data-timeline-segment="${escapeHtml(segment.id)}">
-        <rect x="${x}" y="12" width="${width}" height="46" rx="6" class="timeline-segment ${
-          ui.selectedProjectSegmentId === segment.id ? "selected" : ""
-        }" />
-        <text x="${x + 8}" y="40">Cut ${index + 1}</text>
+      return `<g data-timeline-segment="${escapeHtml(segment.id)}" role="button" tabindex="0" aria-label="Select cut ${index + 1}" aria-pressed="${selectedId === segment.id}">
+        <rect x="${x}" y="12" width="${width}" height="46" rx="6" class="timeline-segment ${selectedId === segment.id ? "selected" : ""}" />
+        <title>Cut ${index + 1} · ${seconds(segment.sourceStart)}–${seconds(segment.sourceEnd)}</title>
+        ${sourceClip?.thumbnailUrl ? `<defs><clipPath id="timeline-thumbnail-${index}"><rect x="${x + 1}" y="13" width="${Math.max(0, width - 2)}" height="44" rx="5" /></clipPath></defs><image href="${escapeHtml(sourceClip.thumbnailUrl)}" x="${x}" y="12" width="${width}" height="46" preserveAspectRatio="xMidYMid slice" clip-path="url(#timeline-thumbnail-${index})" class="timeline-thumbnail" />` : ""}
+        ${width > 58 ? `<text x="${x + 8}" y="32">Cut ${index + 1}</text>` : ""}
+        ${width > 110 ? `<text x="${x + 8}" y="49" class="timeline-clip-duration">${seconds(segment.duration)}</text>` : ""}
       </g>`;
     })
     .join("");
@@ -243,11 +251,11 @@ function renderTimeline(project) {
   ].join("");
   return `
     <div class="project-timeline-scroll" data-project-timeline-scroll>
-      <svg class="project-timeline" viewBox="0 0 1000 260" width="${Math.round(
+      <svg class="project-timeline" viewBox="0 0 1000 296" preserveAspectRatio="none" width="${Math.round(
         1000 * zoom
-      )}" role="img" aria-label="Non-destructive project timeline">
-        ${sceneLines}${blocks}${transcriptBlocks}${markerLines}${commentLines}${assetTrack}
-        <line x1="${playhead}" x2="${playhead}" y1="0" y2="260" class="playhead-line" />
+      )}" role="group" aria-label="Non-destructive project timeline">
+        ${ruler}<g transform="translate(0 36)">${sceneLines}${blocks}${transcriptBlocks}${markerLines}${commentLines}${assetTrack}</g>
+        <line x1="${playhead}" x2="${playhead}" y1="24" y2="296" class="playhead-line" />
       </svg>
     </div>
     <ol class="sr-only" aria-label="Timeline segments">
@@ -315,10 +323,14 @@ function renderInspector(project) {
         selected.id
       )}</span></div></div>
       <form data-project-segment-form="${escapeHtml(project.id)}" data-segment-id="${escapeHtml(selected.id)}">
-        <label><span>Source in</span><input name="sourceStart" type="number" min="0" max="${project.source.duration}" step="0.001"
+        ${renderPropertyGroup(
+          "Source range",
+          `        <label><span>Source in</span><input name="sourceStart" type="number" min="0" max="${project.source.duration}" step="0.001"
           value="${escapeHtml(selected.sourceStart)}" /></label>
         <label><span>Source out</span><input name="sourceEnd" type="number" min="0" max="${project.source.duration}" step="0.001"
           value="${escapeHtml(selected.sourceEnd)}" /></label>
+`
+        )}
         <button class="ghost-button small" type="submit">Apply trim</button>
       </form>
       <div class="button-row wrap">
@@ -427,8 +439,9 @@ function renderProjectSettings(project) {
               )
               .join("")}
           </fieldset>
-          <div class="form-grid">
-            <label><span>Aspect</span><select name="targetAspect">
+          <div class="property-groups">${renderPropertyGroup(
+            "Canvas and captions",
+            `            <label><span>Aspect</span><select name="targetAspect">
               ${["original", "vertical", "square", "landscape"]
                 .map(
                   (value) =>
@@ -479,7 +492,10 @@ function renderProjectSettings(project) {
               value="${escapeHtml(presentation.captionTextColor)}" /></label>
             <label><span>Caption background</span><input name="captionBackgroundColor" type="color"
               value="${escapeHtml(presentation.captionBackgroundColor)}" /></label>
-            <label><span>Transition</span><select name="transition">
+`
+          )}${renderPropertyGroup(
+            "Transitions and brand assets",
+            `            <label><span>Transition</span><select name="transition">
               <option value="cut" ${composition.transition === "cut" ? "selected" : ""}>Cut</option>
               <option value="fade" ${composition.transition === "fade" ? "selected" : ""}>Fade</option>
             </select></label>
@@ -500,7 +516,10 @@ function renderProjectSettings(project) {
               value="${escapeHtml(composition.music?.volume || 0.25)}" /></label>
             <label><span>Intro track</span><select name="introAssetId">${assetChoices("intro", composition.introAssetId)}</select></label>
             <label><span>Outro track</span><select name="outroAssetId">${assetChoices("outro", composition.outroAssetId)}</select></label>
-            <label><span>Subject framing</span><select name="subjectMode">
+`
+          )}${renderPropertyGroup(
+            "Reviewed framing and audio",
+            `            <label><span>Subject framing</span><select name="subjectMode">
               <option value="off" ${subjectTrack ? "" : "selected"}>Off</option>
               <option value="keyframes" ${subjectTrack ? "selected" : ""}>Reviewed focus point</option>
             </select></label>
@@ -522,7 +541,10 @@ function renderProjectSettings(project) {
             <label class="checkbox-label"><input name="audioReviewed" type="checkbox" ${
               audioTrack ? "checked" : ""
             } /><span>Apply reviewed local audio treatment</span></label>
-            <label><span>Library B-roll</span><select name="brollMediaId">${brollChoices}</select></label>
+`
+          )}${renderPropertyGroup(
+            "B-roll and sound effects",
+            `            <label><span>Library B-roll</span><select name="brollMediaId">${brollChoices}</select></label>
             <label><span>B-roll project start</span><input name="brollStart" type="number" min="0" max="${project.draft.totalDuration}"
               step="0.01" value="${escapeHtml(brollTrack?.start ?? 0)}" /></label>
             <label><span>B-roll project end</span><input name="brollEnd" type="number" min="0.04" max="${project.draft.totalDuration}"
@@ -546,7 +568,8 @@ function renderProjectSettings(project) {
             <label class="checkbox-label"><input name="sfxReviewed" type="checkbox" ${
               sfxTrack ? "checked" : ""
             } /><span>Apply reviewed local sound effect</span></label>
-          </div>
+`
+          )}</div>
           <p class="form-note">Subject focus only adjusts center-crop framing. Audio treatment, sound effects, and HD resizing run locally. Resizing may upscale or downscale pixels but does not recover missing detail. B-roll is copied from your Library into the approved render snapshot. None are applied until reviewed.</p>
           <button class="ghost-button small" type="submit" data-pending-label="Saving…">Save project details</button>
         </form>
@@ -819,11 +842,11 @@ function renderLocalization(project) {
                 </div>`
               : ""
           }
-          <dialog class="voice-likeness-dialog" data-custom-voice-dialog>
+          <dialog class="voice-likeness-dialog" data-custom-voice-dialog aria-label="Create a synthetic voice likeness">
             <form method="dialog" data-custom-voice-form>
               <div class="panel-heading">
                 <div><h2>Create a synthetic voice likeness</h2><p>This sends two recordings to the selected provider. ProduDash does not keep either source file.</p></div>
-                <button class="icon-button" type="button" aria-label="Close" data-custom-voice-close>×</button>
+                <button class="icon-button" type="button" aria-label="Close" data-custom-voice-close>${kitIcon("close")}</button>
               </div>
               ${
                 likenessAccepted
@@ -861,14 +884,14 @@ function renderLocalization(project) {
               </div>
             </form>
           </dialog>
-          <dialog class="voice-likeness-dialog" data-local-likeness-dialog>
+          <dialog class="voice-likeness-dialog" data-local-likeness-dialog aria-label="Authorize a configured local voice likeness">
             <form method="dialog" data-local-likeness-form>
               <div class="panel-heading">
                 <div>
                   <h2>Authorize a configured local voice likeness</h2>
                   <p>The selected reference WAV stays on this computer. ProduDash retains its encrypted path, not a copy of the recording.</p>
                 </div>
-                <button class="icon-button" type="button" aria-label="Close" data-local-likeness-close>×</button>
+                <button class="icon-button" type="button" aria-label="Close" data-local-likeness-close>${kitIcon("close")}</button>
               </div>
               ${
                 likenessAccepted
@@ -1021,7 +1044,7 @@ function renderLocalization(project) {
               `<div class="empty-row"><strong>No voice previews</strong><span>Generate a disclosed built-in voice draft for one transcript cue.</span></div>`
             }
           </div>
-          <dialog class="voice-likeness-dialog" data-rvc-voiceover-dialog>
+          <dialog class="voice-likeness-dialog" data-rvc-voiceover-dialog aria-label="Convert an authorized voice locally">
             <form method="dialog" data-rvc-voiceover-form>
               <input name="voiceoverId" type="hidden" />
               <div class="panel-heading">
@@ -1029,7 +1052,7 @@ function renderLocalization(project) {
                   <h2>Convert a voice preview with RVC</h2>
                   <p>RVC transforms the selected local WAV preview through your configured local model. The original preview remains unchanged.</p>
                 </div>
-                <button class="icon-button" type="button" aria-label="Close" data-rvc-voiceover-close>×</button>
+                <button class="icon-button" type="button" aria-label="Close" data-rvc-voiceover-close>${kitIcon("close")}</button>
               </div>
               ${
                 likenessAccepted
@@ -1107,7 +1130,7 @@ function renderEditor(project) {
     <section class="project-editor" data-project-editor="${escapeHtml(project.id)}">
       <header class="project-editor-header">
         <div>
-          <span class="eyebrow">Local project</span>
+
           <h2>${escapeHtml(project.title)}</h2>
           <p>${escapeHtml(project.source.name)} · ${project.segmentCount} cuts · ${seconds(project.duration)}</p>
           <small>${project.revision === project.savedRevision ? "Saved version" : "Recoverable draft"} · revision ${project.revision}</small>
@@ -1150,26 +1173,33 @@ function renderEditor(project) {
               })
               .join("")}
           </div>
-          <div class="candidate-playback-controls">
+          <div class="candidate-playback-controls project-transport">
+            <div class="preview-mode-group" role="group" aria-label="Preview mode">
             <button class="${ui.projectPreviewMode === "edit" ? "ghost-button" : "text-button"} small" type="button"
-              data-project-preview-mode="edit">After: edited timeline</button>
+              data-project-preview-mode="edit" aria-pressed="${ui.projectPreviewMode === "edit"}">After: edited timeline</button>
             <button class="${ui.projectPreviewMode === "source" ? "ghost-button" : "text-button"} small" type="button"
-              data-project-preview-mode="source">Before: source</button>
-            <button class="ghost-button small" type="button" data-project-play>Play ${ui.projectPreviewMode === "source" ? "source" : "edit"}</button>
-            <button class="text-button" type="button" data-project-pause>Pause</button>
+              data-project-preview-mode="source" aria-pressed="${ui.projectPreviewMode === "source"}">Before: source</button>
+            </div><div class="transport-group" role="group" aria-label="Playback">
+            <button class="ghost-button small" type="button" data-project-play>${kitIcon("play")}Play ${ui.projectPreviewMode === "source" ? "source" : "edit"}</button>
+            <button class="text-button" type="button" data-project-pause>${kitIcon("pause")}Pause</button>
             <button class="text-button" type="button" data-project-frame-step="-1">Previous frame</button>
             <button class="text-button" type="button" data-project-frame-step="1">Next frame</button>
-            <label><span>Playhead</span><input type="range" data-project-playhead min="0" max="${project.draft.totalDuration}" step="0.001"
+            </div>
+            <label class="project-seek"><span>Playhead · ${seconds(project.draft.totalDuration)} total</span><input type="range" data-project-playhead min="0" max="${project.draft.totalDuration}" step="0.001"
               value="${Math.min(project.draft.totalDuration, ui.projectPlayhead)}" /></label>
-          </div>
-          <div class="project-waveform-wrap">${renderWaveform(project)}</div>
-          ${renderTimeline(project)}
-          <div class="timeline-toolbar">
-            <label><span>Timeline zoom</span><input type="range" data-project-zoom min="1" max="4" step="0.25" value="${ui.projectTimelineZoom}" /></label>
-            <span>Snap: cuts, scenes, transcript, playhead</span>
           </div>
         </section>
         ${renderInspector(project)}
+        <section class="project-timeline-panel" aria-label="Timeline">
+          <div class="timeline-toolbar">
+            <strong>Edited timeline · ${project.segmentCount} cuts · ${seconds(project.duration)}</strong>
+            <label><span>Timeline zoom</span><input type="range" data-project-zoom min="1" max="4" step="0.25" value="${ui.projectTimelineZoom}" /></label>
+            <span>Snap: cuts, scenes, transcript, playhead</span>
+          </div>
+          <div class="waveform-heading">Source waveform</div>
+          <div class="project-waveform-wrap">${renderWaveform(project)}</div>
+          ${renderTimeline(project)}
+        </section>
         ${renderTranscript(project)}
       </div>
       ${renderProjectSettings(project)}
@@ -1242,12 +1272,14 @@ function renderEditor(project) {
 export function renderProjects() {
   return `
     <section class="studio-tab-panel projects-workspace" role="tabpanel" aria-label="Projects">
-      <div class="section-heading">
-        <div><span class="eyebrow">Local-first editing</span><h2>Projects</h2><p>Recoverable, non-destructive edits that reference your Clip Library media in place.</p></div>
-        <div class="button-row wrap"><span>${ui.projects.total} projects</span>
-          <button class="ghost-button small" type="button" data-project-import data-pending-label="Importing…">Import project</button>
-        </div>
-      </div>
+      ${renderToolbar(
+        "Projects",
+        "Recoverable, non-destructive edits that reference your Clip Library media in place.",
+        `
+        <span>${ui.projects.total} projects</span>
+        <button class="ghost-button small" type="button" data-project-import data-pending-label="Importing…">Import project</button>
+      `
+      )}
       ${renderProjectCreate()}
       <div class="projects-layout">
         ${renderProjectList()}

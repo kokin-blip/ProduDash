@@ -1,10 +1,12 @@
 const nodeGlobals = {
   __dirname: "readonly",
   AbortController: "readonly",
+  AbortSignal: "readonly",
   Buffer: "readonly",
   URL: "readonly",
   URLSearchParams: "readonly",
   clearTimeout: "readonly",
+  queueMicrotask: "readonly",
   console: "readonly",
   fetch: "readonly",
   global: "readonly",

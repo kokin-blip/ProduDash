@@ -39,7 +39,7 @@ test("every platform declares the fields the rest of the app reads", () => {
     assert.ok(platform.credentialNote, `${platform.id} needs a credential note`);
     assert.ok(platform.authType, `${platform.id} needs an auth type`);
     assert.ok(platform.docsUrl.startsWith("https://"), `${platform.id} needs an https docs URL`);
-    assert.ok(platform.credentialFields.length > 0, `${platform.id} needs credential fields`);
+    assert.ok(platform.authType === "browser_session" || platform.credentialFields.length > 0, `${platform.id} needs credential fields`);
     for (const field of platform.credentialFields) {
       assert.ok(field.key && field.label && field.type, `${platform.id} field is incomplete`);
       assert.equal(typeof field.sensitive, "boolean");
@@ -61,11 +61,11 @@ test("every platform declares the fields the rest of the app reads", () => {
 test("only platforms with a real connector are marked live", () => {
   assert.deepEqual(
     platformsWhere("hasLiveConnector").map((platform) => platform.id),
-    ["shopify", "youtube"]
+    ["shopify", "tiktok", "youtube"]
   );
   assert.equal(hasCapability("shopify", "ownsBusinessRecords"), true);
   // Still declared but not implemented.
-  assert.equal(hasCapability("tiktok", "hasLiveConnector"), false);
+  assert.equal(hasCapability("tiktok", "hasLiveConnector"), true);
   assert.equal(hasCapability("instagram", "hasLiveConnector"), false);
   assert.equal(hasCapability("stripe", "hasLiveConnector"), false);
   assert.equal(hasCapability("nope", "hasLiveConnector"), false);

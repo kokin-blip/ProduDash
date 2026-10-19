@@ -38,6 +38,16 @@ async function bootstrap() {
         }
       });
     });
+    api.onCustomApiEvent(() => {
+      mediaEventRefresh = mediaEventRefresh.then(async () => {
+        try {
+          setAppState(await api.getAppState());
+          renderApp();
+        } catch {
+          /* Next explicit action reports errors. */
+        }
+      });
+    });
     api.onAdvisorEvent(applyAdvisorEvent);
   } catch (error) {
     renderFatalError(error);
